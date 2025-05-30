@@ -129,14 +129,19 @@ const userInitials = computed(() => {
 const organizations = computed(() => organizationStore.organizations);
 
 const shouldShowOrganizationFilter = computed(() => {
+  // Condición 1: Debe haber al menos una organización cargada en el store.
   const hasOrganizations = organizations.value.length > 0;
 
-  const userHasRelevantPermission = authStore.can("sensors.view") || authStore.can("alerts.view") || authStore.can("organizations.view");
-
+  // Condición 2: El usuario debe estar en una de las páginas donde el filtro es relevante.
   const currentPath = route.path;
-  const isOnRelevantPage = currentPath === "/dashboard" || currentPath.startsWith("/sensors") || currentPath.startsWith("/alerts");
+  const isOnRelevantPage = 
+    currentPath === "/dashboard" || 
+    currentPath.startsWith("/sensors") || 
+    currentPath.startsWith("/alerts");
 
-  return hasOrganizations && userHasRelevantPermission && isOnRelevantPage;
+  // El filtro se mostrará si AMBAS condiciones son verdaderas.
+  // Ya NO se requiere una verificación de permisos específicos para este filtro.
+  return hasOrganizations && isOnRelevantPage;
 });
 
 // Actions

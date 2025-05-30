@@ -45,8 +45,6 @@
         </div>
 
         <div class="flex gap-2">
-         
-
           <select v-model="filterPriority" class="form-input py-2 text-sm">
             <option value="">Todas las Prioridades</option>
             <option value="high">Alta</option>
@@ -133,10 +131,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, defineComponent, h, watch } from 'vue';
+import { ref, computed, onMounted, defineComponent, h, watch, onUnmounted } from 'vue';
 import { useAlertStore } from '~/stores/alerts';
-import { useOrganizationStore } from '~/stores/organizations'; // Importa el store de organizaciones
-import { useSensorStore } from '~/stores/sensors'; // Importa el store de sensores
+import { useOrganizationStore } from '~/stores/organizations';
+import { useSensorStore } from '~/stores/sensors';
 
 // Icons (placeholders)
 const SearchIcon = defineComponent({
@@ -147,7 +145,6 @@ const AlertIcon = defineComponent({
 });
 
 definePageMeta({
-  // middleware: ['auth'], // Asegúrate de que tu middleware de autenticación esté activo si es necesario
   permission: 'alerts.ver', // Permiso para ver las alertas
 });
 
@@ -161,7 +158,7 @@ const searchQuery = ref('');
 const filterPriority = ref('');
 const filterStatus = ref('');
 const currentPage = ref(1);
-const itemsPerPage = ref(10); // Puedes ajustar esto según tus necesidades
+const itemsPerPage = ref(10);
 const selectedOrganizationIdLocal = ref(null); // Estado local para el filtro de organización
 
 // --- Computed Properties ---
@@ -169,8 +166,7 @@ const selectedOrganizationIdLocal = ref(null); // Estado local para el filtro de
 // Listado de todas las organizaciones para el select
 const organizations = computed(() => organizationStore.organizations);
 
-// Listado de todos los sensores (sin filtrar por organización aún aquí)
-// Necesitamos los sensores para mapear su organización a las alertas
+// Listado de todos los sensores
 const sensors = computed(() => sensorStore.sensors);
 
 // Alertas con información de sensor y organización (si aplica)
@@ -232,10 +228,6 @@ const paginatedAlerts = computed(() => {
 });
 
 // Contadores de estadísticas (ahora basados en las alertas FILTRADAS POR ORGANIZACIÓN si aplica)
-// NOTA: Si quieres que estas estadísticas SIEMPRE muestren el total sin importar el filtro de organización
-// entonces deberías usar `alertsWithSensorAndOrg.value.length` en lugar de `filteredAlerts.value.length`
-// para la base de los cálculos. Para este caso, lo dejaré basado en `filteredAlerts`
-// para que refleje lo que se ve en la tabla.
 const totalAlerts = computed(() => filteredAlerts.value.length);
 const highPriorityAlerts = computed(() => filteredAlerts.value.filter(a => a.priority === 'high').length);
 const mediumPriorityAlerts = computed(() => filteredAlerts.value.filter(a => a.priority === 'medium').length);
@@ -292,19 +284,21 @@ const handlePageChange = (page) => {
   currentPage.value = page;
 };
 
-const handleOrganizationChange = () => {
-  currentPage.value = 1; // Resetear la paginación al cambiar de organización
-  // Si deseas que esta selección local también actualice el store global
-  // (para que otros módulos reaccionen a ella, aunque no esté en el sidebar),
-  // puedes hacerlo aquí:
-  // organizationStore.setSelectedOrganizationId(selectedOrganizationIdLocal.value);
-  // Pero si es solo para el filtro de esta página, el `selectedOrganizationIdLocal` es suficiente.
-};
+// No necesitas handleOrganizationChange ya que el watcher maneja la sincronización.
+// Si tuvieras un selector local en esta página, entonces sí necesitarías este método.
 
 // --- Watchers ---
-// Resetea la página actual a 1 cada vez que se aplican nuevos filtros
-watch([searchQuery, filterPriority, filterStatus, selectedOrganizationIdLocal], () => {
+// Resetea la página actual a 1 cada vez que se aplican nuevos filtros locales
+watch([searchQuery, filterPriority, filterStatus], () => {
   currentPage.value = 1;
+});
+
+// ¡ESTE ES EL WATCHER CLAVE AÑADIDO PARA LA SINCRONIZACIÓN GLOBAL!
+// Observa los cambios en la selección de organización del store global (sidebar)
+watch(() => organizationStore.selectedOrganizationId, (newValue) => {
+  console.log(`[Alerts Module] organizationStore.selectedOrganizationId cambió a: ${newValue}`);
+  selectedOrganizationIdLocal.value = newValue; // Actualiza el filtro local con el valor global
+  currentPage.value = 1; // Resetea la paginación
 });
 
 // --- Lifecycle Hook ---
@@ -319,15 +313,15 @@ onMounted(async () => {
   // Inicializar el filtro de organización local con el valor del store global
   // Esto es importante para que el filtro de la página refleje la selección global
   selectedOrganizationIdLocal.value = organizationStore.selectedOrganizationId;
-
+  console.log(`[Alerts Module] Initializing with organizationStore.selectedOrganizationId: ${organizationStore.selectedOrganizationId}`);
 
   // Suscribirse a las actualizaciones de alertas para que sean en tiempo real
-  alertStore.subscribeToAlertUpdates(); // <--- ¡DESCOMENTADA!
+  alertStore.subscribeToAlertUpdates();
 });
 
 // Desuscribirse cuando el componente se desmonte para evitar fugas de memoria
 onUnmounted(() => {
-  alertStore.unsubscribeFromAlertUpdates(); // <--- ¡DESCOMENTADA!
+  alertStore.unsubscribeFromAlertUpdates();
 });
 </script>
 
