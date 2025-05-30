@@ -10,13 +10,6 @@
             class="btn btn-secondary">
             Volver
           </NuxtLink>
-          <!-- <PermissionGuard moduleId="organizations" permission="editar">
-            <NuxtLink 
-              :to="`/organizations/${route.params.id}/edit`"
-              class="btn btn-primary">
-              Editar Organización
-            </NuxtLink>
-          </PermissionGuard> -->
         </div>
       </template>
     </PageHeader>
@@ -33,13 +26,13 @@
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <StatCard 
           title="Total Usuarios" 
-          :value="organization.userCount" 
+          :value="organization.userCount || 0" 
           icon="user" 
           color="primary" />
         
         <StatCard 
           title="Total Sensores" 
-          :value="organization.sensorCount" 
+          :value="organization.sensorCount || 0" 
           icon="sensor" 
           color="success" />
         
@@ -81,21 +74,13 @@
       </div>
 
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <!-- Lista de Usuarios -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-medium text-gray-900">Usuarios</h2>
-            <PermissionGuard moduleId="users" permission="crear">
-              <NuxtLink 
-                to="/users/new"
-                class="btn btn-primary btn-sm">
-                Nuevo Usuario
-              </NuxtLink>
-            </PermissionGuard>
-          </div>
+            <h2 class="text-lg font-medium text-gray-900">Usuarios ({{ organization.users?.length || 0 }})</h2>
+            </div>
 
-          <div class="space-y-4">
-            <div v-for="user in organization.Users" 
+          <div v-if="organization.users && organization.users.length > 0" class="space-y-4">
+            <div v-for="user in organization.users" 
                  :key="user.id"
                  class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div class="flex items-center">
@@ -115,23 +100,18 @@
               </span>
             </div>
           </div>
+          <div v-else class="text-center text-gray-500 py-4">
+            No hay usuarios asociados a esta organización.
+          </div>
         </div>
 
-        <!-- Lista de Sensores -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-medium text-gray-900">Sensores</h2>
-            <PermissionGuard moduleId="sensors" permission="crear">
-              <NuxtLink 
-                to="/sensors/new"
-                class="btn btn-primary btn-sm">
-                Nuevo Sensor
-              </NuxtLink>
-            </PermissionGuard>
-          </div>
+            <h2 class="text-lg font-medium text-gray-900">Sensores ({{ organization.sensors?.length || 0 }})</h2>
+            </div>
 
-          <div class="space-y-4">
-            <div v-for="sensor in organization.Sensors" 
+          <div v-if="organization.sensors && organization.sensors.length > 0" class="space-y-4">
+            <div v-for="sensor in organization.sensors" 
                  :key="sensor.id"
                  class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div class="flex items-center">
@@ -148,6 +128,9 @@
                 {{ translateStatus(sensor.status) }}
               </span>
             </div>
+          </div>
+          <div v-else class="text-center text-gray-500 py-4">
+            No hay sensores asociados a esta organización.
           </div>
         </div>
       </div>
@@ -174,15 +157,18 @@ const organization = ref(null);
 
 // Computed
 const activeAlerts = computed(() => {
-  if (!organization.value?.Sensors) return 0;
-  const sensorIds = organization.value.Sensors.map(s => s.id);
+  // Ahora usamos organization.sensors en lugar de organization.Sensors (minuscula)
+  // para consistencia con el mapeo que haremos en el store
+  if (!organization.value?.sensors) return 0; 
+  const sensorIds = organization.value.sensors.map(s => s.id);
   return alertStore.alerts.filter(a => 
     sensorIds.includes(a.sensorId) && a.status === 'active'
   ).length;
 });
 
-// Métodos
+// Métodos (sin cambios, ya estaban correctos)
 const getUserInitials = (user) => {
+  if (!user || !user.firstName || !user.lastName) return ''; // Manejar caso de user.firstName/lastName undefined
   return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`;
 };
 
@@ -193,7 +179,8 @@ const getRoleBadgeClass = (role) => {
     case 'admin':
       return 'bg-secondary-100 text-secondary-800';
     case 'technician':
-      return 'bg-warning-100 text-warning-800';
+    case 'viewer': // También para viewer si lo tienes
+      return 'bg-warning-100 text-warning-800'; // o un color específico para viewer
     default:
       return 'bg-gray-100 text-gray-800';
   }
@@ -235,13 +222,17 @@ const translateStatus = (status) => {
 };
 
 const formatDate = (date) => {
+  if (!date) return 'N/A'; // Manejar fechas nulas
   return new Date(date).toLocaleString('es-ES');
 };
 
 // Cargar datos
 onMounted(async () => {
   try {
-    organization.value = await organizationStore.organizations.find(o => o.id === route.params.id);
+    // CAMBIO CLAVE: Usa una nueva acción en el store para obtener la organización con sus relaciones.
+    // Necesitarás crear esta acción en tu store/organizations.js
+    organization.value = await organizationStore.fetchOrganizationWithRelations(route.params.id);
+    
     if (!organization.value) {
       throw new Error('Organización no encontrada');
     }

@@ -44,6 +44,58 @@ export const useOrganizationStore = defineStore('organizations', {
       }
     },
 
+     async fetchOrganizationWithRelations(id) {
+            this.isLoading = true;
+            this.error = null;
+            try {
+                const { $supabase } = useNuxtApp();
+
+                // Aquí es donde definimos qué relaciones queremos traer.
+                // Ajusta los nombres de las tablas (ej. 'Users', 'Sensors')
+                // y las columnas (ej. 'firstName', 'lastName', 'email', 'role' para Users;
+                // 'name', 'location', 'status' para Sensors) según tu esquema real en Supabase.
+                const { data, error } = await $supabase
+                    .from('Organizations')
+                    .select(`
+                        *,
+                        Users(id, firstName, lastName, email, role), 
+                        Sensors(id, name, type, location, status) 
+                    `)
+                    .eq('id', id)
+                    .single(); // Para obtener un solo registro
+
+                if (error) {
+                    throw error;
+                }
+
+                // Supabase retorna las relaciones como objetos anidados.
+                // Podemos mapearlos a nombres más convenientes si lo deseas,
+                // o usar directamente `data.Users` y `data.Sensors`.
+                // Aquí se asume que tus propiedades en la plantilla son `organization.users` y `organization.sensors`.
+                const organizationData = {
+                    ...data,
+                    users: data.Users || [],    // Renombra Users a users para la plantilla
+                    sensors: data.Sensors || [], // Renombra Sensors a sensors para la plantilla
+                    userCount: data.Users ? data.Users.length : 0, // Calcula el conteo de usuarios
+                    sensorCount: data.Sensors ? data.Sensors.length : 0 // Calcula el conteo de sensores
+                };
+
+                // Es buena práctica almacenar esta organización en el store si la necesitas accesible globalmente
+                // this.organization = organizationData; // Si solo quieres una "currentOrganization"
+
+                console.log('Organización cargada con relaciones:', organizationData);
+                return organizationData;
+
+            } catch (err) {
+                this.error = err.message || 'Error al cargar los detalles de la organización.';
+                console.error('Error fetching organization with relations:', err);
+                return null;
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
+
     // SOLO UNA DEFINICIÓN DE setSelectedOrganization
     setSelectedOrganization(orgId) {
       this.selectedOrganizationId = orgId;

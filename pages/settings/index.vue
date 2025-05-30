@@ -4,14 +4,9 @@
       title="Configuración" 
       subtitle="Administrar configuración y permisos del sistema" />
     
-    <div v-if="!isSuperAdmin" class="text-center py-16">
-      <div class="mb-8">
-        <h2 class="text-2xl font-semibold text-error-600">Acceso Restringido</h2>
-        <p class="mt-4 text-gray-600">Solo los super administradores pueden acceder a la configuración del sistema.</p>
-      </div>
-    </div>
+   -
     
-    <div v-else class="space-y-6">
+    <div class="space-y-6">
       <!-- Configuración de la Organización -->
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Configuración de la Organización</h2>
