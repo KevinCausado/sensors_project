@@ -4,7 +4,7 @@
       title="Organizaciones" 
       subtitle="Gestionar organizaciones del sistema">
       <template #actions>
-        <PermissionGuard moduleId="organizations" permission="crear">
+        <PermissionGuard moduleId="organization" permission="crear">
           <NuxtLink 
             to="/organizations/new"
             class="btn btn-primary flex items-center">
@@ -47,66 +47,67 @@
               <th class="px-6 py-3 bg-gray-50"></th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-if="organizationStore.isLoading">
-                <td colspan="5" class="px-6 py-4 text-center text-gray-500">Cargando organizaciones...</td>
-            </tr>
-            <tr v-else-if="organizationStore.error">
-                <td colspan="5" class="px-6 py-4 text-center text-error-600">Error: {{ organizationStore.error }}</td>
-            </tr>
-            <tr v-else-if="filteredOrganizations.length === 0">
-                <td colspan="5" class="px-6 py-4 text-center text-gray-500">No se encontraron organizaciones.</td>
-            </tr>
-            
-            <tr v-else v-for="org in filteredOrganizations" :key="org.id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="flex items-center">
-                  <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700">
-                    {{ getOrgInitials(org.name) }}
-                  </div>
-                  <div class="ml-4">
-                    <div class="text-sm font-medium text-gray-900">{{ org.name }}</div>
-                  </div>
-                </div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-900">{{ org.contactEmail }}</div>
-                <div class="text-sm text-gray-500">{{ org.contactPhone }}</div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ org.address }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ formatDate(org.createdAt) }} </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div class="flex justify-end space-x-1">
-                  <PermissionGuard moduleId="organizations" permission="ver">
-                    <ActionButton
-                      icon="eye"
-                      tooltip="Ver detalles"
-                      color="primary"
-                      @click="router.push(`/Organizations/${org.id}`)" />
-                  </PermissionGuard>
-                  
-                  <PermissionGuard moduleId="organizations" permission="editar">
-                    <ActionButton
-                      icon="pencil"
-                      tooltip="Editar organización"
-                      color="warning"
-                      @click="router.push(`/Organizations/${org.id}/edit`)" />
-                  </PermissionGuard>
-                  
-                  <PermissionGuard moduleId="organizations" permission="eliminar">
-                    <ActionButton
-                      icon="trash"
-                      tooltip="Eliminar organización"
-                      color="error"
-                      @click="showDeleteConfirm(org)" />
-                  </PermissionGuard>
-                </div>
-              </td>
-            </tr>
-          </tbody>
+         <tbody class="bg-white divide-y divide-gray-200">
+    <tr v-if="organizationStore.isLoading">
+        <td colspan="5" class="px-6 py-4 text-center text-gray-500">Cargando organizaciones...</td> 
+    </tr>
+    <tr v-else-if="organizationStore.error">
+        <td colspan="5" class="px-6 py-4 text-center text-error-600">Error: {{ organizationStore.error }}</td> 
+    </tr>
+    <tr v-else-if="filteredOrganizations.length === 0">
+        <td colspan="5" class="px-6 py-4 text-center text-gray-500">No se encontraron organizaciones.</td> 
+    </tr>
+    
+    <tr v-else v-for="org in filteredOrganizations" :key="org.id" class="hover:bg-gray-50">
+      <td class="px-6 py-4 whitespace-nowrap">
+        <div class="flex items-center">
+         <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700"> 
+            {{ getOrgInitials(org.name) }} 
+          </div>
+          <div class="ml-4">
+            <div class="text-sm font-medium text-gray-900">{{ org.name }}</div> 
+          </div>
+        </div>
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap">
+        <div class="text-sm text-gray-900">{{ org.contact_email }}</div>
+        <div class="text-sm text-gray-500">{{ org.phone_number }}</div>
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        {{ org.address }} 
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        {{ formatDate(org.created_at) }} 
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+        <div class="flex justify-end space-x-1">
+          <PermissionGuard moduleId="organization" permission="ver"> 
+            <ActionButton
+              icon="eye" 
+              tooltip="Ver detalles" 
+              color="primary" 
+              @click="router.push(`/Organizations/${org.id}`)" /> 
+          </PermissionGuard>
+    
+          <PermissionGuard moduleId="organization" permission="editar"> 
+            <ActionButton 
+              icon="pencil" 
+              tooltip="Editar organización" 
+              color="warning" 
+              @click="router.push(`/Organizations/${org.id}/edit`)" /> 
+          </PermissionGuard>
+          
+          <PermissionGuard moduleId="organization" permission="eliminar"> 
+            <ActionButton 
+              icon="trash" 
+              tooltip="Eliminar organización" 
+              color="error" 
+              @click="showDeleteConfirm(org)" /> 
+          </PermissionGuard>
+        </div>
+      </td>
+    </tr>
+</tbody>
         </table>
       </div>
 

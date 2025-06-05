@@ -16,10 +16,10 @@ export const navigationItems = [
     permissionAction: "view"
   },
   {
-    name: "Dispositivos",
-    to: "/devices",
+    name: "Sensores",
+    to: "/sensors",
     icon: "i-heroicons-cpu-chip",
-    moduleId: "devices",
+    moduleId: "sensors",
     permissionAction: "view"
   },
   {
@@ -27,6 +27,13 @@ export const navigationItems = [
     to: "/assets",
     icon: "i-heroicons-cube",
     moduleId: "assets",
+    permissionAction: "view"
+  },
+  {
+    name: "Parametros",
+    to: "/parameters",
+    icon: "i-heroicons-cube",
+    moduleId: "parameters",
     permissionAction: "view"
   },
   {

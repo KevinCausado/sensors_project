@@ -25,7 +25,9 @@ export const permissionMapping = {
   'generar': 'generate',
   'gestion_horarios': 'manage_schedules',
   'administrar': 'manage_schedules', // Otro posible alias para 'manage_schedules'
-  'ver_estado': 'view_status' // Ejemplo si tuvieras un permiso para 'asset_status'
+  'ver_estado': 'view_status', // Ejemplo si tuvieras un permiso para 'asset_status'
+  'resolver': 'resolve',
+  'asignar': 'assign' 
 
   // ... Agrega todos los mapeos necesarios
 };

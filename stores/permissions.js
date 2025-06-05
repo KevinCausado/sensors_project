@@ -15,16 +15,17 @@ export const usePermissionStore = defineStore('permissions', {
     moduleActionDefinitions: {
       dashboard: ['view'], // 'view' is common for dashboard
       locations: ['view', 'create', 'manage', 'delete'],
-      devices: ['view', 'create', 'manage', 'delete'],
+      sensors: ['view', 'create', 'manage', 'delete'],
       assets: ['view', 'create', 'manage', 'delete'],
       settings: ['view', 'manage'], // General settings might just be view/manage
       reports: ['view', 'generate', 'manage_schedules'], // Specific for reports
       organization: ['view', 'create', 'manage', 'delete'],
-      alerts: ['view', 'create', 'manage', 'delete'], // Example: view, create new alerts, manage existing, delete
+      alerts: ['view', 'resolve'], // Example: view, create new alerts, manage existing, delete
       users: ['view', 'create', 'manage', 'delete'], // Includes users, roles, and possibly permissions management
-      permissions: ['view', 'create', 'manage', 'delete'], // For the permissions management itself
+      permissions: ['view', 'assign'], // For the permissions management itself
       realtime_monitor: ['view'], // Monitor in real-time
       vibration_profiles: ['view', 'create', 'manage', 'delete'],
+      parameters: ['view', 'create', 'manage', 'delete'],
       asset_status: ['view', 'manage'], // View status, manage status updates
       // Add any other modules you have and their respective possible actions
     },
@@ -196,31 +197,33 @@ export const usePermissionStore = defineStore('permissions', {
       this.rolePermissions[roleId] = permissionsData;
     },
 
-    async updateRoleUserCounts() {
-      try {
-        const { $supabase } = useNuxtApp();
-        const { data, error } = await $supabase
-          .from('user_profiles')
-          .select('id, role_id');
+   async updateRoleUserCounts() {
+  try {
+    const { $supabase } = useNuxtApp();
+    // CAMBIA 'user_profiles' a 'users' aquí
+    const { data, error } = await $supabase
+      .from('users') // <-- ¡CORREGIDO! Debe ser 'users'
+      .select('id, role_id');
 
-        if (error) throw error;
+    if (error) throw error;
 
-        const roleCounts = {};
-        for (const userProfile of data) {
-          if (userProfile.role_id) {
-            roleCounts[userProfile.role_id] = (roleCounts[userProfile.role_id] || 0) + 1;
-          }
-        }
-
-        this.roles = this.roles.map(role => ({
-          ...role,
-          users: roleCounts[role.id] || 0,
-        }));
-        console.log('[Permission Store] Role user counts updated:', this.roles.map(r => ({ name: r.name, users: r.users })));
-      } catch (error) {
-        console.error('[Permission Store] Error al actualizar conteo de usuarios por rol:', error.message);
+    const roleCounts = {};
+    for (const userProfile of data) { // Cambia userProfile por user si quieres ser más semántico
+      if (userProfile.role_id) {
+        roleCounts[userProfile.role_id] = (roleCounts[userProfile.role_id] || 0) + 1;
       }
-    },
+    }
+
+    this.roles = this.roles.map(role => ({
+      ...role,
+      users: roleCounts[role.id] || 0,
+    }));
+    console.log('[Permission Store] Role user counts updated:', this.roles.map(r => ({ name: r.name, users: r.users })));
+  } catch (error) {
+    console.error('[Permission Store] Error al actualizar conteo de usuarios por rol:', error.message);
+  }
+},
+
 
     setCurrentUserPermissions(permissions) {
         this.currentUserPermissions = permissions;

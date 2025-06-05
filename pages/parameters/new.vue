@@ -9,14 +9,7 @@
             to="/parameters"
             class="btn btn-secondary">
             Volver
-          </NuxtLink>
-          <!-- <button 
-            @click="saveParameter" 
-            class="btn btn-primary flex items-center"
-            :disabled="saving">
-            <CheckIcon class="h-5 w-5 mr-2" />
-            {{ saving ? 'Guardando...' : 'Guardar Parámetro' }}
-          </button> -->
+          </NuxtLink>        
         </div>
       </template>
     </PageHeader>
@@ -151,12 +144,12 @@ const parameterStore = useParameterStore();
 // Estado
 const saving = ref(false);
 const form = ref({
-  name: '',
-  key: '',
+  name: '', // This property won't be sent to DB as 'name' column doesn't exist
+  key: '',  // This is for the 'Clave' input, which maps to the 'key' DB column
   type: 'text',
   category: 'system',
   value: '',
-  unit: '',
+  unit: '', // Assuming 'unit' is either stored in 'value' or another column not shown
   description: ''
 });
 
@@ -164,7 +157,7 @@ const form = ref({
 const saveParameter = async () => {
   try {
     saving.value = true;
-    await parameterStore.addParameter(form.value);
+    await parameterStore.createParameter(form.value);
     router.push('/parameters');
   } catch (error) {
     console.error('Error al guardar parámetro:', error);

@@ -193,10 +193,10 @@ const displayedSensors = computed(() => {
 });
 
 const displayedAlerts = computed(() => {
-  const alerts = alertStore.recentAlerts;
+  // Use alertStore.recentAlerts which is already filtered and enriched
+  const alerts = alertStore.recentAlerts; 
   return expandedSection.value === 'alerts' ? alerts : alerts.slice(0, 3);
 });
-
 // Propiedad computada para los sensores disponibles para selección - AHORA USAN filteredSensors
 const availableSensorsForSelection = computed(() => {
   return sensorStore.filteredSensors

@@ -69,8 +69,8 @@ export const useAuthStore = defineStore('auth', {
 
     // Comprueba si el usuario tiene un permiso específico (legacy, si lo usabas así)
      can: (state) => (permissionString) => {
-      // console.log('[Auth Store - can] Checking permission:', permissionString);
-      // console.log('[Auth Store - can] Current permissions:', state.permissions);
+      console.log('[Auth Store - can] Checking permission:', permissionString);
+      console.log('[Auth Store - can] Current permissions:', state.permissions);
 
       if (!permissionString || typeof permissionString !== 'string') {
         // console.warn('[Auth Store - can] Invalid permission string provided. Returning false.');
@@ -80,15 +80,17 @@ export const useAuthStore = defineStore('auth', {
       // Divide la cadena "moduleId.action" en sus partes
       const [moduleId, action] = permissionString.split('.');
 
+      // console.log('Verificando Permisos:',[moduleId,action])
+
       // Asegúrate de que ambas partes existan
       if (!moduleId || !action) {
-        // console.warn(`[Auth Store - can] Permission string format incorrect: ${permissionString}. Expected 'moduleId.action'. Returning false.`);
+        console.warn(`[Auth Store - can] Permission string format incorrect: ${permissionString}. Expected 'moduleId.action'. Returning false.`);
         return false;
       }
 
       // Si no hay permisos cargados, o el objeto de permisos está vacío
       if (!state.permissions || typeof state.permissions !== 'object' || Object.keys(state.permissions).length === 0) {
-        // console.log(`[Auth Store - can] No permissions loaded or empty for ${permissionString}. Returning false.`);
+        console.log(`[Auth Store - can] No permissions loaded or empty for ${permissionString}. Returning false.`);
         return false;
       }
 
@@ -97,13 +99,13 @@ export const useAuthStore = defineStore('auth', {
 
       // Si el módulo no existe en los permisos del usuario
       if (!modulePermissions) {
-        // console.log(`[Auth Store - can] Module '${moduleId}' not found in permissions. Returning false.`);
+        console.log(`[Auth Store - can] Module '${moduleId}' not found in permissions. Returning false.`);
         return false;
       }
 
       // Finalmente, verifica si la acción específica existe para ese módulo y si su valor es 'true'
       const hasActionPermission = modulePermissions[action] === true;
-      // console.log(`[Auth Store - can] Result for ${permissionString}: ${hasActionPermission}`);
+      console.log(`[Auth Store - can] Result for ${permissionString}: ${hasActionPermission}`);
       return hasActionPermission;
     },
 

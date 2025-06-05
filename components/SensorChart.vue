@@ -133,9 +133,9 @@ const fetchHistoricalReadings = async () => {
       }
 
       const { data, error: fetchError } = await $supabase
-        .from('SensorReadings')
+        .from('sensor_readings') // <-- ¡CORREGIDO! Asegúrate de que esta línea es 'sensor_readings'
         .select('value, timestamp')
-        .eq('sensorId', sensor.id)
+        .eq('sensor_id', sensor.id) // <-- ¡CORREGIDO! Asegúrate de que esta línea es 'sensor_id'
         .gte('timestamp', timeAgo.toISOString())
         .order('timestamp', { ascending: true });
 
@@ -165,6 +165,8 @@ const fetchHistoricalReadings = async () => {
     if (allFailed && props.sensors.length > 0) {
       error.value = 'No se pudo cargar la gráfica para ningún sensor. Verifique la conexión o los permisos.';
     } else if (Object.keys(newHistoricalData).length === 0 && props.sensors.length > 0) {
+      // Si no hay datos, pero no hubo errores fatales, simplemente no se muestra la gráfica
+      // El mensaje de 'emptyDataMessage' se encargará de esto.
       error.value = null;
     } else {
       error.value = null;
@@ -181,11 +183,11 @@ const fetchHistoricalReadings = async () => {
 
 // Observar cambios en 'selectedRange' o la SELECCIÓN de sensores (IDs)
 // Solo disparamos la carga histórica cuando cambia el rango o los IDs de los sensores seleccionados.
-watch([() => props.sensors.map(s => s.id), selectedRange], async ([newSensorIds, newRange], [oldSensorIds, oldRange]) => { // <-- ¡AQUÍ ESTÁ LA CORRECCIÓN!
+watch([() => props.sensors.map(s => s.id), selectedRange], async ([newSensorIds, newRange], [oldSensorIds, oldRange]) => {
   // Para evitar recargar si solo cambian los datos de Realtime dentro de un sensor,
   // chequeamos si los IDs de los sensores seleccionados han cambiado.
   const idsChanged = JSON.stringify(newSensorIds) !== JSON.stringify(oldSensorIds);
-  if (idsChanged || newRange !== oldRange) { // <-- Y AQUÍ LA CORRECCIÓN DE LA CONDICIÓN
+  if (idsChanged || newRange !== oldRange) {
     await fetchHistoricalReadings();
   }
 }, { immediate: true, deep: true });
@@ -257,7 +259,7 @@ const chartOptions = computed(() => ({
   },
   tooltip: {
     x: {
-      format: 'dd MMM yyyy HH:mm:ss' // Corregido el formato aquí también para evitar posibles errores
+      format: 'dd MMM HH:mm:ss'
     },
     y: {
       formatter: function (val) {
@@ -279,7 +281,7 @@ const chartOptions = computed(() => ({
 
 // Chart series data: Ahora fusiona datos históricos con datos en tiempo real
 const series = computed(() => {
-   console.log('--- La propiedad computada `series` de SensorChart se está re-evaluando. ---', Date.now());
+  console.log('--- La propiedad computada `series` de SensorChart se está re-evaluando. ---', Date.now());
   const datasets = props.sensors.map(sensor => {
     // Obtener datos históricos para el sensor
     const historicalData = historicalChartData.value[sensor.id] || [];

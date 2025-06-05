@@ -172,17 +172,39 @@ const sensors = computed(() => sensorStore.sensors);
 // Alertas con información de sensor y organización (si aplica)
 const alertsWithSensorAndOrg = computed(() => {
   return alertStore.alerts.map(alert => {
-    const sensor = sensors.value.find(s => s.id === alert.sensorId);
-    let organizationName = null;
-    if (sensor && sensor.organizationId) {
-      const org = organizations.value.find(o => o.id === sensor.organizationId);
+    let sensorName = 'Desconocido';
+    let organizationName = 'Desconocida';
+    let organizationIdForAlert = null; // Usaremos esto para el filtro y display
+
+    // 1. Obtener nombre del sensor (como ya lo tienes funcionando)
+    // Usamos alert.sensor_id ya que es el nombre de la columna en la BD
+    if (alert.sensor_id) {
+      const sensor = sensors.value.find(s => s.id === alert.sensor_id);
+      if (sensor) {
+        sensorName = sensor.name;
+        // La organization_id del sensor es la que nos interesa para la alerta
+        organizationIdForAlert = sensor.organization_id;
+      }
+    }
+
+    // 2. Obtener el nombre de la organización
+    // Primero, intenta con el organization_id asociado directamente a la alerta,
+    // o con el organization_id obtenido del sensor.
+    const orgIdToLookup = organizationIdForAlert || alert.organization_id; // Prioriza el del sensor si existe, si no, el de la alerta
+
+    if (orgIdToLookup) {
+      const org = organizations.value.find(o => o.id === orgIdToLookup);
       organizationName = org ? org.name : 'Desconocida';
     }
+
     return {
       ...alert,
-      sensorName: sensor ? sensor.name : 'Desconocido',
-      organizationId: sensor ? sensor.organizationId : null, // Agregamos organizationId a la alerta
+      sensorName: sensorName,
+      organizationId: orgIdToLookup, // Añade esta propiedad a la alerta enriquecida para el filtro
       organizationName: organizationName,
+      // Asegúrate de que las propiedades utilizadas en el template son consistentes
+      // con las que vienen de la BD (snake_case) o las que has remapeado aquí.
+      // alert.description y alert.alert_time ya son correctos.
     };
   });
 });
@@ -277,7 +299,35 @@ const formatDate = (date) => {
 };
 
 const resolveAlert = async (id) => {
-  await alertStore.resolveAlert(id);
+  const nuxtApp = useNuxtApp();
+  const supabase = nuxtApp.$supabase;
+
+  try {
+    const { data, error } = await supabase
+      .from('alerts')
+      .update({
+        status: 'resolved',
+        resolved_time: new Date().toISOString() // Establece la hora actual en formato ISO
+      })
+      .eq('id', id); // Condición para actualizar solo la alerta con el ID específico
+
+    if (error) {
+      console.error('[Alerts Page] Error al resolver alerta:', error.message);
+      // Opcional: Mostrar una notificación al usuario sobre el error
+      return;
+    }
+
+    console.log('[Alerts Page] Alerta resuelta con éxito:', data);
+    // Como tienes una suscripción en tiempo real (alertStore.subscribeToAlertUpdates()),
+    // la interfaz debería actualizarse automáticamente una vez que la base de datos cambie.
+    // No necesitas actualizar manualmente el estado 'alerts' aquí si el realtime está funcionando.
+    // Si la alerta se resuelve y el filtro de estado está en 'active', la alerta desaparecerá.
+    // Si está en 'Todos los Estados', verás que su estado cambia a 'Resuelta'.
+
+  } catch (e) {
+    console.error('[Alerts Page] Excepción al resolver alerta:', e.message);
+    // Opcional: Mostrar una notificación de error al usuario
+  }
 };
 
 const handlePageChange = (page) => {

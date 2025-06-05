@@ -13,254 +13,183 @@ export const useAlertStore = defineStore('alerts', {
   }),
 
   getters: {
+    // General purpose filtered alerts, now also enriched with sensor and organization names.
+    // This getter is reactive to:
+    // - `state.alerts` (raw alerts from DB/Realtime)
+    // - `organizationStore.selectedOrganizationId` (for filtering)
+    // - `sensorStore.sensors` (for sensor name lookup)
+    // - `organizationStore.organizations` (for organization name lookup)
     filteredAlerts: (state) => {
       const organizationStore = useOrganizationStore();
       const sensorStore = useSensorStore();
 
-      if (!organizationStore.selectedOrganizationId) {
-        return state.alerts;
+      let filtered = state.alerts;
+
+      // --- CRITICAL DEPENDENCY CHECK ---
+      // Ensure that sensorStore.sensors and organizationStore.organizations are populated
+      // before attempting to filter or enrich. If they are not, the .find() calls would fail
+      // or return incorrect 'Desconocido' values.
+      if (!sensorStore.sensors.length || !organizationStore.organizations.length) {
+          console.warn('[Alerts Store] filteredAlerts: Sensors or Organizations not yet loaded for enrichment. Returning partial data.');
+          // Return alerts without enrichment, or an empty array, or a loading state.
+          // Returning un-enriched alerts allows the UI to show 'Cargando...' for names
+          return state.alerts.map(alert => ({
+              ...alert,
+              sensorName: 'Cargando...',
+              organizationName: 'Cargando...'
+          }));
       }
 
-      const sensorIdsInSelectedOrg = sensorStore.filteredSensors.map(sensor => sensor.id);
+      // Apply organization filter if a specific organization is selected
+      if (organizationStore.selectedOrganizationId) {
+        // Find all sensors belonging to the selected organization.
+        // We use `sensorStore.sensors` (all sensors) here, not `filteredSensors`,
+        // to ensure we can correctly map alerts to sensors within the selected organization,
+        // regardless of the current sensor filter.
+        const sensorIdsInSelectedOrg = sensorStore.sensors
+          .filter(sensor => sensor.organization_id === organizationStore.selectedOrganizationId)
+          .map(sensor => sensor.id);
 
-      return state.alerts.filter(alert =>
-        sensorIdsInSelectedOrg.includes(alert.sensorId)
-      );
+        filtered = filtered.filter(alert =>
+          // Check if the alert's sensor_id is in the list of sensors from the selected organization
+          (alert.sensor_id && sensorIdsInSelectedOrg.includes(alert.sensor_id)) ||
+          // OR if the alert itself has an organization_id that matches the selected organization.
+          // This handles alerts that might not be directly tied to a sensor but directly to an organization.
+          (alert.organization_id && alert.organization_id === organizationStore.selectedOrganizationId)
+        );
+      }
+
+      // After filtering, enrich each alert with sensorName and organizationName
+      return filtered.map(alert => {
+        // Find the associated sensor
+        const sensor = sensorStore.sensors.find(s => s.id === alert.sensor_id);
+        const sensorName = sensor ? sensor.name : 'Desconocido';
+
+        // Determine the effective organization ID for the alert
+        // Prioritize `alert.organization_id` if it exists.
+        // Otherwise, fall back to the `sensor.organization_id` if a sensor was found.
+        const effectiveOrgId = alert.organization_id || sensor?.organization_id;
+        const organization = organizationStore.organizations.find(org => org.id === effectiveOrgId);
+        const organizationName = organization ? organization.name : 'Desconocida';
+
+        return {
+          ...alert,
+          sensorName: sensorName,
+          organizationName: organizationName,
+        };
+      });
     },
 
-    totalAlerts: (state) => state.filteredAlerts.length,
-    highPriorityAlerts: (state) => state.filteredAlerts.filter(a => a.priority === 'high').length,
-    mediumPriorityAlerts: (state) => state.filteredAlerts.filter(a => a.priority === 'medium').length,
-    lowPriorityAlerts: (state) => state.filteredAlerts.filter(a => a.priority === 'low').length,
-
-    activeAlerts: (state) => {
-      const activeFiltered = state.filteredAlerts.filter(a => a.status === 'active');
-      return activeFiltered.length;
-    },
-
+    // Specific getter for the dashboard's "Recent Alerts" section.
+    // This getter is reactive to `filteredAlerts`.
     recentAlerts: (state) => {
-      return [...state.filteredAlerts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // Re-use the already filtered and enriched alerts from `filteredAlerts` getter.
+      // This automatically applies the selected organization filter and has names.
+      const alertsToProcess = state.filteredAlerts;
+
+      // Sort alerts by `alert_time` in descending order (most recent first)
+      const sorted = [...alertsToProcess].sort((a, b) => {
+        const dateA = new Date(a.alert_time).getTime();
+        const dateB = new Date(b.alert_time).getTime();
+        return dateB - dateA;
+      });
+
+      // Limit the number of alerts for a concise dashboard display (e.g., top 5)
+      return sorted.slice(0, 5); // You can adjust this limit (e.g., to 10)
     },
 
-    alertsForSensor: (state) => (sensorId) => {
-      return state.filteredAlerts.filter(alert => alert.sensorId === sensorId);
-    },
+    // Your existing statistical getters
+    totalAlerts: (state) => state.alerts.length,
+    activeAlerts: (state) => state.alerts.filter(alert => alert.status === 'active').length,
+    resolvedAlerts: (state) => state.alerts.filter(alert => alert.status === 'resolved').length,
   },
 
   actions: {
     async fetchAlerts() {
       this.isLoading = true;
       this.error = null;
-      console.log('[Alerts Store Action] Fetching alerts started...');
       try {
-        const { $supabase } = useNuxtApp();
-
-        const { data, error } = await $supabase
-          .from('Alerts')
-          .select(`
-            *,
-            Sensors(
-              name,
-              OrganizationId(name)
-            )
-          `)
-          .order('createdAt', { ascending: false });
-
-        if (error) {
-          throw error;
-        }
-
-        this.alerts = (data || []).map(alert => ({
-          ...alert,
-          sensorName: alert.Sensors?.name || 'Sensor Desconocido',
-          organizationName: alert.Sensors?.OrganizationId?.name || 'Organización Desconocida',
-        }));
-
-        console.log(`[Alerts Store Action] Data fetched. Number of records: ${this.alerts.length}`);
-        console.log('[Alerts Store Action] Processed data for alerts (first item):', this.alerts[0]);
-
-      } catch (err) {
-        console.error('[Alerts Store Action] Error fetching alerts:', err);
-        this.error = err.message || 'Error al cargar las alertas.';
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    async resolveAlert(alertId) {
-      this.isLoading = true;
-      this.error = null;
-      try {
-        const { $supabase } = useNuxtApp();
-
-        const { data, error } = await $supabase
-          .from('Alerts')
-          .update({ status: 'resolved', updatedAt: new Date().toISOString() })
-          .eq('id', alertId)
-          .select(`
-            *,
-            Sensors(
-              name,
-              OrganizationId(name)
-            )
-          `);
-
-        if (error) {
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          const updatedAlertRaw = data[0];
-          const updatedAlert = {
-              ...updatedAlertRaw,
-              sensorName: updatedAlertRaw.Sensors?.name || 'Sensor Desconocido',
-              organizationName: updatedAlertRaw.Sensors?.OrganizationId?.name || 'Organización Desconocida',
-          };
-
-          const index = this.alerts.findIndex(alert => alert.id === updatedAlert.id);
-          if (index !== -1) {
-            this.alerts[index] = updatedAlert;
-          }
-        }
-      } catch (err) {
-        console.error('Error resolving alert:', err);
-        this.error = err.message || 'Error al resolver la alerta.';
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    async createAlert(newAlertData) {
-      this.isLoading = true;
-      this.error = null;
-      try {
-        const { $supabase } = useNuxtApp();
-
-        const { data, error } = await $supabase
-          .from('Alerts')
-          .insert([newAlertData])
-          .select(`
-            *,
-            Sensors(
-              name,
-              OrganizationId(name)
-            )
-          `);
+        const { data, error } = await useNuxtApp().$supabase
+          .from('alerts')
+          .select('*')
+          .order('alert_time', { ascending: false }); // Order by alert_time for initial fetch
 
         if (error) throw error;
-
-        if (data && data.length > 0) {
-          const createdAlertRaw = data[0];
-          const createdAlert = {
-              ...createdAlertRaw,
-              sensorName: createdAlertRaw.Sensors?.name || 'Sensor Desconocido',
-              organizationName: createdAlertRaw.Sensors?.OrganizationId?.name || 'Organización Desconocida',
-          };
-          this.alerts.unshift(createdAlert);
-        }
-
-      } catch (err) {
-        console.error('Error creating alert:', err);
-        this.error = err.message || 'Error al crear la alerta.';
+        this.alerts = data;
+      } catch (error) {
+        this.error = error.message;
+        console.error('Error fetching alerts:', error.message);
       } finally {
         this.isLoading = false;
       }
     },
 
-    // --- ACCIONES DE REALTIME ---
+    async resolveAlert(id) {
+  this.isLoading = true;
+  this.error = null;
+  try {
+    const { data, error } = await useNuxtApp().$supabase
+      .from('alerts')
+      .update({ status: 'resolved', resolved_time: new Date().toISOString() }) // <-- CHANGE HERE: resolved_at to resolved_time
+      .eq('id', id);
+
+    if (error) throw error;
+
+    // Optimistically update the local state (Realtime might also update it)
+    const index = this.alerts.findIndex(alert => alert.id === id);
+    if (index !== -1) {
+      this.alerts[index].status = 'resolved';
+      this.alerts[index].resolved_time = new Date().toISOString(); // <-- CHANGE HERE: resolved_at to resolved_time
+    }
+  } catch (error) {
+    this.error = error.message;
+    console.error('Error resolving alert:', error.message);
+  } finally {
+    this.isLoading = false;
+  }
+},
 
     async subscribeToAlertUpdates() {
+      // Prevent multiple subscriptions
       if (this.alertsChannel) {
-          await this.alertsChannel.unsubscribe();
-          this.alertsChannel = null;
-      }
-
-      let supabaseClient = null;
-      try {
-          const nuxtApp = useNuxtApp();
-          supabaseClient = nuxtApp.$supabase;
-      } catch (e) {
-          console.error('[Alerts Store] ERROR FATAL al intentar acceder a $supabase:', e);
-          return;
-      }
-
-      if (!supabaseClient) {
-          console.error('[Alerts Store] ERROR: $supabase no está disponible. No se puede suscribir a alertas.');
-          return;
+        console.log('[Alerts Store] Already subscribed to alerts.');
+        return;
       }
 
       try {
-          const channel = supabaseClient
-              .channel('public:Alerts')
-              .on(
-                  'postgres_changes',
-                  { event: '*', schema: 'public', table: 'Alerts' },
-                  async (payload) => {
-                      let processedAlert = payload.new;
-
-                      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                          const { data: fullAlertData, error: fetchError } = await supabaseClient
-                              .from('Alerts')
-                              .select(`
-                                  *,
-                                  Sensors(
-                                      name,
-                                      OrganizationId(name)
-                                  )
-                              `)
-                              .eq('id', payload.new.id)
-                              .single();
-
-                          if (fetchError) {
-                              console.error('Error fetching full alert data for realtime update:', fetchError);
-                              if (payload.new) {
-                                  processedAlert = {
-                                      ...payload.new,
-                                      sensorName: 'Error al cargar Sensor',
-                                      organizationName: 'Error al cargar Organización'
-                                  };
-                              }
-                          } else {
-                              processedAlert = {
-                                  ...fullAlertData,
-                                  sensorName: fullAlertData.Sensors?.name || 'Sensor Desconocido',
-                                  organizationName: fullAlertData.Sensors?.OrganizationId?.name || 'Organización Desconocida',
-                              };
-                          }
-                      }
-
-                      if (payload.eventType === 'INSERT') {
-                          this.alerts.unshift(processedAlert);
-                      } else if (payload.eventType === 'UPDATE') {
-                          const index = this.alerts.findIndex(alert => alert.id === payload.new.id);
-                          if (index !== -1) {
-                              this.alerts[index] = { ...this.alerts[index], ...processedAlert };
-                          }
-                      } else if (payload.eventType === 'DELETE') {
-                          this.alerts = this.alerts.filter(alert => alert.id !== payload.old.id);
-                      }
-                  }
-              )
-              .subscribe((status) => {
-                  if (status === 'SUBSCRIBED') {
-                      console.log('Suscripción a alertas (Realtime) - STATUS: SUBSCRIBED');
-                  } else if (status === 'CHANNEL_ERROR') {
-                      console.error('Suscripción a alertas (Realtime) - STATUS: CHANNEL_ERROR', status);
-                  } else if (status === 'TIMEOUT') {
-                      console.warn('Suscripción a alertas (Realtime) - STATUS: TIMEOUT');
-                  } else {
-                      console.log(`Suscripción a alertas (Realtime) - STATUS: ${status}`);
-                  }
-              });
-          this.alertsChannel = channel;
+        const client = useNuxtApp().$supabase;
+        const channel = client.channel('alerts_changes');
+        channel
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, (payload) => {
+            console.log('[Alerts Store] Realtime change in alerts:', payload);
+            if (payload.eventType === 'INSERT') {
+              // Add new alert to the beginning and re-sort to maintain chronological order
+              this.alerts.unshift(payload.new);
+              this.alerts.sort((a, b) => new Date(b.alert_time) - new Date(a.alert_time));
+            } else if (payload.eventType === 'UPDATE') {
+              // Update existing alert and re-sort
+              const index = this.alerts.findIndex(alert => alert.id === payload.old.id);
+              if (index !== -1) {
+                this.alerts[index] = payload.new;
+                this.alerts.sort((a, b) => new Date(b.alert_time) - new Date(a.alert_time));
+              }
+            } else if (payload.eventType === 'DELETE') {
+              // Remove deleted alert
+              this.alerts = this.alerts.filter(alert => alert.id !== payload.old.id);
+            }
+          })
+          .subscribe();
+        this.alertsChannel = channel;
       } catch (e) {
-          console.error('[Alerts Store] Error al configurar el canal de Supabase para alertas (en try/catch de channel):', e);
+          console.error('[Alerts Store] Error setting up Supabase Realtime channel for alerts:', e);
       }
     },
+
     async unsubscribeFromAlertUpdates() {
       if (this.alertsChannel) {
         await this.alertsChannel.unsubscribe();
         this.alertsChannel = null;
+        console.log('[Alerts Store] Unsubscribed from alerts.');
       }
     }
   }

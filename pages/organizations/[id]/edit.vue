@@ -49,7 +49,7 @@
             <div>
               <label class="form-label">Correo de Contacto</label>
               <input 
-                v-model="form.contactEmail"
+                v-model="form.contact_email"
                 type="email"
                 required
                 class="form-input" />
@@ -58,7 +58,7 @@
             <div>
               <label class="form-label">Teléfono de Contacto</label>
               <input 
-                v-model="form.contactPhone"
+                v-model="form.phone_number"
                 type="tel"
                 class="form-input" />
             </div>
@@ -107,8 +107,8 @@ const organization = ref(null);
 const form = ref({
   name: '',
   address: '',
-  contactEmail: '',
-  contactPhone: ''
+  contact_email: '',
+  contact_phone: ''
 });
 
 // Métodos
