@@ -1,29 +1,97 @@
 // utils/navigation.js
 
-// Definición de iconos usando clases (asume que los iconos están configurados globalmente,
-// por ejemplo, con nuxt-icon o algún setup similar para i-heroicons)
-// Nota: Aquí se usa una función dummy para representar los componentes de icono
-// ya que no pueden ser importados directamente en un archivo de utilidades simple como este
-// si no están disponibles globalmente o a través de un plugin.
-// La Sidebar.vue seguirá usando los `defineComponent` con `h` que ya tienes.
-const createIconComponent = (className) => ({
-  render: () => h('div', { class: className })
-});
-
-// Puedes definir tus íconos aquí de la misma manera que en Sidebar.vue si no los tienes globalmente disponibles
-// Asegúrate de importar `h` si los defines aquí para este archivo de utilidades
-// import { h } from 'vue'; // Descomentar si usas la función createIconComponent aquí
-
 export const navigationItems = [
-  { name: "Dashboard", to: "/", icon: "i-heroicons-home", moduleId: "dashboard", permissionAction: "ver" },
-  { name: "Sensores", to: "/sensors", icon: "i-heroicons-chip", moduleId: "sensors", permissionAction: "ver" },
-  { name: "Alertas", to: "/alerts", icon: "i-heroicons-bell", moduleId: "alerts", permissionAction: "ver" },
-  { name: "Organizaciones", to: "/organizations", icon: "i-heroicons-building-office", moduleId: "organizations", permissionAction: "ver" },
-  { name: "Usuarios", to: "/users", icon: "i-heroicons-users", moduleId: "users", permissionAction: "ver" },
-  { name: "Permisos", to: "/permissions", icon: "i-heroicons-lock-closed", moduleId: "roles", permissionAction: "ver" },
-  { name: "Parámetros", to: "/parameters", icon: "i-heroicons-cog-6-tooth", moduleId: "parameters", permissionAction: "ver" },
-  { name: "Configuración", to: "/settings", icon: "i-heroicons-cog-6-tooth", moduleId: "settings", permissionAction: "ver" }
+  {
+    name: "Dashboard",
+    to: "/",
+    icon: "i-heroicons-home",
+    moduleId: "dashboard",
+    permissionAction: "view"
+  },
+  {
+    name: "Ubicaciones",
+    to: "/locations",
+    icon: "i-heroicons-map-pin",
+    moduleId: "locations",
+    permissionAction: "view"
+  },
+  {
+    name: "Dispositivos",
+    to: "/devices",
+    icon: "i-heroicons-cpu-chip",
+    moduleId: "devices",
+    permissionAction: "view"
+  },
+  {
+    name: "Activos",
+    to: "/assets",
+    icon: "i-heroicons-cube",
+    moduleId: "assets",
+    permissionAction: "view"
+  },
+  {
+    name: "Configuración General",
+    to: "/settings",
+    icon: "i-heroicons-cog-6-tooth",
+    moduleId: "settings",
+    permissionAction: "view"
+  },
+  {
+    name: "Reportes",
+    to: "/reports",
+    icon: "i-heroicons-document-text",
+    moduleId: "reports",
+    permissionAction: "view"
+  },
+  {
+    name: "Organizaciones",
+    to: "/organizations",
+    icon: "i-heroicons-building-office",
+    moduleId: "organization",
+    permissionAction: "view"
+  },
+  {
+    name: "Alertas",
+    to: "/alerts",
+    icon: "i-heroicons-bell",
+    moduleId: "alerts",
+    permissionAction: "view"
+  },
+  {
+    name: "Usuarios", // Changed name to just "Usuarios" as "Permisos" will be separate
+    to: "/users", // This link will default to the 'users' tab
+    icon: "i-heroicons-users",
+    moduleId: "users",
+    permissionAction: "view"
+  },
+  // --- NEW 'PERMISOS' NAVIGATION ITEM ---
+  {
+    name: "Permisos", // Name for the sidebar link
+    to: "/permissions", // Link to the users page, with a query param to activate the permissions tab
+    icon: "i-heroicons-key", // A suitable icon for permissions (e.g., a key or shield)
+    moduleId: "permissions", // This must match the 'id' of the new module in your 'app_modules' table
+    permissionAction: "view" // The permission action required to see this navigation item
+  },
+  // --- END NEW 'PERMISOS' NAVIGATION ITEM ---
+  {
+    name: "Monitor en Tiempo Real",
+    to: "/realtime-monitor",
+    icon: "i-heroicons-chart-bar",
+    moduleId: "realtime_monitor",
+    permissionAction: "view"
+  },
+  {
+    name: "Perfiles de Vibración",
+    to: "/vibration-profiles",
+    icon: "i-heroicons-wave-pulse",
+    moduleId: "vibration_profiles",
+    permissionAction: "view"
+  },
+  {
+    name: "Estado de Activos",
+    to: "/asset-status",
+    icon: "i-heroicons-clipboard-document-check",
+    moduleId: "asset_status",
+    permissionAction: "view"
+  },
 ];
-
-// Ojo: En este archivo de utilidades, la propiedad 'icon' debe ser una cadena de texto (el nombre de la clase del icono)
-// no un componente Vue. El Sidebar.vue se encargará de mapear esta cadena a tu componente de icono real.

@@ -92,20 +92,20 @@ const login = async () => {
     loading.value = true;
     error.value = '';
 
-    await authStore.login({
+    // --- CAMBIO CLAVE AQUÍ: Cambia authStore.login a authStore.signIn ---
+    await authStore.signIn({ // <--- ESTA ES LA LÍNEA QUE DEBES CAMBIAR
       email: email.value,
       password: password.value
     });
 
-    // --- CORRECCIÓN CLAVE AQUÍ ---
-    // Asegúrate de que el user ya esté en el store después de login.
+    // Asegúrate de que el user ya esté en el store después de signIn.
     // Luego llama a `ensureUserProfileExists` con el ID del usuario.
     if (authStore.user) {
-      await authStore.ensureUserProfileExists(authStore.user.id); 
+      await authStore.ensureUserProfileExists(authStore.user.id);
     } else {
       throw new Error("No user found after successful login authentication.");
     }
-    
+
     let redirectToPath = '/'; // Ruta por defecto si no se encuentra ningún módulo accesible
 
     // Itera sobre tus ítems de navegación para encontrar el primero accesible
@@ -148,7 +148,7 @@ const login = async () => {
 
   } catch (err) {
     console.error('Login error:', err); // Log detallado del error
-    error.value = err.message || 'Error al iniciar sesión. Por favor, verifica tus credenciales.';
+    error.value = authStore.error || err.message || 'Error al iniciar sesión. Por favor, verifica tus credenciales.';
   } finally {
     loading.value = false;
   }

@@ -68,12 +68,22 @@ import PermissionGuard from "~/components/PermissionGuard.vue";
 const IconComponents = {
   "i-heroicons-x-mark": defineComponent({ render: () => h("div", { class: "i-heroicons-x-mark" }) }),
   "i-heroicons-home": defineComponent({ render: () => h("div", { class: "i-heroicons-home" }) }),
-  "i-heroicons-chip": defineComponent({ render: () => h("div", { class: "i-heroicons-chip" }) }),
-  "i-heroicons-bell": defineComponent({ render: () => h("div", { class: "i-heroicons-bell" }) }),
-  "i-heroicons-building-office": defineComponent({ render: () => h("div", { class: "i-heroicons-building-office" }) }),
-  "i-heroicons-users": defineComponent({ render: () => h("div", { class: "i-heroicons-users" }) }),
-  "i-heroicons-lock-closed": defineComponent({ render: () => h("div", { class: "i-heroicons-lock-closed" }) }),
-  "i-heroicons-cog-6-tooth": defineComponent({ render: () => h("div", { class: "i-heroicons-cog-6-tooth" }) }),
+  "i-heroicons-chip": defineComponent({ render: () => h("div", { class: "i-heroicons-chip" }) }), // Ya tienes este
+  "i-heroicons-bell": defineComponent({ render: () => h("div", { class: "i-heroicons-bell" }) }), // Ya tienes este
+  "i-heroicons-building-office": defineComponent({ render: () => h("div", { class: "i-heroicons-building-office" }) }), // Ya tienes este
+  "i-heroicons-users": defineComponent({ render: () => h("div", { class: "i-heroicons-users" }) }), // Ya tienes este
+  "i-heroicons-lock-closed": defineComponent({ render: () => h("div", { class: "i-heroicons-lock-closed" }) }), // Ya tienes este
+  "i-heroicons-cog-6-tooth": defineComponent({ render: () => h("div", { class: "i-heroicons-cog-6-tooth" }) }), // Ya tienes este
+
+  // **NUEVOS ICONOS AÑADIDOS DESDE navigationItems.js**
+  "i-heroicons-map-pin": defineComponent({ render: () => h("div", { class: "i-heroicons-map-pin" }) }),
+  "i-heroicons-cpu-chip": defineComponent({ render: () => h("div", { class: "i-heroicons-cpu-chip" }) }),
+  "i-heroicons-cube": defineComponent({ render: () => h("div", { class: "i-heroicons-cube" }) }),
+  "i-heroicons-document-text": defineComponent({ render: () => h("div", { class: "i-heroicons-document-text" }) }),
+  "i-heroicons-chart-bar": defineComponent({ render: () => h("div", { class: "i-heroicons-chart-bar" }) }),
+  "i-heroicons-wave-pulse": defineComponent({ render: () => h("div", { class: "i-heroicons-wave-pulse" }) }),
+  "i-heroicons-clipboard-document-check": defineComponent({ render: () => h("div", { class: "i-heroicons-clipboard-document-check" }) }),
+  // Agrega cualquier otro icono que utilices en navigationItems.js
 };
 
 // Mapea las cadenas de iconos a los componentes reales

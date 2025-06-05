@@ -1,6 +1,7 @@
 <script setup>
-import { computed, watch, onMounted } from 'vue'; // Asegúrate de importar watch y onMounted
-import { useAuthStore } from '~/stores/auth'; // Asegúrate de que esta ruta sea correcta
+import { computed, watch, onMounted } from 'vue';
+import { useAuthStore } from '~/stores/auth';
+import { getInternalPermissionName } from '~/utils/permissionsMap'; // Importa la función de mapeo
 
 const props = defineProps({
   moduleId: {
@@ -15,33 +16,38 @@ const props = defineProps({
 
 const authStore = useAuthStore();
 
-// --- NUEVOS LOGS DE DEPURACIÓN EN PERMISSIONGUARD (Mantenlos por ahora) ---
-console.log(`[PG-DEBUG] PermissionGuard initialized for module: ${props.moduleId}, permission: ${props.permission}`);
-console.log(`[PG-DEBUG] authStore instance in PermissionGuard:`, authStore); // Verificamos la instancia del store
-// --------------------------------------------------------------------------
+// Construye la cadena de permiso completa (ej: "users.ver")
+const fullFrontendPermissionString = computed(() => 
+  `${props.moduleId}.${props.permission}`
+);
 
-// ESTA ES LA LÍNEA CLAVE: UTILIZA EL GETTER 'can' DE TU STORE
+// Obten el nombre interno del permiso (ej: "view")
+const internalPermissionName = computed(() => 
+  getInternalPermissionName(props.permission)
+);
+
+// Construye la cadena de permiso completa con el nombre interno (ej: "users.view")
+const fullInternalPermissionString = computed(() =>
+  `${props.moduleId}.${internalPermissionName.value}`
+);
+
+// El getter 'hasPermission' ahora usará el nombre interno del permiso
 const hasPermission = computed(() => {
-  const result = authStore.can(`${props.moduleId}.${props.permission}`);
-  console.log(`[PG-DEBUG] hasPermission computed for ${props.moduleId}.${props.permission}: ${result}`);
+  const result = authStore.can(fullInternalPermissionString.value);
+  console.log(`[PG-DEBUG] Checking frontend permission '${fullFrontendPermissionString.value}' -> internal '${fullInternalPermissionString.value}'. Result: ${result}`);
   return result;
 });
 
-// Opcional: watch para ver si hasPermission cambia (mantenlo por ahora para depuración)
+// Los logs de depuración siguen siendo útiles
 watch(hasPermission, (newVal) => {
-    console.log(`[PG-DEBUG] hasPermission changed for ${props.moduleId}.${props.permission}: ${newVal}`);
+    console.log(`[PG-DEBUG] hasPermission changed for ${fullInternalPermissionString.value}: ${newVal}`);
 });
 
-// Opcional: onMounted para ver si el componente se monta (mantenlo por ahora para depuración)
 onMounted(() => {
-    console.log(`[PG-DEBUG] PermissionGuard mounted for ${props.moduleId}.${props.permission}`);
+    console.log(`[PG-DEBUG] PermissionGuard mounted for ${fullInternalPermissionString.value}`);
 });
 </script>
 
 <template>
-  <template v-if="hasPermission">
-    <slot></slot>
-  </template>
-  <template v-else>
-    </template>
+  <slot v-if="hasPermission" />
 </template>

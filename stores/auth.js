@@ -1,17 +1,55 @@
 // stores/auth.js
 import { defineStore } from 'pinia';
 import { useNuxtApp } from '#app';
+// Asegúrate de que useSupabaseClient esté importado correctamente para tu entorno Nuxt/Supabase
+
+import { navigateTo } from '#app'; // Importar navigateTo si se usa explícitamente
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null, // Objeto de usuario de Supabase Auth (auth.users)
-    userProfile: null, // Objeto de perfil desde tu tabla 'Users'
-    role: null, // El rol personalizado del usuario (ej: 'super-admin', 'viewer')
+    userProfile: null, // Objeto de perfil desde tu tabla 'users' (ANTES: 'Users' -> ahora minúsculas)
+    role: null, // El rol personalizado del usuario (ej: 'super-admin', 'Visor') (ANTES: 'viewer' -> ahora 'Visor' como predeterminado en BD)
     permissions: {}, // Estado para almacenar los permisos (objeto de permisos agrupados por módulo)
     isLoading: false, // Indicador general de carga para operaciones de auth
     error: null, // Para almacenar mensajes de error de autenticación
-    availableRoles: [], // Lista de roles disponibles desde la tabla 'Roles'
+    availableRoles: [], // Lista de roles disponibles desde la tabla 'roles' (ANTES: 'Roles' -> ahora minúsculas)
     authListenerUnsubscribe: null, // Para guardar la función de desuscripción del listener de Supabase Auth
+    // New states for form management and permissions
+    editMode: false,
+    currentOrganizationId: null,
+    editingUser: null,
+    editingUserRole: null, // Stores the role ID for the editing user
+    selectedOrganizationId: null, // For creating new users or filtering
+    userPermissions: {}, // Permissions for the user being edited
+    // For managing user list and pagination
+    users: [],
+    page: 1,
+    limit: 10,
+    totalUsers: 0,
+    totalPages: 1,
+    searchQuery: '', // For user search
+    filterRole: '', // For role filter
+    filterOrganization: '', // For organization filter
+    organizations: [], // List of organizations for filters or new users
+    // States related to roles management
+    roles: [],
+    editingRole: null,
+    editingRolePermissions: {}, // Permissions for the role being edited
+    rolePermissionsLoaded: false, // Flag to indicate if role permissions are loaded
+    defaultPermissions: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      manage_users: false,
+      manage_roles: false,
+      manage_alerts: false,
+      generate: false,
+      manage_parameters: false,
+    },
+    appModules: [], // Stores available app modules (from the new app_modules table)
+    initialPermissions: {}, // To track changes when editing a role
   }),
 
   getters: {
@@ -29,536 +67,899 @@ export const useAuthStore = defineStore('auth', {
       return state.userProfile.role === roleName;
     },
 
-    // Comprueba si el usuario tiene un permiso específico (ej: 'users.read', 'products.create')
-    can: (state) => (permissionPath) => {
-      console.log(`[AUTH-CAN-DEBUG] Evaluando permiso para: ${permissionPath}`);
-      console.log(`[AUTH-CAN-DEBUG] userProfile actual (dentro de can):`, JSON.parse(JSON.stringify(state.userProfile)));
-      console.log(`[AUTH-CAN-DEBUG] userProfile?.role actual (dentro de can):`, state.userProfile?.role);
-      console.log(`[AUTH-CAN-DEBUG] Objeto de permisos (dentro de can):`, JSON.parse(JSON.stringify(state.permissions)));
+    // Comprueba si el usuario tiene un permiso específico (legacy, si lo usabas así)
+     can: (state) => (permissionString) => {
+      // console.log('[Auth Store - can] Checking permission:', permissionString);
+      // console.log('[Auth Store - can] Current permissions:', state.permissions);
 
-      // Los super-admin tienen acceso total
-      if (state.userProfile?.role === 'super-admin') {
-        console.log('[AUTH-DEBUG] Super-admin: Concediendo acceso total (ignorando verificación de permiso específica).');
-        return true;
-      }
-
-      // Si no es super-admin y no hay permisos cargados, denegar acceso
-      if (!state.permissions || Object.keys(state.permissions).length === 0) {
-        console.log(`[AUTH-CAN-DEBUG] No hay permisos cargados o está vacío para un no-super-admin. Denegando ${permissionPath}.`);
+      if (!permissionString || typeof permissionString !== 'string') {
+        // console.warn('[Auth Store - can] Invalid permission string provided. Returning false.');
         return false;
       }
 
-      // Dividir el permiso en módulo y acción (ej: 'users.read' -> 'users', 'read')
-      const parts = permissionPath.split('.');
-      const moduleName = parts[0];
-      const action = parts[1];
+      // Divide la cadena "moduleId.action" en sus partes
+      const [moduleId, action] = permissionString.split('.');
 
-      console.log(`[AUTH-CAN-DEBUG] No-super-admin: Verificando permiso: ${permissionPath}`);
-      console.log(`[AUTH-CAN-DEBUG] No-super-admin: Nombre del Módulo: "${moduleName}", Acción: "${action}"`);
-      console.log(`[AUTH-CAN-DEBUG] No-super-admin: Permisos del usuario para "${moduleName}":`, state.permissions[moduleName]);
-
-      // Comprobar si el módulo existe y si la acción está incluida en sus permisos
-      if (state.permissions[moduleName] && Array.isArray(state.permissions[moduleName])) {
-        const hasAction = state.permissions[moduleName].includes(action);
-        console.log(`[AUTH-CAN-DEBUG] No-super-admin: Resultado para ${permissionPath}: ${hasAction}`);
-        return hasAction;
+      // Asegúrate de que ambas partes existan
+      if (!moduleId || !action) {
+        // console.warn(`[Auth Store - can] Permission string format incorrect: ${permissionString}. Expected 'moduleId.action'. Returning false.`);
+        return false;
       }
 
-      // Si el módulo no se encuentra o no es un array de acciones, denegar
-      console.log(`[AUTH-CAN-DEBUG] No-super-admin: Módulo "${moduleName}" no encontrado o no es un array. Denegando ${permissionPath}.`);
-      return false;
+      // Si no hay permisos cargados, o el objeto de permisos está vacío
+      if (!state.permissions || typeof state.permissions !== 'object' || Object.keys(state.permissions).length === 0) {
+        // console.log(`[Auth Store - can] No permissions loaded or empty for ${permissionString}. Returning false.`);
+        return false;
+      }
+
+      // Accede al módulo específico en el objeto de permisos del estado
+      const modulePermissions = state.permissions[moduleId];
+
+      // Si el módulo no existe en los permisos del usuario
+      if (!modulePermissions) {
+        // console.log(`[Auth Store - can] Module '${moduleId}' not found in permissions. Returning false.`);
+        return false;
+      }
+
+      // Finalmente, verifica si la acción específica existe para ese módulo y si su valor es 'true'
+      const hasActionPermission = modulePermissions[action] === true;
+      // console.log(`[Auth Store - can] Result for ${permissionString}: ${hasActionPermission}`);
+      return hasActionPermission;
     },
+
+    // Getter para obtener todos los permisos (si necesitas mostrarlos o depurar)
+    allPermissions: (state) => state.permissions,
+
+    // Getters for form management
+    isEditMode: (state) => state.editMode,
+    getEditingUser: (state) => state.editingUser,
+    getEditingUserRole: (state) => state.editingUserRole,
+    getUserPermissions: (state) => state.userPermissions,
+
+    // Getters for user list and pagination
+    getUsers: (state) => state.users,
+    getCurrentPage: (state) => state.page,
+    getLimit: (state) => state.limit,
+    getTotalUsers: (state) => state.totalUsers,
+    getTotalPages: (state) => state.totalPages,
+    getSearchQuery: (state) => state.searchQuery,
+    getFilterRole: (state) => state.filterRole,
+    getFilterOrganization: (state) => state.filterOrganization,
+    getOrganizations: (state) => state.organizations,
+
+    // Getters for roles management
+    getRoles: (state) => state.roles,
+    getEditingRole: (state) => state.editingRole,
+    getEditingRolePermissions: (state) => state.editingRolePermissions,
+    isRolePermissionsLoaded: (state) => state.rolePermissionsLoaded,
+    getAppModules: (state) => state.appModules,
   },
 
   actions: {
-    // Establece el estado de carga
-    setLoading(status) {
-      this.isLoading = status;
-    },
-    // Establece un mensaje de error
-    setError(message) {
-      this.error = message;
-    },
-
-    // Inicia sesión de un usuario con email y contraseña
-    async login({ email, password }) {
+    // --- Funciones de Autenticación Básicas ---
+    async signUp(credentials) {
       this.isLoading = true;
       this.error = null;
-
       try {
         const { $supabase } = useNuxtApp();
-        const { data, error: authError } = await $supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
-        });
-
-        if (authError) {
-          throw authError;
-        }
-
+        const { data, error } = await $supabase.auth.signUp(credentials);
+        if (error) throw error;
         this.user = data.user;
-        if (this.user) {
-          // Una vez autenticado con Supabase Auth, asegura que el perfil de tu tabla 'Users' exista
-          await this.ensureUserProfileExists(this.user.id);
-        }
-
-        console.log('[Auth Store] Inicio de sesión exitoso. Usuario:', this.user);
-        return this.user;
-      } catch (err) {
-        console.error('[Auth Store] Error de inicio de sesión:', err);
-        this.error = err.message || 'Error al iniciar sesión.';
-        this.user = null;
-        this.userProfile = null;
-        this.role = null;
-        this.permissions = {};
-        throw err; // Re-lanza el error para que el componente de la UI lo maneje
+        console.log('[Auth Store] Registro exitoso:', data.user);
+        // Si el registro es exitoso, esperamos que el onAuthStateChange maneje la carga del perfil.
+        // Pero podríamos precargar aquí si es necesario.
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error en el registro:', e.message);
       } finally {
         this.isLoading = false;
       }
     },
 
-    // Cierra la sesión del usuario
-    async logout() {
+    async signIn(credentials) {
       this.isLoading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-
-        // Limpiar el estado del store ANTES de cerrar sesión en Supabase.
-        // Esto evita mostrar datos de un usuario que está a punto de desautenticarse.
-        this.user = null;
-        this.userProfile = null;
-        this.permissions = {};
-        this.role = null;
-
-        // Cerrar sesión en Supabase
-        const { error } = await $supabase.auth.signOut();
-
-        if (error) {
-          console.error('[Auth Store] Error al cerrar sesión en Supabase:', error.message);
-          throw error;
-        }
-
-        console.log('[Auth Store] Sesión cerrada en Supabase y store limpiado. Redirigiendo...');
-        // Redirige usando navigateTo. Esto activará el middleware, que ahora está corregido.
-        await navigateTo('/auth/login');
-      } catch (error) {
-        this.error = error.message;
-        console.error('[Auth Store] Error al cerrar sesión (catch):', error.message);
-        // Asegúrate de que, incluso con un error, el usuario sea redirigido si no está en la página de login.
-        if (useNuxtApp().$router.currentRoute.value.path !== '/auth/login') {
-          await navigateTo('/auth/login');
-        }
+        const { data, error } = await $supabase.auth.signInWithPassword(credentials);
+        if (error) throw error;
+        this.user = data.user;
+        console.log('[Auth Store] Inicio de sesión exitoso:', data.user);
+        // El listener de onAuthStateChange manejará la carga del perfil después de este evento.
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error en el inicio de sesión:', e.message);
       } finally {
         this.isLoading = false;
-        console.log('[Auth Store] Acción de logout finalizada.');
       }
     },
 
-    // Verifica el estado de autenticación al cargar la aplicación o al refrescar
+    async signOut() {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        const { error } = await $supabase.auth.signOut();
+        if (error) throw error;
+        this.user = null;
+        this.userProfile = null;
+        this.role = null;
+        this.permissions = {};
+        console.log('[Auth Store] Sesión cerrada exitosamente.');
+        navigateTo('/login'); // Redirigir al usuario al cerrar sesión
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al cerrar sesión:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async resetPassword(email) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        const { data, error } = await $supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/update-password`, // Asegúrate que esta URL exista
+        });
+        if (error) throw error;
+        console.log('[Auth Store] Correo de restablecimiento de contraseña enviado.');
+        return true; // Indica éxito
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al solicitar restablecimiento de contraseña:', e.message);
+        return false; // Indica fallo
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async updatePassword(newPassword) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        const { data, error } = await $supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        console.log('[Auth Store] Contraseña actualizada exitosamente.');
+        this.user = data.user;
+        return true;
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al actualizar contraseña:', e.message);
+        return false;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    // --- Carga y Gestión del Perfil de Usuario ---
+   async fetchUserProfile(userId) {
+    this.isLoading = true;
+    this.error = null;
+    try {
+        const { $supabase } = useNuxtApp();
+        const { data, error } = await $supabase.rpc('get_user_profile_with_permissions', { p_auth_id: userId });
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+            const profile = data[0]; // The RPC returns an array, take the first element
+
+            this.userProfile = {
+                // Ensure the RPC returns these fields
+                id: profile.id,
+                auth_id: userId, // CRUCIAL: Store the auth_id here
+                email: profile.email,
+                // --- FIX: MAPPING TO CAMELCASE NAMES FROM RPC ---
+                firstName: profile.firstName, // Changed from profile.first_name
+                lastName: profile.lastName,   // Changed from profile.last_name
+                // -------------------------------------------------
+                role: profile.role, // The role name returned by the RPC (e.g.: 'Administrador Global')
+                organization_id: profile.organization_id, // If the RPC returns it
+                preferences: profile.preferences || null,
+                // Add any other fields your RPC returns and you need in userProfile
+            };
+            this.role = profile.role; // Assign the main role name to the 'role' property of the store
+            this.permissions = profile.permissions || {}; // Assign the JSONB permissions object
+
+            console.log('[Auth Store] Perfil de usuario y permisos cargados:', this.userProfile, this.permissions);
+        } else {
+            this.userProfile = null;
+            this.role = null;
+            this.permissions = {};
+            console.warn('[Auth Store] No se encontró perfil de usuario para ID:', userId);
+        }
+    } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al cargar el perfil de usuario:', e.message);
+    } finally {
+        this.isLoading = false;
+    }
+},
+
+     async ensureUserProfileExists(userId) {
+    // Intenta cargar el perfil si no está ya cargado o si el user.id no coincide
+    if (!this.userProfile || this.userProfile.auth_id !== userId) {
+        console.log('[Auth Store] Asegurando que el perfil de usuario exista para:', userId);
+        
+        // Primero, intentar cargar el perfil existente por auth_id
+        await this.fetchUserProfile(userId);
+
+        // Si después de intentar cargar, el perfil *aún* no se encontró (o no coincide con el auth_id actual)
+        // Y tenemos un usuario Supabase autenticado
+        if ((!this.userProfile || this.userProfile.auth_id !== userId) && this.user && this.user.id === userId) {
+            console.log('[Auth Store] Perfil de usuario no encontrado o desactualizado localmente. Verificando en DB y creando/actualizando si es necesario.');
+            try {
+                const { $supabase } = useNuxtApp();
+
+                // *** PASO CLAVE: Verificar si ya existe un perfil con este auth_id en la base de datos ***
+                const { data: existingProfile, error: selectError } = await $supabase
+                    .from('users')
+                    .select('id, auth_id, email, role_id') // Selecciona las columnas necesarias para verificar
+                    .eq('auth_id', userId)
+                    .single();
+
+                if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = No rows found
+                    console.error('[Auth Store] Error al verificar perfil existente:', selectError.message);
+                    throw selectError; // Propagar otros errores de selección
+                }
+
+                if (existingProfile) {
+                    // Si ya existe un perfil con este auth_id, significa que el fetchUserProfile inicial
+                    // pudo haber fallado o el this.userProfile no se actualizó por alguna razón.
+                    // No necesitamos crear uno nuevo, solo asegurarnos de que this.userProfile esté correcto.
+                    console.log('[Auth Store] Perfil con auth_id ya existe en DB, actualizando el store local.');
+                    // Esto es crucial: Si el perfil ya existe, lo asignamos directamente al store
+                    // para evitar el intento de inserción/upsert que causaría el duplicado.
+                    this.userProfile = existingProfile; 
+                    // Y luego podemos re-fetch para obtener todos los detalles si es necesario
+                    await this.fetchUserProfile(userId); // Re-fetch para cargar permisos y otros datos completos
+                } else {
+                    // Solo si NO existe un perfil con este auth_id, procedemos a crearlo
+                    console.log('[Auth Store] Perfil de usuario NO encontrado por auth_id. Procediendo a CREAR uno nuevo.');
+
+                    if (this.availableRoles.length === 0) {
+                        await this.fetchAvailableRoles();
+                    }
+
+                    const defaultRole = this.availableRoles.find(r => r.name === 'Visor' || r.name === 'viewer');
+                    let defaultRoleId = null;
+                    if (defaultRole) {
+                        defaultRoleId = defaultRole.id;
+                    } else {
+                        console.warn('[Auth Store] No se encontró un rol "Visor" o "viewer". No se pudo asignar un rol por defecto.');
+                        throw new Error('No se pudo determinar el ID del rol por defecto para un nuevo perfil de usuario.');
+                    }
+
+                    const defaultFirstName = this.user.user_metadata?.first_name || 'Usuario';
+                    const defaultLastName = this.user.user_metadata?.last_name || 'Nuevo';
+
+                    // Insertar el nuevo perfil
+                    const { data, error: insertError } = await $supabase
+                        .from('users')
+                        .insert({
+                            auth_id: this.user.id,
+                            email: this.user.email,
+                            first_name: defaultFirstName,
+                            last_name: defaultLastName,
+                            role_id: defaultRoleId, // Este será el rol por defecto solo en la creación
+                            organization_id: null,
+                            is_active: true,
+                        })
+                        .select();
+
+                    if (insertError) {
+                        // Si llegamos aquí y hay un error, es un problema real que debe ser manejado.
+                        // El error de "duplicate key value violates unique constraint "users_email_key""
+                        // SOLO DEBERÍA OCURRIR si hay una inconsistencia en la BD
+                        // (ej. un usuario con un email diferente al auth_id ya tiene ese email).
+                        // Si ocurre aquí, es un escenario inesperado después de la verificación por auth_id.
+                        console.error('[Auth Store] Error al CREAR perfil de usuario:', insertError.message);
+                        throw insertError;
+                    }
+
+                    console.log('[Auth Store] Perfil de usuario creado:', data[0]);
+                    this.userProfile = data[0]; // Asignar el perfil recién creado al store
+                }
+
+                // Asegúrate de que el perfil cargado en el store es el más reciente y completo
+                await this.fetchUserProfile(userId);
+
+            } catch (e) {
+                console.error('[Auth Store] Error en ensureUserProfileExists (creación/verificación):', e.message);
+                this.error = 'Error al procesar perfil de usuario: ' + e.message;
+            }
+        } else if (!this.user) {
+            console.warn('[Auth Store] No hay usuario autenticado para crear o asegurar perfil.');
+        }
+    } else {
+        console.log('[Auth Store] Perfil de usuario ya cargado y válido.');
+    }
+},
+    // === NUEVA FUNCIÓN: checkAuth (adaptada para el error que reportaste) ===
+    // Esta función se encarga de verificar la sesión actual y cargar el perfil del usuario.
+    // Es probable que tu `01.auth-initializer.client.js` la esté llamando.
     async checkAuth() {
       this.isLoading = true;
-      this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        console.log('[Auth Store - checkAuth] 1. Intentando obtener sesión de Supabase...'); // LOG 1
+        const { data: { session }, error } = await $supabase.auth.getSession();
 
-         await new Promise(resolve => setTimeout(resolve, 300));
+        if (error) throw error;
 
-        const { data: { session }, error: sessionError } = await $supabase.auth.getSession();
-
-        if (sessionError) {
-          console.error('[Auth Store - checkAuth] 2. Error al obtener sesión de Supabase:', sessionError); // LOG 2
-          throw sessionError;
-        }
-
-        if (session && session.user) {
+        if (session) {
           this.user = session.user;
-          console.log('[Auth Store - checkAuth] 3. Sesión de Supabase encontrada. ID de usuario:', this.user.id); // LOG 3
-
-          // Cargar/asegurar el perfil de usuario y permisos
-          await this.ensureUserProfileExists(this.user.id);
-          console.log('[Auth Store - checkAuth] 4. Perfil de usuario y permisos cargados.'); // LOG 4
-
+          console.log('[Auth Store - checkAuth] Sesión activa, usuario:', session.user.id);
+          await this.ensureUserProfileExists(session.user.id);
         } else {
-          // No hay sesión activa o usuario nulo desde Supabase, limpiar el store
           this.user = null;
           this.userProfile = null;
           this.role = null;
           this.permissions = {};
-          console.log('[Auth Store - checkAuth] 5. No se encontró sesión activa de Supabase. Limpiando estado local.'); // LOG 5
+          console.log('[Auth Store - checkAuth] No hay sesión activa.');
         }
-        return !!this.user; // Devuelve true si hay usuario, false si no
-      } catch (err) {
-        console.error('[Auth Store - checkAuth] 6. Ocurrió un error durante la verificación de autenticación:', err); // LOG 6
-        // En caso de error, asegurarse de que el store esté limpio
-        this.user = null;
-        this.userProfile = null;
-        this.role = null;
-        this.permissions = {};
-        this.error = err.message || 'Error al verificar sesión.';
-        return false;
-      } finally {
-        this.isLoading = false;
-        console.log(`[Auth Store - checkAuth] 7. checkAuth finalizado. ¿Autenticado?: ${!!this.user}`); // LOG 7
-      }
-    },
-
-    // *** ACCIÓN PRINCIPAL PARA CARGAR PERFIL Y PERMISOS USANDO RPC (Corregida) ***
-    async ensureUserProfileExists(authId) {
-      console.log('[Auth Store] Ensuring user profile exists for authId:', authId);
-      try {
-        const { $supabase } = useNuxtApp();
-        const DEFAULT_ROLE_NAME = 'viewer';
-        let roleToAssign = DEFAULT_ROLE_NAME;
-        let defaultRoleId = null;
-
-        // Cargar roles disponibles si no están ya cargados
-        if (this.availableRoles.length === 0) {
-          await this.fetchAvailableRoles();
-        }
-
-        const defaultViewerRole = this.availableRoles.find(r => r.name === DEFAULT_ROLE_NAME);
-        if (defaultViewerRole) {
-          defaultRoleId = defaultViewerRole.id;
-        } else {
-          console.warn(`[Auth Store] Default role '${DEFAULT_ROLE_NAME}' not found in available roles.`);
-        }
-
-        // --- Intento 1: Buscar el perfil existente con permisos vía RPC ---
-        let profileData = null;
-        let profileFetchError = null;
-
-        try {
-          const { data, error } = await $supabase
-            .rpc('get_user_profile_with_permissions', { p_auth_id: authId })
-            .single();
-          profileData = data;
-          profileFetchError = error;
-        } catch (err) {
-          // Captura errores de red u otros que no sean de Supabase PostgREST
-          profileFetchError = err;
-        }
-
-        // --- Lógica de creación/actualización si no se encontró el perfil ---
-        // Solo si hubo un error PGRST116 (no row found) procedemos a intentar crear
-        if (profileFetchError && profileFetchError.code === 'PGRST116') {
-          console.log('[Auth Store] No existing profile found via RPC. Attempting to create/upsert new one.');
-
-          const userEmail = this.user?.email || (await $supabase.auth.getUser()).data.user?.email;
-          if (!userEmail) {
-            throw new Error('Authenticated user email not available for profile creation.');
-          }
-
-          // Realizar el UPSERT para crear o actualizar el perfil
-          const { data: newProfile, error: upsertError } = await $supabase
-            .from('Users')
-            .upsert([
-              {
-                auth_id: authId,
-                id: authId, // Mantener id igual a authId para consistencia
-                email: userEmail,
-                role: roleToAssign,
-                "RoleId": defaultRoleId, // Asegúrate de que tu tabla 'Users' tenga una columna 'RoleId'
-                firstName: 'Nuevo',
-                lastName: 'Usuario',
-                preferences: { language: 'es', timezone: 'Europe/Madrid', emailNotifications: true, alertNotifications: true },
-              }
-            ], {
-              onConflict: 'auth_id' // <--- Especifica la columna de conflicto para upsert
-            })
-            .select('id, firstName, lastName, role, email, preferences') // Seleccionar las columnas que te interesan
-            .single();
-
-          if (upsertError) {
-            console.error('[Auth Store] Error during profile UPSERT:', upsertError);
-            throw upsertError;
-          }
-          console.log('[Auth Store] Profile upserted successfully. Now refetching with RPC for full data and permissions.');
-
-          // Después del UPSERT, volver a intentar obtener el perfil con el RPC para los permisos
-          try {
-            const { data, error } = await $supabase
-              .rpc('get_user_profile_with_permissions', { p_auth_id: authId })
-              .single();
-            profileData = data;
-            profileFetchError = error; // Esto debería ser null o un error si algo salió mal en la re-búsqueda
-          } catch (err) {
-            profileFetchError = err; // Captura errores de red, etc.
-          }
-
-          if (profileFetchError) {
-            console.error('[Auth Store] Error refetching profile after upsert via RPC:', profileFetchError);
-            throw profileFetchError; // Re-lanza si hay error en la re-búsqueda
-          }
-
-        } else if (profileFetchError) {
-          // Si hubo un error que NO sea "no row found" (PGRST116), lo tratamos como un error grave
-          console.error('[Auth Store] Error fetching existing profile via RPC:', profileFetchError);
-          throw profileFetchError;
-        }
-
-        // --- Asignar el perfil y permisos al store si se obtuvo exitosamente ---
-        if (profileData) {
-          this.userProfile = profileData;
-          this.role = profileData.role;
-          this.permissions = profileData.permissions || {}; // Asegúrate de que `permissions` sea un objeto
-          console.log('[Auth Store] User profile and permissions set:', JSON.parse(JSON.stringify(this.userProfile)));
-        } else {
-          // Si después de todos los intentos no hay profileData, limpiar el estado del store
-          console.warn('[Auth Store] No user profile data available after all attempts. Clearing profile state.');
-          this.userProfile = null;
-          this.role = null;
-          this.permissions = {};
-        }
-
-        console.log('[Auth Store] Final User Role in store (after ensuring profile):', this.role);
-        console.log('[Auth Store] Loaded User Permissions:', this.permissions);
-
-      } catch (err) {
-        console.error('[Auth Store] Error in ensureUserProfileExists (catch block):', err);
-        // En caso de cualquier error, asegurar que los datos del perfil estén limpios
-        this.userProfile = null;
-        this.role = null;
-        this.permissions = {};
-        // Re-lanza el error para que sea manejado por checkAuth o login
-        throw err;
-      }
-    },
-
-    // Acción para actualizar el perfil del usuario en la tabla 'Users'
-    async updateProfile({ firstName, lastName, preferences }) {
-      this.isLoading = true;
-      this.error = null;
-      try {
-        const { $supabase } = useNuxtApp();
-        const userIdToUpdate = this.user?.id;
-        if (!userIdToUpdate) {
-          throw new Error('No user is currently authenticated to update profile.');
-        }
-
-        const updateData = {
-          firstName,
-          lastName,
-          preferences: preferences || {},
-          updatedAt: new Date().toISOString(),
-        };
-
-        const { data, error } = await $supabase
-          .from('Users')
-          .update(updateData)
-          .eq('id', userIdToUpdate)
-          .select('id, firstName, lastName, role, email, preferences')
-          .single();
-        if (error) throw error;
-
-        if (data) {
-          this.userProfile = data;
-          this.role = data.role;
-          // Aquí no actualizamos `this.permissions` directamente.
-          // Idealmente, un update de perfil no cambiaría los permisos del rol,
-          // y estos se recargarían con `ensureUserProfileExists` al siguiente login/check.
-        } else {
-          console.warn('Supabase update returned no data for the updated profile.');
-        }
-        return this.userProfile;
-      } catch (error) {
-        this.error = error;
-        console.error('Error updating profile:', error.message);
-        throw error;
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store - checkAuth] Error al verificar autenticación:', e.message);
       } finally {
         this.isLoading = false;
       }
     },
 
-    // Acción para cambiar la contraseña del usuario autenticado
-    async changePassword(newPassword) {
-      this.isLoading = true;
-      this.error = null;
-      try {
-        const { $supabase } = useNuxtApp();
-        const { error } = await $supabase.auth.updateUser({
-          password: newPassword,
-        });
-        if (error) throw error;
+    // --- Funciones de Gestión de Usuarios y Roles (Adaptando Consultas) ---
 
-        return true;
-      } catch (error) {
-        this.error = error;
-        console.error('Error changing password:', error.message);
-        throw error;
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    // Acción para cargar todos los roles disponibles (incluyendo sus permisos)
     async fetchAvailableRoles() {
+        this.isLoading = true;
+        try {
+            const { $supabase } = useNuxtApp();
+            // === ADAPTACIÓN DE CONSULTA: Select a la tabla 'public.roles' con sus nuevos campos ===
+            const { data, error } = await $supabase
+                .from('roles') // Asegúrate de que la tabla se llama 'roles' (minúsculas)
+                .select('id, name, description, type, organization_id'); // Ahora incluye 'type' y 'organization_id'
+            if (error) throw error;
+            this.availableRoles = data;
+            console.log('[Auth Store] Roles disponibles cargados:', this.availableRoles);
+        } catch (e) {
+            this.error = e.message;
+            console.error('[Auth Store] Error al cargar roles disponibles:', e.message);
+        } finally {
+            this.isLoading = false;
+        }
+    },
+
+    async fetchOrganizations() {
       this.isLoading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
+        // === ADAPTACIÓN DE CONSULTA: Select a la tabla 'public.organizations' ===
         const { data, error } = await $supabase
-          .from('Roles')
-          .select('id, name, permissions') // Asegúrate de que 'permissions' esté en tu tabla Roles
-          .order('name', { ascending: true });
+          .from('organizations') // Asegúrate de que la tabla se llama 'organizations' (minúsculas)
+          .select('id, name, slug'); // Selecciona los campos relevantes de la tabla organizations
+        if (error) throw error;
+        this.organizations = data;
+        console.log('[Auth Store] Organizaciones cargadas:', this.organizations);
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al cargar organizaciones:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async fetchUsers(options = {}) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        const { page = this.page, limit = this.limit, searchQuery = this.searchQuery, filterRole = this.filterRole, filterOrganization = this.filterOrganization } = options;
+
+        let query = $supabase
+          .from('users') // Consulta la tabla 'public.users'
+          .select(`
+            id,
+            auth_id,
+            first_name,
+            last_name,
+            email,
+            phone_number,
+            organization_id,
+            role_id,
+            is_active,
+            last_login,
+            created_at,
+            updated_at,
+            organization:organizations(name), // Join implícito con la tabla organizations para obtener el nombre
+            role:roles(name) // Join implícito con la tabla roles para obtener el nombre del rol
+          `, { count: 'exact' });
+
+        if (searchQuery) {
+          query = query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+        }
+        if (filterRole) {
+          query = query.eq('role_id', filterRole);
+        }
+        if (filterOrganization) {
+          query = query.eq('organization_id', filterOrganization);
+        }
+
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+
+        const { data, error, count } = await query
+          .order('created_at', { ascending: false })
+          .range(from, to);
+
         if (error) throw error;
 
-        this.availableRoles = data;
-        return data;
-      } catch (error) {
-        this.error = error;
-        console.error('Error fetching available roles:', error.message);
-        throw error;
+        this.users = data.map(user => ({
+          ...user,
+          // Mapea a tus nombres de campo en el frontend si son diferentes a los de la BD
+          firstName: user.first_name,
+          lastName: user.last_name,
+          organization_name: user.organization ? user.organization.name : 'N/A',
+          role_name: user.role ? user.role.name : 'N/A',
+        }));
+        this.totalUsers = count;
+        this.totalPages = Math.ceil(count / limit);
+        this.page = page;
+        this.limit = limit;
+        this.searchQuery = searchQuery;
+        this.filterRole = filterRole;
+        this.filterOrganization = filterOrganization;
+
+        console.log('[Auth Store] Usuarios cargados:', this.users);
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al cargar usuarios:', e.message);
       } finally {
         this.isLoading = false;
       }
     },
 
-    // Acción para registrar un nuevo usuario y crear su perfil
-    async register({ firstName, lastName, email, password, organization }) {
+    async createUser(userData) {
       this.isLoading = true;
       this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        // 1. Create Supabase Auth user
+        const { data: authData, error: authError } = await $supabase.auth.signUp({
+          email: userData.email,
+          password: userData.password,
+          options: {
+            // data: { first_name: userData.firstName, last_name: userData.lastName } // Puedes pasar datos de usuario iniciales aquí
+          }
+        });
+
+        if (authError) throw authError;
+
+        const newAuthUser = authData.user;
+        if (!newAuthUser) throw new Error('Supabase Auth user was not created.');
+
+        // 2. Insert into your public.users table
+        const { data: userProfileData, error: userProfileError } = await $supabase
+          .from('users') // Cambiado a 'users' (minúsculas)
+          .insert({
+            auth_id: newAuthUser.id,
+            email: userData.email,
+            first_name: userData.firstName, // Asegúrate de que el campo coincida con tu BD
+            last_name: userData.lastName,   // Asegúrate de que el campo coincida con tu BD
+            organization_id: userData.organization_id,
+            role_id: userData.role_id,
+            phone_number: userData.phone_number || null, // Si es opcional
+            is_active: userData.is_active || true, // Default to true if not provided
+          })
+          .select();
+
+        if (userProfileError) {
+            // If user profile insertion fails, attempt to delete the auth user
+            await $supabase.auth.admin.deleteUser(newAuthUser.id); // Requires service_role key on backend for admin.deleteUser
+            throw userProfileError;
+        }
+
+        console.log('[Auth Store] Usuario creado en Auth y Perfil:', userProfileData);
+        // Refresh user list
+        await this.fetchUsers();
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al crear usuario:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async updateUser(userId, userData) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        // Update user profile in public.users table
+        const { data, error } = await $supabase
+          .from('users') // Cambiado a 'users' (minúsculas)
+          .update({
+            first_name: userData.firstName, // Asegúrate de que el campo coincida con tu BD
+            last_name: userData.lastName,   // Asegúrate de que el campo coincida con tu BD
+            email: userData.email,
+            phone_number: userData.phone_number || null,
+            organization_id: userData.organization_id,
+            role_id: userData.role_id,
+            is_active: userData.is_active,
+            // updated_at will be set by the trigger
+          })
+          .eq('id', userId)
+          .select(); // Return the updated row
+
+        if (error) throw error;
+        console.log('[Auth Store] Usuario actualizado:', data);
+
+        // Actualizar el correo electrónico del usuario en auth.users si ha cambiado
+        if (this.editingUser && this.editingUser.email !== userData.email) {
+            const { error: authUpdateError } = await $supabase.auth.admin.updateUserById(
+                this.editingUser.auth_id, // Usar auth_id para actualizar en auth.users
+                { email: userData.email }
+            );
+            if (authUpdateError) {
+                console.warn('[Auth Store] Advertencia: Falló la actualización de correo electrónico en auth.users:', authUpdateError.message);
+                // No lanzar error fatal aquí, ya que el perfil en public.users ya se actualizó.
+            } else {
+                console.log('[Auth Store] Correo electrónico de auth.users actualizado.');
+            }
+        }
+        await this.fetchUsers(); // Refresh user list
+        this.setEditMode(false); // Exit edit mode after update
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al actualizar usuario:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async deleteUser(userId, authId) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        // 1. Delete user profile from public.users table
+        const { error: profileError } = await $supabase
+          .from('users') // Cambiado a 'users' (minúsculas)
+          .delete()
+          .eq('id', userId);
+
+        if (profileError) throw profileError;
+
+        // 2. Delete user from auth.users (requires service_role key on backend)
+        const { error: authError } = await $supabase.auth.admin.deleteUser(authId);
+        if (authError) {
+            // Log a warning if auth user deletion fails, but don't stop if profile was deleted
+            console.warn('[Auth Store] Advertencia: Falló la eliminación del usuario de auth.users:', authError.message);
+        } else {
+            console.log('[Auth Store] Usuario eliminado de Auth.');
+        }
+
+        console.log('[Auth Store] Usuario eliminado exitosamente:', userId);
+        await this.fetchUsers(); // Refresh user list
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al eliminar usuario:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    setEditMode(mode, user = null) {
+      this.editMode = mode;
+      this.editingUser = user;
+      if (user) {
+        this.editingUserRole = user.role_id; // Set the role_id of the user being edited
+        // Deep copy userPermissions to ensure reactivity and independence from original object
+        this.userPermissions = JSON.parse(JSON.stringify(user.permissions || {}));
+      } else {
+        this.editingUserRole = null;
+        this.userPermissions = {};
+      }
+      this.error = null; // Clear any previous errors
+    },
+
+    setSearchQuery(query) {
+      this.searchQuery = query;
+    },
+    setFilterRole(roleId) {
+      this.filterRole = roleId;
+    },
+    setFilterOrganization(orgId) {
+      this.filterOrganization = orgId;
+    },
+    setPage(page) {
+      this.page = page;
+    },
+
+    // --- Funciones para Gestión de Roles y Permisos ---
+
+    async fetchRoles() {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        // === ADAPTACIÓN DE CONSULTA: Select a la tabla 'public.roles' ===
+        // Aquí no necesitas join con role_module_permissions si solo quieres la lista de roles.
+        const { data, error } = await $supabase
+          .from('roles') // Cambiado a 'roles' (minúsculas)
+          .select('id, name, description, type, organization_id, created_at, updated_at') // Incluye los nuevos campos
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+        this.roles = data;
+        console.log('[Auth Store] Roles cargados:', this.roles);
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al cargar roles:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async fetchAppModules() {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        // === ADAPTACIÓN DE CONSULTA: Select a la tabla 'public.app_modules' ===
+        const { data, error } = await $supabase
+          .from('app_modules') // Asegúrate de que la tabla se llama 'app_modules'
+          .select('id, name, description, permissions_schema'); // Selecciona los campos relevantes
+        if (error) throw error;
+        this.appModules = data;
+        console.log('[Auth Store] Módulos de aplicación cargados:', this.appModules);
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al cargar módulos de aplicación:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async fetchRolePermissions(roleId) {
+      this.isLoading = true;
+      this.error = null;
+      this.rolePermissionsLoaded = false;
+      this.editingRolePermissions = {}; // Reset permissions
+
+      if (!roleId) {
+        console.warn('[Auth Store] roleId es nulo o indefinido en fetchRolePermissions.');
+        this.isLoading = false;
+        return;
+      }
 
       try {
         const { $supabase } = useNuxtApp();
-        // 1. Registrar usuario en Supabase Auth
-        const { data: authData, error: authError } = await $supabase.auth.signUp({
-          email: email,
-          password: password,
-        });
+        // === ADAPTACIÓN DE CONSULTA: Usar RPC para obtener permisos de rol ===
+        // Tu función RPC `get_role_permissions_by_id` debe devolver el objeto de permisos por módulo.
+        const { data, error } = await $supabase.rpc('get_role_permissions_by_id', { p_role_id: roleId });
 
-        if (authError) {
-          throw authError;
+        if (error) throw error;
+
+        // La RPC devuelve un array de objetos, donde el primer elemento tiene la columna 'permissions'
+        if (data && data.length > 0 && data[0].permissions) {
+          this.editingRolePermissions = data[0].permissions;
+          this.initialPermissions = JSON.parse(JSON.stringify(data[0].permissions)); // Store for tracking changes
+          console.log('[Auth Store] Permisos del rol cargados:', this.editingRolePermissions);
+        } else {
+          this.editingRolePermissions = {};
+          this.initialPermissions = {};
+          console.warn('[Auth Store] No se encontraron permisos para el rol o el formato es incorrecto:', roleId);
         }
-
-        this.user = authData.user;
-        // Si el registro de auth fue exitoso, creamos el perfil en nuestra tabla Users
-        if (this.user) {
-          let organizationId = null;
-          // 2. Buscar la organización (opcional: crearla si no existe, o manejar la lógica de asignación)
-          if (organization) {
-            const { data: orgData, error: orgError } = await $supabase
-              .from('Organizations')
-              .select('id')
-              .eq('name', organization)
-              .single();
-            if (orgError && orgError.code !== 'PGRST116') { // PGRST116 es "no row found"
-              console.error('Error buscando organización:', orgError);
-              throw orgError;
-            }
-
-            if (orgData) {
-              organizationId = orgData.id;
-            } else {
-              console.warn(`Organización "${organization}" no encontrada. Creando usuario sin asociación a organización.`);
-            }
-          }
-
-          // 3. Obtener el ID del rol por defecto 'viewer'
-          if (this.availableRoles.length === 0) {
-            await this.fetchAvailableRoles();
-          }
-          const DEFAULT_ROLE_NAME = 'viewer';
-          const defaultViewerRole = this.availableRoles.find(r => r.name === DEFAULT_ROLE_NAME);
-          let defaultRoleId = null;
-          if (defaultViewerRole) {
-            defaultRoleId = defaultViewerRole.id;
-          } else {
-            console.warn(`[Auth Store] Default role '${DEFAULT_ROLE_NAME}' not found during registration. Proceeding without RoleId.`);
-          }
-
-
-          // 4. Crear el perfil en la tabla Users (usando onConflict para mayor robustez)
-          // Usamos upsert para "insertar o actualizar si ya existe", por si un trigger ya creó el perfil
-          const { data: profileData, error: profileError } = await $supabase
-            .from('Users')
-            .upsert({
-              auth_id: this.user.id,
-              id: this.user.id, // Usar el ID del usuario de Supabase Auth
-              firstName: firstName,
-              lastName: lastName,
-              email: email, // El email de la tabla Users debería coincidir con auth.users
-              role: 'viewer', // Rol por defecto: 'viewer'
-              "OrganizationId": organizationId, // Asignar el ID de la organización
-              "RoleId": defaultRoleId, // Asignar el ID del rol por defecto
-              preferences: { language: 'es', timezone: 'Europe/Madrid', emailNotifications: true, alertNotifications: true },
-            }, {
-              onConflict: 'auth_id' // Conflicto en auth_id: si ya existe, actualiza
-            })
-            .select('*')
-            .single();
-
-          if (profileError) {
-            console.error('[Auth Store] Error creating/upserting user profile:', profileError);
-            // Si falla la creación del perfil por algo que no sea duplicado,
-            // puedes considerar borrar el usuario de auth.users también para mantener la consistencia.
-            // await $supabase.auth.admin.deleteUser(this.user.id);
-            throw profileError;
-          }
-          console.log('[Auth Store] Profile upserted for new registration:', profileData);
-
-
-          // Después de la inserción/upsert, recargar el perfil completo con el RPC
-          // para asegurar que tenemos los permisos cargados correctamente.
-          await this.ensureUserProfileExists(this.user.id);
-          console.log('Usuario registrado y perfil creado/asegurado:', this.userProfile);
-        }
-
-        return this.user;
-      } catch (err) {
-        console.error('Error durante el registro:', err);
-        this.error = err.message || 'Error al registrarse. Por favor, verifica tus datos.';
-        this.user = null;
-        this.userProfile = null;
-        this.role = null;
-        this.permissions = {};
-        throw err;
+        this.rolePermissionsLoaded = true;
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al cargar permisos del rol:', e.message);
       } finally {
         this.isLoading = false;
       }
     },
 
-    // Inicia el listener de cambios de estado de autenticación de Supabase
-    // Este listener puede ser llamado en el app.vue o layout principal para reaccionar a cambios
-    // como expiración de token o cierre de sesión desde otras pestañas.
-    async initAuthListener() {
-        // Si ya hay un listener activo, lo desuscribimos para evitar duplicados
-        if (this.authListenerUnsubscribe) {
-            this.authListenerUnsubscribe();
-            console.log('[Auth Store - Listener] Desuscripto del listener anterior.');
+    async createRole(roleData) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        // === ADAPTACIÓN DE CONSULTA: Insertar en public.roles ===
+        // 'permissions' ya NO es un campo directo de 'roles'.
+        // Insertamos el rol sin permisos iniciales, o con un valor predeterminado si es necesario en BD.
+        const { data: newRole, error: roleError } = await $supabase
+          .from('roles') // Cambiado a 'roles'
+          .insert({
+            name: roleData.name,
+            description: roleData.description,
+            type: roleData.type, // Nuevo campo 'type'
+            organization_id: roleData.organization_id || null, // Nuevo campo 'organization_id'
+          })
+          .select('id'); // Solo necesitamos el ID del nuevo rol para los permisos
+
+        if (roleError) throw roleError;
+        const newRoleId = newRole[0].id;
+
+        // === ADAPTACIÓN DE CONSULTA: Insertar permisos en public.role_module_permissions ===
+        // Ahora necesitamos insertar en la tabla intermedia.
+        // Asume que roleData.permissions es un objeto con el formato adecuado { "Modulo": { "read": true, ... } }
+        const permissionsToInsert = [];
+        for (const moduleName in roleData.permissions) {
+          const module = this.appModules.find(m => m.name === moduleName);
+          if (module) {
+            permissionsToInsert.push({
+              role_id: newRoleId,
+              module_id: module.id,
+              permissions: roleData.permissions[moduleName]
+            });
+          }
         }
 
-        const { $supabase } = useNuxtApp();
-        console.log('[Auth Store - Listener] Inicializando listener de onAuthStateChange...');
-        const { data: { subscription } } = $supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log(`[Auth Store - Listener] Evento de Auth recibido: ${event}`);
-            if (session) {
-                // Solo actualizar si el usuario ha cambiado o si no hay usuario en el store
-                if (!this.user || this.user.id !== session.user.id) {
-                    this.user = session.user;
-                    console.log('[Auth Store - Listener] Sesión actualizada (evento):', session.user.id);
-                    await this.ensureUserProfileExists(this.user.id); // Asegura que el perfil y permisos se carguen
-                } else {
-                    console.log('[Auth Store - Listener] Sesión confirmada, mismo usuario.');
-                }
-            } else {
-                console.log('[Auth Store - Listener] Sesión cerrada (evento) o expirada. Limpiando store.');
-                this.user = null;
-                this.userProfile = null;
-                this.role = null;
-                this.permissions = {};
-                // Opcional: Podrías redirigir aquí, pero el middleware ya se encargará si la ruta lo requiere.
-                // const currentPath = useNuxtApp().$router.currentRoute.value.path;
-                // const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/update-password'];
-                // if (!publicRoutes.includes(currentPath)) {
-                //     await navigateTo('/auth/login');
-                // }
-            }
-        });
-        // Guarda la función de desuscripción para poder limpiarla después
-        this.authListenerUnsubscribe = subscription.unsubscribe;
-        console.log('[Auth Store - Listener] Listener de Auth configurado.');
+        if (permissionsToInsert.length > 0) {
+          const { error: permError } = await $supabase
+            .from('role_module_permissions') // Nueva tabla
+            .insert(permissionsToInsert);
+
+          if (permError) throw permError;
+        }
+
+        console.log('[Auth Store] Rol y permisos creados:', newRole);
+        await this.fetchRoles(); // Refresh role list
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al crear rol:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
     },
+
+    async updateRole(roleId, roleData) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+
+        // === ADAPTACIÓN DE CONSULTA: Actualizar en public.roles (sin permisos) ===
+        // Los permisos se gestionan en una tabla separada.
+        const { error: roleError } = await $supabase
+          .from('roles') // Cambiado a 'roles'
+          .update({
+            name: roleData.name,
+            description: roleData.description,
+            type: roleData.type, // Nuevo campo
+            organization_id: roleData.organization_id || null, // Nuevo campo
+            // updated_at será manejado por un trigger
+          })
+          .eq('id', roleId);
+
+        if (roleError) throw roleError;
+
+        // === ADAPTACIÓN DE CONSULTA: Actualizar permisos en public.role_module_permissions ===
+        // Borra los permisos existentes para el rol y luego inserta los nuevos.
+        const { error: deletePermError } = await $supabase
+          .from('role_module_permissions')
+          .delete()
+          .eq('role_id', roleId);
+
+        if (deletePermError) throw deletePermError;
+
+        const permissionsToInsert = [];
+        for (const moduleName in roleData.permissions) {
+          const module = this.appModules.find(m => m.name === moduleName);
+          if (module) {
+            permissionsToInsert.push({
+              role_id: roleId,
+              module_id: module.id,
+              permissions: roleData.permissions[moduleName]
+            });
+          }
+        }
+
+        if (permissionsToInsert.length > 0) {
+          const { error: insertPermError } = await $supabase
+            .from('role_module_permissions')
+            .insert(permissionsToInsert);
+
+          if (insertPermError) throw insertPermError;
+        }
+
+        console.log('[Auth Store] Rol y permisos actualizados:', roleId);
+        await this.fetchRoles(); // Refresh role list
+        this.setEditingRole(null); // Exit editing mode
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al actualizar rol:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async deleteRole(roleId) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        // === ADAPTACIÓN DE CONSULTA: Eliminar en public.roles ===
+        // Si tienes ON DELETE CASCADE en role_id en users y role_module_permissions,
+        // esto debería eliminar automáticamente los usuarios y permisos asociados.
+        // Si no tienes CASCADE, deberías borrar primero en role_module_permissions y luego en users.
+        const { error } = await $supabase
+          .from('roles') // Cambiado a 'roles'
+          .delete()
+          .eq('id', roleId);
+
+        if (error) throw error;
+        console.log('[Auth Store] Rol eliminado:', roleId);
+        await this.fetchRoles(); // Refresh role list
+      } catch (e) {
+        this.error = e.message;
+        console.error('[Auth Store] Error al eliminar rol:', e.message);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    setEditingRole(role = null) {
+      this.editingRole = role;
+      this.error = null;
+      this.editingRolePermissions = {};
+      this.rolePermissionsLoaded = false;
+      if (role) {
+        this.fetchRolePermissions(role.id);
+      } else {
+        this.initialPermissions = {}; // Clear initial permissions when not editing
+      }
+    },
+
+    // Toggle permission for a module
+    togglePermission(moduleName, permissionType) {
+      if (!this.editingRolePermissions[moduleName]) {
+        this.editingRolePermissions[moduleName] = { ...this.defaultPermissions };
+      }
+      this.editingRolePermissions[moduleName][permissionType] = !this.editingRolePermissions[moduleName][permissionType];
+    },
+
+    // Check if a permission is enabled for a module
+    isPermissionEnabled(moduleName, permissionType) {
+      return this.editingRolePermissions[moduleName] && this.editingRolePermissions[moduleName][permissionType];
+    },
+
+    // --- Listeners de Supabase Auth (sin cambios, ya que operan sobre la sesión de Supabase Auth) ---
+    initAuthListener() {
+            // Desuscribe cualquier listener anterior para evitar duplicados
+            if (this.authListenerUnsubscribe) {
+                this.authListenerUnsubscribe();
+                console.log('[Auth Store - Listener] Desuscripto del listener anterior.');
+            }
+
+            const { $supabase } = useNuxtApp();
+            console.log('[Auth Store - Listener] Inicializando listener de onAuthStateChange...');
+
+            // Configura el nuevo listener y guarda la función de desuscripción
+            const { data: { subscription } } = $supabase.auth.onAuthStateChange(async (event, session) => {
+                console.log(`[Auth Store - Listener] Evento de Auth recibido: ${event}`);
+
+                if (session) {
+                    // Siempre actualiza el objeto de usuario de Supabase Auth en el store
+                    this.user = session.user;
+                    console.log('[Auth Store - Listener] Sesión activa. Intentando cargar perfil de usuario de la aplicación.');
+
+                    // Llama a ensureUserProfileExists para cargar/verificar el perfil de la aplicación
+                    // Esto es clave para obtener el rol de la aplicación.
+                    await this.ensureUserProfileExists(this.user.id);
+
+                } else {
+                    // Si no hay sesión, significa que el usuario ha cerrado sesión o la sesión ha expirado
+                    console.log('[Auth Store - Listener] Sesión cerrada (evento) o expirada. Limpiando store.');
+                    this.user = null; // Limpia el objeto de usuario de Supabase Auth
+                    this.userProfile = null; // Limpia el perfil de la aplicación
+                    this.role = null;       // Limpia el rol de la aplicación
+                    this.permissions = {};  // Limpia los permisos
+                }
+            });
+            this.authListenerUnsubscribe = subscription.unsubscribe;
+            console.log('[Auth Store - Listener] Listener de Auth configurado.');
+        },
   },
 });

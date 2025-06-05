@@ -249,7 +249,7 @@ const toggleSidebar = () => {
 };
 
 const handleLogout = async () => {
-  await authStore.logout();
+  await authStore.signOut();
   showUserMenu.value = false;
   router.push('/auth/login');
 };

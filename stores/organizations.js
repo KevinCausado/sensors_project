@@ -27,7 +27,7 @@ export const useOrganizationStore = defineStore('organizations', {
         const { $supabase } = useNuxtApp();
 
         const { data, error } = await $supabase
-          .from('Organizations') // Nombre de tabla confirmado
+          .from('organizations') // Nombre de tabla confirmado
           .select('*')
           .order('name', { ascending: true });
 
@@ -55,7 +55,7 @@ export const useOrganizationStore = defineStore('organizations', {
                 // y las columnas (ej. 'firstName', 'lastName', 'email', 'role' para Users;
                 // 'name', 'location', 'status' para Sensors) según tu esquema real en Supabase.
                 const { data, error } = await $supabase
-                    .from('Organizations')
+                    .from('organizations')
                     .select(`
                         *,
                         Users(id, firstName, lastName, email, role), 
@@ -116,7 +116,7 @@ export const useOrganizationStore = defineStore('organizations', {
         const { $supabase } = useNuxtApp();
 
         const { data, error } = await $supabase
-          .from('Organizations')
+          .from('organizations')
           .insert([newOrgData])
           .select();
 
@@ -146,7 +146,7 @@ export const useOrganizationStore = defineStore('organizations', {
         updatedFields.updatedAt = new Date().toISOString();
 
         const { data, error } = await $supabase
-          .from('Organizations')
+          .from('organizations')
           .update(updatedFields)
           .eq('id', id)
           .select();
@@ -176,7 +176,7 @@ export const useOrganizationStore = defineStore('organizations', {
         const { $supabase } = useNuxtApp();
 
         const { error } = await $supabase
-          .from('Organizations')
+          .from('organizations')
           .delete()
           .eq('id', id);
 
