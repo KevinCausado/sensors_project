@@ -2,7 +2,7 @@
   <div>
     <PageHeader
       title="Detalles del Usuario"
-      :subtitle="`${user?.firstName} ${user?.lastName}`"
+      :subtitle="`${user?.first_name} ${user?.last_name}`" 
     >
       <template #actions>
         <div class="flex gap-2">
@@ -11,15 +11,7 @@
             class="btn btn-secondary"
           >
             Volver
-          </NuxtLink>
-          <!-- <PermissionGuard moduleId="users" permission="editar">
-            <NuxtLink
-              :to="`/users/${route.params.id}/edit`"
-              class="btn btn-primary"
-            >
-              Editar Usuario
-            </NuxtLink>
-          </PermissionGuard> -->
+          </NuxtLink>          
         </div>
       </template>
     </PageHeader>
@@ -38,12 +30,12 @@
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div>
             <label class="block text-sm font-medium text-gray-500">Nombre</label>
-            <p class="mt-1 text-sm text-gray-900">{{ user.firstName }}</p>
+            <p class="mt-1 text-sm text-gray-900">{{ user.first_name }}</p> <!-- Modificado para usar first_name -->
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-500">Apellido</label>
-            <p class="mt-1 text-sm text-gray-900">{{ user.lastName }}</p>
+            <p class="mt-1 text-sm text-gray-900">{{ user.last_name }}</p> <!-- Modificado para usar last_name -->
           </div>
 
           <div>
@@ -54,20 +46,20 @@
           <div>
             <label class="block text-sm font-medium text-gray-500">Rol</label>
             <span class="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                  :class="getRoleBadgeClass(user.role)">
-              {{ translateRole(user.role) }}
+                  :class="getRoleBadgeClass(user.role_name)"> <!-- Modificado para usar role_name -->
+              {{ translateRole(user.role_name) }} <!-- Modificado para usar role_name -->
             </span>
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-500">Organización</label>
-            <p class="mt-1 text-sm text-gray-900">{{ user.organizationName }}</p>
+            <p class="mt-1 text-sm text-gray-900">{{ user.organization_name }}</p> <!-- Modificado para usar organization_name -->
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-500">Último Acceso</label>
             <p class="mt-1 text-sm text-gray-900">
-              {{ formatDate(user.lastLogin) }}
+              {{ formatDate(user.last_login) }} <!-- Modificado para usar last_login -->
             </p>
           </div>
         </div>
@@ -78,6 +70,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRoute } from 'vue-router'; // Asegúrate de importar useRoute
 import { useUserStore } from '~/stores/users';
 
 definePageMeta({
@@ -92,32 +85,33 @@ const loading = ref(true);
 const user = ref(null);
 
 // Métodos
-const getRoleBadgeClass = (role) => {
-  switch (role) {
+const getRoleBadgeClass = (roleName) => { // Cambiado a roleName
+  switch (roleName) { // Usar roleName
     case 'super-admin':
       return 'bg-primary-100 text-primary-800';
     case 'admin':
       return 'bg-secondary-100 text-secondary-800';
     case 'technician':
       return 'bg-warning-100 text-warning-800';
+    case 'viewer': // Asegúrate de incluir 'viewer' si es un rol posible
+      return 'bg-blue-100 text-blue-800'; // Un color diferente para 'viewer'
     default:
       return 'bg-gray-100 text-gray-800';
   }
 };
 
-const translateRole = (role) => {
+const translateRole = (roleName) => { // Cambiado a roleName
   const roles = {
-    'super-admin': 'Super Admin',
+    'super-admin': 'Super Administrador',
     'admin': 'Administrador',
     'technician': 'Técnico',
     'viewer': 'Visualizador'
   };
-  return roles[role] || role;
+  return roles[roleName] || roleName; // Usar roleName
 };
 
 const formatDate = (date) => {
   if (!date) return 'Nunca';
-  // Ajusta la configuración regional si no es 'es-ES' o si prefieres un formato diferente
   return new Date(date).toLocaleString('es-ES', { 
     year: 'numeric', 
     month: 'long', 
@@ -130,8 +124,12 @@ const formatDate = (date) => {
 // Cargar datos
 onMounted(async () => {
   try {
-    // *** CAMBIO CLAVE AQUÍ: Llama a fetchUser en lugar de getUserById ***
-    user.value = await userStore.fetchUser(route.params.id);
+    // CAMBIO CLAVE AQUÍ: Llama a fetchUserById
+    user.value = await userStore.fetchUserById(route.params.id);
+    if (!user.value) {
+      console.warn(`Usuario con ID ${route.params.id} no encontrado.`);
+      // Opcional: Redirigir o mostrar un mensaje específico
+    }
   } catch (error) {
     console.error('Error al cargar usuario:', error);
     // Opcional: Redirigir o mostrar un mensaje de error si el usuario no se carga

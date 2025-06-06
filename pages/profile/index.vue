@@ -136,7 +136,7 @@ definePageMeta({
 });
 
 const authStore = useAuthStore();
-const user = computed(() => authStore.userProfile); // <--- ¡CAMBIO AQUÍ!
+const user = computed(() => authStore.userProfile); // <--- Continúa usando userProfile
 
 // **Estado del formulario: INICIALIZACIÓN COMPLETA DE ESTRUCTURA**
 // Aseguramos que todas las propiedades anidadas existan desde el principio.
@@ -188,16 +188,16 @@ const updateProfile = async () => {
   try {
     saving.value = true;
     await authStore.updateProfile({
-      id: user.value.id, // Asegúrate de pasar el ID del usuario
+      // No necesitas pasar el ID del componente, el store ya tiene this.user.id (el auth_id)
       firstName: form.value.firstName,
       lastName: form.value.lastName,
-      // Solo actualiza las preferencias si las tienes configuradas en tu store
       preferences: form.value.preferences,
     });
     // Puedes usar un toast o notificación aquí para indicar éxito
   } catch (error) {
     console.error("Error al actualizar perfil:", error);
     // Mostrar un mensaje de error al usuario
+    // authStore.error ya contiene el mensaje de error del store
   } finally {
     saving.value = false;
   }
@@ -218,7 +218,7 @@ const changePassword = async () => {
     }
 
     passwordLoading.value = true;
-    await authStore.changePassword(passwordForm.value.current, passwordForm.value.new);
+    await authStore.updatePassword(passwordForm.value.new); // Llama a updatePassword con la nueva contraseña
     // Puedes usar un toast o notificación aquí para indicar éxito
     passwordForm.value = {
       current: "",

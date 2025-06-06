@@ -42,6 +42,12 @@
                 Dirección
               </th>
               <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Ubicación Geográfica
+              </th>
+              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Estado
+              </th>
+              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Fecha Creación
               </th>
               <th class="px-6 py-3 bg-gray-50"></th>
@@ -49,23 +55,23 @@
           </thead>
          <tbody class="bg-white divide-y divide-gray-200">
     <tr v-if="organizationStore.isLoading">
-        <td colspan="5" class="px-6 py-4 text-center text-gray-500">Cargando organizaciones...</td> 
+        <td colspan="7" class="px-6 py-4 text-center text-gray-500">Cargando organizaciones...</td> 
     </tr>
     <tr v-else-if="organizationStore.error">
-        <td colspan="5" class="px-6 py-4 text-center text-error-600">Error: {{ organizationStore.error }}</td> 
+        <td colspan="7" class="px-6 py-4 text-center text-error-600">Error: {{ organizationStore.error }}</td>
     </tr>
     <tr v-else-if="filteredOrganizations.length === 0">
-        <td colspan="5" class="px-6 py-4 text-center text-gray-500">No se encontraron organizaciones.</td> 
+        <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron organizaciones.</td> 
     </tr>
     
     <tr v-else v-for="org in filteredOrganizations" :key="org.id" class="hover:bg-gray-50">
       <td class="px-6 py-4 whitespace-nowrap">
         <div class="flex items-center">
          <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700"> 
-            {{ getOrgInitials(org.name) }} 
+            {{ getOrgInitials(org.name) }}
           </div>
           <div class="ml-4">
-            <div class="text-sm font-medium text-gray-900">{{ org.name }}</div> 
+            <div class="text-sm font-medium text-gray-900">{{ org.name }}</div>
           </div>
         </div>
       </td>
@@ -74,14 +80,29 @@
         <div class="text-sm text-gray-500">{{ org.phone_number }}</div>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        {{ org.address }} 
+        {{ org.address }}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        {{ formatDate(org.created_at) }} 
+        <template v-if="org.city">{{ org.city }}</template>
+        <template v-if="org.state">
+          <span v-if="org.city">, </span>{{ org.state }}
+        </template>
+        <template v-if="org.country">
+          <span v-if="org.city || org.state">, </span>{{ org.country }}
+        </template>
+        <span v-if="!org.city && !org.state && !org.country">N/A</span>
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap">
+        <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', getOrganizationStatusClass(org.is_active)]">
+          {{ translateOrganizationStatus(org.is_active) }}
+        </span>
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        {{ formatDate(org.created_at) }}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
         <div class="flex justify-end space-x-1">
-          <PermissionGuard moduleId="organization" permission="ver"> 
+          <PermissionGuard moduleId="organization" permission="ver">
             <ActionButton
               icon="eye" 
               tooltip="Ver detalles" 
@@ -89,15 +110,15 @@
               @click="router.push(`/Organizations/${org.id}`)" /> 
           </PermissionGuard>
     
-          <PermissionGuard moduleId="organization" permission="editar"> 
+          <PermissionGuard moduleId="organization" permission="editar">
             <ActionButton 
               icon="pencil" 
               tooltip="Editar organización" 
               color="warning" 
               @click="router.push(`/Organizations/${org.id}/edit`)" /> 
           </PermissionGuard>
-          
-          <PermissionGuard moduleId="organization" permission="eliminar"> 
+      
+          <PermissionGuard moduleId="organization" permission="eliminar">
             <ActionButton 
               icon="trash" 
               tooltip="Eliminar organización" 
@@ -129,18 +150,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, defineComponent, h } from 'vue'; // Importar h
+import { ref, computed, onMounted, defineComponent, h } from 'vue';
 import { useOrganizationStore } from '~/stores/organizations';
 
 // Icons (placeholders)
 const PlusIcon = defineComponent({
-  render: () => h('div', { class: 'i-heroicons-plus' }) // Ejemplo de icono
+  render: () => h('div', { class: 'i-heroicons-plus' })
 });
 const SearchIcon = defineComponent({
-  render: () => h('div', { class: 'i-heroicons-magnifying-glass' }) // Ejemplo de icono
+  render: () => h('div', { class: 'i-heroicons-magnifying-glass' })
 });
-// Asegúrate de que ActionButton, ConfirmModal, Pagination, PageHeader y PermissionGuard estén correctamente importados o definidos globalmente.
-// Si son componentes que creaste, deben estar en `components/global` o importados explícitamente.
 
 definePageMeta({
   // middleware: ['auth'],
@@ -158,7 +177,6 @@ const orgToDelete = ref(null);
 
 // Computed
 const organizations = computed(() => organizationStore.organizations);
-
 const filteredOrganizations = computed(() => {
   let result = [...organizations.value];
   
@@ -166,21 +184,20 @@ const filteredOrganizations = computed(() => {
     const query = searchQuery.value.toLowerCase();
     result = result.filter(org => 
       org.name.toLowerCase().includes(query) ||
-      (org.address && org.address.toLowerCase().includes(query)) || // Añadir comprobación para 'address'
-      (org.contactEmail && org.contactEmail.toLowerCase().includes(query))
+      (org.address && org.address.toLowerCase().includes(query)) ||
+      (org.contact_email && org.contact_email.toLowerCase().includes(query)) ||
+      (org.city && org.city.toLowerCase().includes(query)) ||
+      (org.state && org.state.toLowerCase().includes(query)) ||
+      (org.country && org.country.toLowerCase().includes(query))
     );
   }
-  // Puedes añadir aquí una ordenación si el orden de Supabase no es el deseado
-  // result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  
   return result;
 });
-
 const totalFilteredOrganizations = computed(() => filteredOrganizations.value.length);
 
 // Métodos
 const getOrgInitials = (name) => {
-  if (!name) return ''; // Manejar si el nombre es nulo o indefinido
+  if (!name) return '';
   return name
     .split(' ')
     .map(word => word[0])
@@ -190,19 +207,16 @@ const getOrgInitials = (name) => {
 };
 
 const formatDate = (date) => {
-  if (!date) return ''; // Manejar si la fecha es nula o indefinida
+  if (!date) return '';
   return new Date(date).toLocaleDateString('es-ES');
 };
-
 const handlePageChange = (page) => {
   currentPage.value = page;
 };
-
 const showDeleteConfirm = (org) => {
   orgToDelete.value = org;
   showDeleteModal.value = true;
 };
-
 const confirmDelete = async () => {
   try {
     await organizationStore.deleteOrganization(orgToDelete.value.id);
@@ -210,13 +224,21 @@ const confirmDelete = async () => {
     orgToDelete.value = null;
   } catch (error) {
     console.error('Error al eliminar organización:', error);
-    // Aquí podrías mostrar una notificación al usuario de que hubo un error
   }
 };
-
 const cancelDelete = () => {
   showDeleteModal.value = false;
   orgToDelete.value = null;
+};
+
+// Function to get the badge class based on is_active status
+const getOrganizationStatusClass = (isActive) => {
+  return isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+};
+
+// Function to translate the boolean status to a display string
+const translateOrganizationStatus = (isActive) => {
+  return isActive ? 'Activo' : 'Inactivo';
 };
 
 // Cargar datos

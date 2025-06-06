@@ -10,13 +10,6 @@
             class="btn btn-secondary">
             Volver
           </NuxtLink>
-          <!-- <button
-            @click="saveUser"
-            class="btn btn-primary flex items-center"
-            :disabled="saving">
-            <CheckIcon class="h-5 w-5 mr-2" />
-            {{ saving ? 'Guardando...' : 'Guardar Usuario' }}
-          </button> -->
         </div>
       </template>
     </PageHeader>
@@ -118,10 +111,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router'; // Importa useRouter
+import { useRouter } from 'vue-router';
 import { useUserStore } from '~/stores/users';
 import { useOrganizationStore } from '~/stores/organizations';
-import { useAuthStore } from '~/stores/auth'; // Importa el authStore
+import { useAuthStore } from '~/stores/auth';
 
 // Icons (Esto es solo un placeholder, asegúrate de que tus iconos estén configurados correctamente)
 import { defineComponent, h } from 'vue';
@@ -148,7 +141,7 @@ const form = ref({
   email: '',
   password: '',
   role: '', // Esto almacenará el ID (UUID) del rol seleccionado por el usuario
-  organizationId: ''
+  organizationId: '' // Esto almacenará el ID (UUID) de la organización seleccionada
 });
 
 // --- Propiedades computadas ---
@@ -172,14 +165,14 @@ const saveUser = async () => {
     }
 
     // 2. Prepara el objeto de datos que vas a enviar a `userStore.createUser`.
-    // ¡Aquí convertimos el ID del rol a su NOMBRE (string ENUM) para la base de datos!
+    // ¡Aquí convertimos el ID del rol al campo 'role_id' que espera el store!
     const userDataToSave = {
       firstName: form.value.firstName,
       lastName: form.value.lastName,
       email: form.value.email,
-      password: form.value.password, // La contraseña es necesaria para la creación de un nuevo usuario
-      role: selectedRoleObject.name, // <-- ¡ESTA ES LA CLAVE! Enviamos el nombre del ENUM
-      organizationId: form.value.organizationId,
+      password: form.value.password,
+      role_id: selectedRoleObject.id, // <-- ¡CAMBIO IMPORTANTE AQUÍ! Enviamos el ID del rol
+      organization_id: form.value.organizationId, // El store espera 'organization_id'
     };
 
     // Opcional: Para depuración, puedes ver qué se va a enviar
@@ -218,7 +211,6 @@ onMounted(async () => {
     }
 
     // Asigna un rol por defecto si no hay uno seleccionado y hay roles disponibles
-    // Puedes elegir un rol específico por su nombre (ej. 'viewer') o el primer rol de la lista.
     if (authStore.availableRoles.length > 0 && !form.value.role) {
       const defaultRole = authStore.availableRoles.find(r => r.name === 'viewer'); // O el rol que consideres por defecto
       if (defaultRole) {

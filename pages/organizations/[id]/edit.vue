@@ -10,19 +10,13 @@
             class="btn btn-secondary">
             Volver
           </NuxtLink>
-          <!-- <button 
-            @click="saveOrganization" 
-            class="btn btn-primary flex items-center"
-            :disabled="saving">
-            <CheckIcon class="h-5 w-5 mr-2" />
-            {{ saving ? 'Guardando...' : 'Guardar Cambios' }}
-          </button> -->
         </div>
       </template>
     </PageHeader>
 
     <div v-if="loading" class="flex items-center justify-center py-8">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <p class="ml-3 text-gray-500">Cargando información de la organización...</p>
     </div>
 
     <div v-else class="max-w-3xl mx-auto">
@@ -45,6 +39,33 @@
               class="form-input" />
           </div>
 
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div>
+              <label class="form-label">Ciudad</label>
+              <input
+                v-model="form.city"
+                type="text"
+                class="form-input"
+              />
+            </div>
+            <div>
+              <label class="form-label">Estado</label>
+              <input
+                v-model="form.state"
+                type="text"
+                class="form-input"
+              />
+            </div>
+            <div>
+              <label class="form-label">País</label>
+              <input
+                v-model="form.country"
+                type="text"
+                class="form-input"
+              />
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <label class="form-label">Correo de Contacto</label>
@@ -64,6 +85,17 @@
             </div>
           </div>
 
+          <div>
+            <label class="form-label">Estado</label>
+            <select
+              v-model="form.is_active"
+              required
+              class="form-input"
+            >
+              <option :value="true">Activo</option>
+              <option :value="false">Inactivo</option>
+            </select>
+          </div>
           <div class="flex justify-end gap-2">
             <NuxtLink 
               to="/organizations"
@@ -72,8 +104,9 @@
             </NuxtLink>
             <button 
               type="submit" 
-              class="btn btn-primary"
+              class="btn btn-primary flex items-center"
               :disabled="saving">
+              <CheckIcon class="h-5 w-5 mr-2" />
               {{ saving ? 'Guardando...' : 'Guardar Cambios' }}
             </button>
           </div>
@@ -85,15 +118,17 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useOrganizationStore } from '~/stores/organizations';
 
 // Icons (placeholder)
+import { defineComponent, h } from 'vue';
 const CheckIcon = defineComponent({
-  render: () => h('div')
+  render: () => h('div', { class: 'i-heroicons-check' })
 });
 
 definePageMeta({
-  // middleware: ['auth']
+  middleware: ['auth']
 });
 
 const route = useRoute();
@@ -104,25 +139,52 @@ const organizationStore = useOrganizationStore();
 const loading = ref(true);
 const saving = ref(false);
 const organization = ref(null);
+
 const form = ref({
   name: '',
   address: '',
-  contact_email: '',
-  contact_phone: ''
+  city: '',           
+  state: '',          
+  country: '',        
+  contact_email: '',  
+  phone_number: '',  
+  is_active: false,   // Default to false, will be overridden by fetched data
 });
 
 // Métodos
 const loadOrganization = async () => {
+  loading.value = true;
   try {
-    const org = await organizationStore.organizations.find(o => o.id === route.params.id);
+    await organizationStore.fetchOrganizations();
+    const org = organizationStore.organizations.find(o => o.id === route.params.id);
+
     if (!org) {
-      throw new Error('Organización no encontrada');
+      console.error('Organización no encontrada para ID:', route.params.id);
+      router.push('/organizations');
+      return;
     }
+    
     organization.value = org;
-    form.value = { ...org };
+    
+    // Populate form with fetched data
+    // Ensure `is_active` is populated correctly. `?? false` as a fallback.
+    form.value = {
+      name: org.name || '',
+      address: org.address || '',
+      city: org.city || '',
+      state: org.state || '',
+      country: org.country || '',
+      contact_email: org.contact_email || '',
+      phone_number: org.phone_number || '',
+      is_active: org.is_active ?? false, 
+    };
+
   } catch (error) {
     console.error('Error al cargar organización:', error);
+    alert('Error al cargar organización: ' + error.message);
     router.push('/organizations');
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -133,17 +195,16 @@ const saveOrganization = async () => {
     router.push('/organizations');
   } catch (error) {
     console.error('Error al guardar organización:', error);
+    alert('Error al guardar cambios: ' + error.message);
   } finally {
     saving.value = false;
   }
 };
 
-// Cargar datos
-onMounted(async () => {
-  try {
-    await loadOrganization();
-  } finally {
-    loading.value = false;
-  }
-});
+// Remover helper functions for status badge, as they are no longer needed
+// const getOrganizationStatusClass = (isActive) => { ... };
+// const translateOrganizationStatus = (isActive) => { ... };
+
+// Cargar datos al montar el componente
+onMounted(loadOrganization);
 </script>

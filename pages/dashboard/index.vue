@@ -38,6 +38,7 @@
     </div>
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      
       <div class="card">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-medium text-gray-900">Sensores Recientes</h2>
@@ -47,7 +48,6 @@
             {{ expandedSection === 'sensors' ? 'Ver menos' : 'Ver todo' }}
           </button>
         </div>
-
         <div class="space-y-4"
               :class="{ 'max-h-80 overflow-y-auto': expandedSection === 'sensors' }">
           <div v-for="sensor in displayedSensors" :key="sensor.id"
@@ -293,18 +293,16 @@ onMounted(async () => {
         ]);
 
         // --- Lógica para inicializar la organización seleccionada ---
+        // (Your commented-out organization logic, uncomment if needed)
         // if (process.client) { // Solo ejecutar en el lado del cliente (navegador)
         //     const storedOrgId = localStorage.getItem('selected_org_id');
         //     if (storedOrgId && organizationStore.allOrganizations.some(org => org.id === storedOrgId)) {
-        //         // Si hay un ID guardado y es válido, usarlo
         //         organizationStore.setSelectedOrganization(storedOrgId);
         //         console.log(`Organización inicial cargada desde localStorage: ${storedOrgId}`);
         //     } else if (organizationStore.allOrganizations.length > 0) {
-        //         // Si no hay ID guardado, o es inválido, seleccionar la primera organización disponible
         //         organizationStore.setSelectedOrganization(organizationStore.allOrganizations[0].id);
         //         console.log('No hay organización guardada o es inválida, seleccionando la primera disponible.');
         //     } else {
-        //         // Si no hay organizaciones disponibles en absoluto
         //         organizationStore.setSelectedOrganization(null);
         //         console.log('No hay organizaciones disponibles para seleccionar.');
         //     }
@@ -320,6 +318,7 @@ onMounted(async () => {
         }
 
         // REVISAR: Cargar datos históricos para los porcentajes (si es necesario desde Supabase)
+        // Esto es para calcular el cambio porcentual de los totales de sensores y organizaciones
         const now = new Date();
         const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
@@ -341,12 +340,21 @@ onMounted(async () => {
 
         // --- SECCIÓN DE SUSCRIPCIONES REALTIME ---
         console.log('[Dashboard.vue - onMounted] Preparando para iniciar suscripciones de Realtime...');
-        console.log('--- TEST: Llamando a alertStore.subscribeToAlertUpdates() ahora ---');
-        alertStore.subscribeToAlertUpdates(); // Llama a la acción SIN await para no bloquear
-        console.log('--- TEST: alertStore.subscribeToAlertUpdates() ha sido llamada ---');
 
-        // Las suscripciones que NO SON para el gráfico, pueden ser awaited o no, dependiendo de tu flujo
-        sensorStore.subscribeToSensorUpdates(); // Suscripción a cambios generales de sensores
+        // 1. Suscripción para alertas
+        alertStore.subscribeToAlertUpdates();
+        console.log('--- alertStore.subscribeToAlertUpdates() ha sido llamada ---');
+
+        // 2. Suscripción a cambios generales de sensores (status, last_communication, etc.)
+        sensorStore.subscribeToSensorUpdates();
+        console.log('--- sensorStore.subscribeToSensorUpdates() ha sido llamada ---');
+
+        // 3. NUEVO Y CRUCIAL: Suscripción para las lecturas recientes en las tarjetas de sensores
+        // Esta acción se encarga de mantener `allSensorRecentReadings[sensorId][0]`
+        // actualizado con la última lectura para la vista de "Sensores Recientes".
+        sensorStore.subscribeToDashboardRecentReadings();
+        console.log('--- sensorStore.subscribeToDashboardRecentReadings() ha sido llamada ---');
+
 
     } catch (error) {
         console.error("Error al cargar el dashboard:", error);
@@ -354,12 +362,15 @@ onMounted(async () => {
         loading.value = false;
     }
 });
+
+// --- onUnmounted hook ---
 // Desuscribirse al desmontar el componente para evitar fugas de memoria
 onUnmounted(async () => {
-  console.log('[Dashboard.vue - onMounted] Preparando para iniciar suscripciones de Realtime...');
-  await sensorStore.unsubscribeFromAllDashboardReadings();
-  await sensorStore.unsubscribeFromSensorUpdates();
-  await alertStore.unsubscribeFromAlertUpdates(); // Asegúrate de tener esta acción en tu alertStore
+  console.log('[Dashboard.vue - onUnmounted] Desuscribiendo de los canales de Realtime...');
+  await sensorStore.unsubscribeFromAllDashboardReadings(); // Desuscribe de las suscripciones individuales del gráfico
+  await sensorStore.unsubscribeFromSensorUpdates();      // Desuscribe de los cambios generales de sensores
+  await sensorStore.unsubscribeFromDashboardRecentReadings(); // <-- NUEVO: Desuscribe de las lecturas recientes para StatCards
+  await alertStore.unsubscribeFromAlertUpdates();         // Desuscribe de las alertas
 });
 </script>
 

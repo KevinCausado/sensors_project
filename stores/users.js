@@ -5,18 +5,20 @@ import { useNuxtApp } from '#app';
 export const useUserStore = defineStore('users', {
   state: () => ({
     users: [],
-    currentUser: null, // Agregamos esto para almacenar el usuario actual si lo necesitas
+    currentUser: null,
     loading: false,
     error: null,
+    roles: [],
+    organizations: [],
   }),
 
   getters: {
     getUsers: (state) => state.users,
     isLoading: (state) => state.loading,
     getError: (state) => state.error,
-    // Eliminamos getUserById de aquí, porque será una acción
-    // Si aún necesitas un getter para buscar en el estado local después de que se cargue,
-    // puedes tener algo como: findUserInStateById: (state) => (id) => state.users.find(user => user.id === id)
+    getRoles: (state) => state.roles,
+    getOrganizations: (state) => state.organizations,
+    findUserInStateById: (state) => (id) => state.users.find(user => user.id === id),
   },
 
   actions: {
@@ -25,77 +27,102 @@ export const useUserStore = defineStore('users', {
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const { data, error } = await $supabase.rpc('get_app_users'); // O directamente .from('Users').select(...)
+        const { data: usersData, error: usersError } = await $supabase.rpc('get_app_users');
+        if (usersError) throw usersError;
 
-        if (error) {
-          throw error;
-        }
+        this.users = usersData.map(user => ({
+          ...user,
+          id: user.user_profile_id,
+        }));
 
-        // Mapear los datos si get_app_users no los devuelve aplanados
-        const mappedUsers = data.map(user => {
-            const newUser = { ...user };
-            // Si tu RPC ya devuelve organizationName y organizationId en camelCase, estas líneas no son estrictamente necesarias
-            // pero es buena práctica tenerlas para robustez o si cambias el RPC.
-            if (newUser.Organizations && newUser.Organizations.name) {
-                newUser.organizationName = newUser.Organizations.name;
-            }
-            if (newUser.OrganizationId !== undefined) {
-                newUser.organizationId = newUser.OrganizationId;
-                delete newUser.OrganizationId; // Eliminar la versión PascalCase
-            }
-            delete newUser.Organizations; // Eliminar el objeto anidado
-            return newUser;
-        });
-
-        this.users = mappedUsers;
       } catch (error) {
         console.error('Error fetching users:', error);
         this.error = error.message || 'Error al cargar usuarios.';
+        throw error;
       } finally {
         this.loading = false;
       }
     },
 
-    // --- ¡NUEVA ACCIÓN: fetchUser! (Antes era un getter) ---
-    async fetchUser(id) {
-      this.loading = true;
-      this.error = null;
-      try {
-        const { $supabase } = useNuxtApp();
-        // Carga un solo usuario por ID, incluyendo la relación con Organizations
-        const { data, error } = await $supabase
-          .from('Users')
-          .select('*, Organizations(name)') // Incluimos Organizations para obtener el nombre
-          .eq('id', id)
-          .single(); // Para obtener un solo registro
-
-        if (error) {
-          throw error;
+    async fetchRoles() {
+        this.loading = true;
+        this.error = null;
+        try {
+            const { $supabase } = useNuxtApp();
+            const { data, error } = await $supabase.from('roles').select('id, name');
+            if (error) throw error;
+            this.roles = data;
+        } catch (error) {
+            console.error('Error fetching roles:', error);
+            this.error = error.message || 'Error al cargar roles.';
+            throw error;
+        } finally {
+            this.loading = false;
         }
+    },
 
-        // Mapear los datos para aplanar 'organizationName' y corregir 'organizationId'
-        const mappedData = { ...data };
-        if (mappedData.Organizations && mappedData.Organizations.name) {
-          mappedData.organizationName = mappedData.Organizations.name;
-        } else {
-          mappedData.organizationName = 'N/A'; // Si no hay organización asociada
+    async fetchOrganizations() {
+        this.loading = true;
+        this.error = null;
+        try {
+            const { $supabase } = useNuxtApp();
+            const { data, error } = await $supabase.from('organizations').select('id, name');
+            if (error) throw error;
+            this.organizations = data;
+        } catch (error) {
+            console.error('Error fetching organizations:', error);
+            this.error = error.message || 'Error al cargar organizaciones.';
+            throw error;
+        } finally {
+            this.loading = false;
         }
-        delete mappedData.Organizations; // Eliminar el objeto anidado
+    },
 
-        if (mappedData.OrganizationId !== undefined) {
-          mappedData.organizationId = mappedData.OrganizationId;
-          delete mappedData.OrganizationId;
+    async fetchUserById(id) {
+        this.loading = true;
+        this.error = null;
+        try {
+            const { $supabase } = useNuxtApp();
+            const { data, error } = await $supabase
+                .from('users')
+                .select(`
+                    id,
+                    email,
+                    first_name,
+                    last_name,
+                    is_active,
+                    last_login,
+                    created_at,
+                    updated_at,
+                    role_id,
+                    organization_id,
+                    roles(name),
+                    organizations(name)
+                `)
+                .eq('id', id)
+                .single();
+
+            if (error) throw error;
+
+            if (data) {
+                this.currentUser = {
+                    ...data,
+                    role_name: data.roles?.name || 'N/A',
+                    organization_name: data.organizations?.name || 'N/A',
+                };
+                delete this.currentUser.roles;
+                delete this.currentUser.organizations;
+            } else {
+                this.currentUser = null;
+            }
+            return this.currentUser;
+        } catch (error) {
+            console.error('Error fetching user by ID:', error);
+            this.error = error.message || 'Error al cargar usuario.';
+            throw error;
+        } finally {
+            this.loading = false;
         }
-
-        this.currentUser = mappedData; // Almacena el usuario cargado en el estado
-        return mappedData; // Retorna el usuario mapeado
-      } catch (error) {
-        console.error(`Error fetching user with ID ${id}:`, error);
-        this.error = error.message || 'Error al cargar el usuario.';
-        throw error; // Re-lanza el error para que el componente lo capture
-      } finally {
-        this.loading = false;
-      }
     },
 
     async createUser(userData) {
@@ -103,47 +130,74 @@ export const useUserStore = defineStore('users', {
         this.error = null;
         try {
             const { $supabase } = useNuxtApp();
-            
-            // Mapear 'organizationId' del frontend a 'OrganizationId' para la inserción en Supabase
-            const dataToInsert = { ...userData };
-            if (dataToInsert.organizationId !== undefined) {
-                dataToInsert.OrganizationId = dataToInsert.organizationId;
-                delete dataToInsert.organizationId;
-            }
-            if (dataToInsert.organizationName) { // Asegúrate de no enviar esto si no es una columna real
-                delete dataToInsert.organizationName;
-            }
-            
-            // Primero, crea el usuario en Supabase Auth
+
+            // 1. Registrar el usuario en la autenticación de Supabase
             const { data: authData, error: authError } = await $supabase.auth.signUp({
-                email: dataToInsert.email,
-                password: dataToInsert.password, // Asegúrate de que userData incluya la contraseña
+                email: userData.email,
+                password: userData.password
             });
 
-            if (authError) throw authError;
-
-            // Si el registro de auth fue exitoso, inserta los datos adicionales en public."Users"
-            if (authData.user) {
-                const { error: profileError } = await $supabase.from('Users').insert({
-                    id: authData.user.id, // El ID de public."Users" es el mismo que auth.users.id
-                    "firstName": dataToInsert.firstName,
-                    "lastName": dataToInsert.lastName,
-                    email: dataToInsert.email,
-                    role: dataToInsert.role,
-                    "OrganizationId": dataToInsert.OrganizationId, // Usar el nombre de columna correcto para Supabase
-                    // Supabase debería gestionar createdAt y updatedAt si los configuraste con DEFAULT now()
-                    // "lastLogin": authData.user.last_sign_in_at || null, // last_sign_in_at puede ser nulo en el momento de creación
-                    // "createdAt": authData.user.created_at,
-                    // "updatedAt": authData.user.updated_at
-                }).select(); // Agrega .select() para obtener los datos insertados
-
-                if (profileError) throw profileError;
-
-                // Después de insertar, puedes refrescar la lista o agregar el usuario localmente
-                // Para simplificar, podrías simplemente llamar a fetchUsers() de nuevo
-                await this.fetchUsers();
-                return dataToInsert; // O el usuario recién creado si profileError no ocurrió
+            if (authError) {
+                if (authError.message.includes('already registered')) {
+                     throw new Error('Este email ya está registrado. Por favor, usa uno diferente o edita el usuario existente.');
+                }
+                throw authError;
             }
+
+            // 2. Obtener el ID del usuario de autenticación
+            const authUserId = authData.user?.id;
+            if (!authUserId) {
+                throw new Error('No se pudo obtener el ID del usuario de autenticación después del registro.');
+            }
+
+            // 3. Preparar el objeto de datos para insertar en la tabla 'users'
+            // Asegúrate de incluir 'auth_id' con el ID del usuario de autenticación.
+            // La columna 'id' en tu tabla 'users' puede ser una PK auto-generada
+            // o puede ser la misma que 'auth_id'. Aquí asumimos que 'auth_id' es una columna separada y requerida.
+            const userToInsert = {
+                auth_id: authUserId, // <--- CAMBIO CLAVE: Asignar el ID de autenticación a 'auth_id'
+                email: userData.email,
+                first_name: userData.firstName,
+                last_name: userData.lastName,
+                role_id: userData.role_id, // Espera el ID del rol (UUID)
+                organization_id: userData.organization_id, // Espera el ID de la organización (UUID)
+                is_active: userData.is_active !== undefined ? userData.is_active : true,
+            };
+
+            // 4. Insertar el perfil del usuario en la tabla 'users'
+            const { data: newUserProfile, error: insertError } = await $supabase
+                .from('users')
+                .insert([userToInsert])
+                .select(`
+                    id,
+                    auth_id,
+                    email,
+                    first_name,
+                    last_name,
+                    is_active,
+                    last_login,
+                    organization_id,
+                    role_id,
+                    roles(name),
+                    organizations(name)
+                `)
+                .single();
+
+            if (insertError) throw insertError;
+
+            // 5. Mapear los datos para el estado del store
+            const mappedUser = {
+                ...newUserProfile,
+                role_name: newUserProfile.roles?.name || 'N/A',
+                organization_name: newUserProfile.organizations?.name || 'N/A',
+            };
+            delete mappedUser.roles;
+            delete mappedUser.organizations;
+
+            // 6. Actualizar el estado del store
+            this.users.push(mappedUser);
+            return mappedUser;
+
         } catch (error) {
             console.error('Error creating user:', error);
             this.error = error.message || 'Error al crear usuario.';
@@ -153,47 +207,47 @@ export const useUserStore = defineStore('users', {
         }
     },
 
-
-    async updateUser(id, updates) {
+    async updateUser(id, userData) {
         this.loading = true;
         this.error = null;
         try {
             const { $supabase } = useNuxtApp();
 
-            // Mapear 'organizationId' del frontend a 'OrganizationId' para la actualización en Supabase
-            const dataToUpdate = { ...updates };
-            if (dataToUpdate.organizationId !== undefined) {
-                dataToUpdate.OrganizationId = dataToUpdate.organizationId;
-                delete dataToUpdate.organizationId;
-            }
-            if (dataToUpdate.organizationName) { // Asegúrate de no enviar esto si no es una columna real
-                delete dataToUpdate.organizationName;
-            }
-            if (dataToUpdate.email) { // El email no se puede cambiar directamente aquí
-                delete dataToUpdate.email;
-            }
+            const updates = {
+                first_name: userData.firstName,
+                last_name: userData.lastName,
+                is_active: userData.is_active,
+                role_id: userData.role_id,
+                organization_id: userData.organization_id,
+            };
 
-            const { data, error } = await $supabase
-                .from('Users')
-                .update(dataToUpdate) // Usar el objeto mapeado
+            const { data, error: updateError } = await $supabase
+                .from('users')
+                .update(updates)
                 .eq('id', id)
-                .select('*, Organizations(name)'); // Seleccionar el nombre de la organización al actualizar para el estado local
+                .select(`
+                    id,
+                    email,
+                    first_name,
+                    last_name,
+                    is_active,
+                    last_login,
+                    organization_id,
+                    role_id,
+                    roles(name),
+                    organizations(name)
+                `)
+                .single();
 
-            if (error) throw error;
+            if (updateError) throw updateError;
 
-            // Mapear los datos devueltos para la consistencia del estado local
-            const mappedData = { ...data[0] };
-            if (mappedData.Organizations && mappedData.Organizations.name) {
-                mappedData.organizationName = mappedData.Organizations.name;
-            } else {
-                mappedData.organizationName = 'N/A';
-            }
-            delete mappedData.Organizations;
-
-            if (mappedData.OrganizationId !== undefined) {
-                mappedData.organizationId = mappedData.OrganizationId;
-                delete mappedData.OrganizationId;
-            }
+            const mappedData = {
+                ...data,
+                role_name: data.roles?.name || 'N/A',
+                organization_name: data.organizations?.name || 'N/A',
+            };
+            delete mappedData.roles;
+            delete mappedData.organizations;
 
             const index = this.users.findIndex(u => u.id === id);
             if (index !== -1) {
@@ -217,8 +271,14 @@ export const useUserStore = defineStore('users', {
         this.error = null;
         try {
             const { $supabase } = useNuxtApp();
-            const { error } = await $supabase.from('Users').delete().eq('id', id);
-            if (error) throw error;
+
+            const { error: deleteProfileError } = await $supabase
+                .from('users')
+                .delete()
+                .eq('id', id);
+
+            if (deleteProfileError) throw deleteProfileError;
+
             this.users = this.users.filter(u => u.id !== id);
             if (this.currentUser?.id === id) {
                 this.currentUser = null;

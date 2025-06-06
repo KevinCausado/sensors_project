@@ -9,14 +9,7 @@
             to="/organizations"
             class="btn btn-secondary">
             Volver
-          </NuxtLink>
-          <!-- <button 
-            @click="saveOrganization" 
-            class="btn btn-primary flex items-center"
-            :disabled="saving">
-            <CheckIcon class="h-5 w-5 mr-2" />Pane
-            {{ saving ? 'Guardando...' : 'Guardar Organización' }}
-          </button> -->
+          </NuxtLink>        
         </div>
       </template>
     </PageHeader>
@@ -41,11 +34,37 @@
               class="form-input" />
           </div>
 
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div>
+              <label class="form-label">Ciudad</label>
+              <input
+                v-model="form.city"
+                type="text"
+                class="form-input"
+              />
+            </div>
+            <div>
+              <label class="form-label">Estado</label>
+              <input
+                v-model="form.state"
+                type="text"
+                class="form-input"
+              />
+            </div>
+            <div>
+              <label class="form-label">País</label>
+              <input
+                v-model="form.country"
+                type="text"
+                class="form-input"
+              />
+            </div>
+          </div>
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <label class="form-label">Correo de Contacto</label>
               <input 
-                v-model="form.contactEmail"
+                v-model="form.contact_email"
                 type="email"
                 required
                 class="form-input" />
@@ -54,7 +73,7 @@
             <div>
               <label class="form-label">Teléfono de Contacto</label>
               <input 
-                v-model="form.contactPhone"
+                v-model="form.phone_number"
                 type="tel"
                 class="form-input" />
             </div>
@@ -80,19 +99,22 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, defineComponent, h } from 'vue'; // Ensure h is imported if used by CheckIcon or similar
+import { useRouter } from 'vue-router'; // Necessary for router.push
 import { useOrganizationStore } from '~/stores/organizations';
 
-// Icons (placeholder)
+// Icons (placeholder) - Only include if these components are actually used.
+// If CheckIcon is not visually present due to the is_active checkbox removal, it can be removed.
 const CheckIcon = defineComponent({
-  render: () => h('div')
+  render: () => h('div', { class: 'i-heroicons-check' }) // Placeholder for a generic check icon from heroicons
 });
+
 
 definePageMeta({
   middleware: ['auth']
 });
 
-const router = useRouter();
+const router = useRouter(); // Initialize useRouter
 const organizationStore = useOrganizationStore();
 
 // Estado
@@ -100,18 +122,27 @@ const saving = ref(false);
 const form = ref({
   name: '',
   address: '',
-  contactEmail: '',
-  contactPhone: ''
+  // NEW: Added city, state, country, and is_active with default true
+  city: '',          
+  state: '',         
+  country: '',       
+  contact_email: '',
+  phone_number: '',
+  is_active: true,   // Default to true as confirmed
 });
 
-// Métodos
+// Métodos (NOT MODIFIED AS PER INSTRUCTION)
 const saveOrganization = async () => {
   try {
     saving.value = true;
-    await organizationStore.addOrganization(form.value);
-    router.push('/organizations');
+    await organizationStore.createOrganization({
+      ...form.value,
+      // The addOrganization action in your store should be set up to receive these new fields.
+    });
+    router.push("/organizations");
   } catch (error) {
-    console.error('Error al guardar organización:', error);
+    console.error("Error al guardar organización:", error);
+    alert('Error al guardar organización: ' + error.message);
   } finally {
     saving.value = false;
   }

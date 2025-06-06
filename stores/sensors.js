@@ -31,20 +31,25 @@ export const useSensorStore = defineStore('sensors', {
       );
     },
 
-       recentSensors: (state) => {
+     recentSensors: (state) => {
+      // Ordenamos los sensores por su 'last_communication'
+      // que ahora se actualiza automáticamente con la última lectura gracias al trigger.
       const sortedSensors = [...state.filteredSensors].sort((a, b) => {
         if (!a.last_communication && !b.last_communication) return 0;
         if (!a.last_communication) return 1;
         if (!b.last_communication) return -1;
         return new Date(b.last_communication).getTime() - new Date(a.last_communication).getTime();
       });
+
       const latestFive = sortedSensors.slice(0, 5);
+
+      // Mapea y utiliza los nuevos campos directamente del objeto sensor
       return latestFive.map(sensor => ({
         ...sensor,
-        // Ensure lastReading is structured correctly for the UI
-        value: state.allSensorRecentReadings[sensor.id]?.[0]?.value || null, // Access value directly
-        unit: state.allSensorRecentReadings[sensor.id]?.[0]?.unit || null,   // Access unit directly
-        lastReading: state.allSensorRecentReadings[sensor.id]?.[0]?.timestamp || null, // Access timestamp for formatting
+        // ¡Accedes directamente a los campos del sensor!
+        value: sensor.last_value || null, // last_value es el último valor del sensor
+        unit: sensor.last_unit || null,   // last_unit es la unidad de la última lectura
+        lastReading: sensor.last_reading_timestamp || null, // last_reading_timestamp es la fecha/hora de la última lectura
       }));
     },
   },
@@ -71,8 +76,14 @@ export const useSensorStore = defineStore('sensors', {
           battery_level: sensor.battery_level,
           signal_strength: sensor.signal_strength,
           thresholds: sensor.thresholds,
-          type: sensor.type, // Make sure type is mapped
-          unit: sensor.unit, // Make sure unit is mapped
+          type: sensor.type,
+          unit: sensor.unit, 
+          city: sensor.city, 
+          state: sensor.state,
+          country: sensor.country,
+           last_value : sensor.last_value,           
+           last_unit: sensor.last_unit,
+           last_reading_timestamp : sensor.last_reading_timestamp
         }));
         console.log('Fetched sensors:', this.sensors);
       } catch (e) {
@@ -116,6 +127,12 @@ export const useSensorStore = defineStore('sensors', {
                 battery_level: data.battery_level,
                 signal_strength: data.signal_strength,
                 thresholds: data.thresholds,
+                city: data.city, 
+               state: data.state,
+               country: data.country,
+               last_value : data.last_value,           
+               last_unit: data.last_unit,
+               last_reading_timestamp : data.last_reading_timestamp
             };
             this.currentSensor = mappedSensor;
             console.log('Fetched single sensor with organization name:', this.currentSensor);
@@ -159,6 +176,9 @@ export const useSensorStore = defineStore('sensors', {
           thresholds: data[0].thresholds,
           type: data[0].type, // Ensure type is mapped
           unit: data[0].unit, // Ensure unit is mapped
+          city: data[0].city, 
+          country: data[0].country, 
+          state: data[0].state, 
         };
         this.sensors.push(newSensor);
         return newSensor;
@@ -204,6 +224,9 @@ export const useSensorStore = defineStore('sensors', {
             thresholds: data[0].thresholds,
             type: data[0].type, // Ensure type is mapped
             unit: data[0].unit, // Ensure unit is mapped
+            city: data[0].city, 
+            country: data[0].country, 
+           state: data[0].state, 
           };
           this.sensors[index] = updatedSensor;
           this.currentSensor = updatedSensor;

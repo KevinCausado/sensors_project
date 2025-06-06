@@ -877,6 +877,80 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+
+     async updateProfile(profileData) {
+            this.isLoading = true;
+            this.error = null;
+            try {
+                const { $supabase } = useNuxtApp();
+
+                // Validar que el usuario esté autenticado y tengamos su auth_id
+                if (!this.user || !this.user.id) {
+                    throw new Error('Usuario no autenticado. No se puede actualizar el perfil.');
+                }
+
+                // 1. Preparar los datos para la actualización en la tabla 'users'
+                const updates = {
+                    first_name: profileData.firstName, // Convertir de camelCase a snake_case para la DB
+                    last_name: profileData.lastName,   // Convertir de camelCase a snake_case para la DB
+                    preferences: profileData.preferences, // Asume que 'preferences' es una columna JSONB
+                };
+
+                // 2. Ejecutar la actualización
+                // Filtrar por el auth_id del usuario actualmente autenticado (this.user.id)
+                const { data, error } = await $supabase
+                    .from('users') // Tu tabla de perfiles de usuario
+                    .update(updates)
+                    .eq('auth_id', this.user.id) // Clave de unión con auth.users
+                    .select(`
+                        id,
+                        auth_id,
+                        email,
+                        first_name,
+                        last_name,
+                        role_id,
+                        organization_id,
+                        is_active,
+                        preferences,
+                        roles(name),
+                        organizations(name)
+                    `)
+                    .single();
+
+                if (error) {
+                    if (error.code === 'PGRST116' && error.message.includes('0 rows')) {
+                        throw new Error('Perfil de usuario no encontrado para actualizar. Asegúrate de que existe un perfil asociado a este usuario de autenticación.');
+                    }
+                    throw error;
+                }
+
+                // 3. Actualizar el userProfile en el store con los nuevos datos
+                if (data) {
+                    this.userProfile = {
+                        ...data,
+                        firstName: data.first_name,
+                        lastName: data.last_name,
+                        role: data.roles?.name,
+                        organizationName: data.organizations?.name,
+                    };
+                    delete this.userProfile.first_name;
+                    delete this.userProfile.last_name;
+                    delete this.userProfile.roles;
+                    delete this.userProfile.organizations;
+                }
+                console.log('Perfil actualizado con éxito:', this.userProfile);
+
+                return this.userProfile;
+
+            } catch (e) {
+                console.error('Error updating profile:', e);
+                this.error = e.message || 'Error al actualizar el perfil.';
+                throw e; // Re-lanza el error para que el componente pueda manejarlo
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
     async deleteRole(roleId) {
       this.isLoading = true;
       this.error = null;

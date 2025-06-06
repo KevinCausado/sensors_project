@@ -47,9 +47,25 @@
             <label class="form-label">Modelo</label>
             <input v-model="form.model" type="text" class="form-input" />
           </div>
+         
 
-          <div>
-            <label class="form-label">Descripción de Ubicación</label>
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div>
+              <label class="form-label">País</label>
+              <input v-model="form.country" type="text" class="form-input" />
+            </div>
+            <div>
+              <label class="form-label">Estado</label>
+              <input v-model="form.state" type="text" class="form-input" />
+            </div>
+            <div>
+              <label class="form-label">Ciudad</label>
+              <input v-model="form.city" type="text" class="form-input" />
+            </div>
+          </div>
+
+           <div>
+            <label class="form-label">Dirección</label>
             <textarea v-model="form.location_description" class="form-input"></textarea>
           </div>
 
@@ -114,7 +130,6 @@ import { useRouter } from "vue-router";
 import { useParameterStore } from "~/stores/parameters"; // Asegúrate de que este import exista
 
 import { PlusIcon, CheckIcon } from "@heroicons/vue/24/outline";
-
 // Componentes
 import PageHeader from "@/components/PageHeader.vue";
 
@@ -137,8 +152,11 @@ const form = ref({
   serial_number: "", // Añadido
   model: "", // Añadido
   location_description: "", // Añadido
+  country: "", // Nuevo campo
+  state: "", // Nuevo campo
+  city: "", // Nuevo campo
   organizationId: "",
-  status: "active",
+  status: "",
   thresholds: {
     criticalMin: 0,
     criticalMax: 100,
@@ -146,12 +164,10 @@ const form = ref({
     normalMax: 100,
   },
 });
-
 // Computed
 const organizations = computed(() => organizationStore.organizations);
 // Este getter ya está bien, asumiendo que tu store de parámetros lo define correctamente
 const availableUnits = computed(() => parameterStore.getUnitParameters);
-
 // Métodos
 const saveSensor = async () => {
   try {
@@ -170,7 +186,6 @@ const saveSensor = async () => {
     saving.value = false;
   }
 };
-
 // Cargar datos
 onMounted(async () => {
   await Promise.all([
