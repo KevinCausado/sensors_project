@@ -2,44 +2,44 @@
 import axios from 'axios';
 
 // --- CONFIGURACIÓN ---
-// Reemplaza estos con los IDs reales de tus sensores de Supabase
+// ¡IMPORTANTE!: Reemplaza estos con los IDs reales de tus sensores de Supabase
+// Asegúrate de que los 'id' y 'unit' coincidan con tus sensores en la tabla 'public.sensors'
 const SENSOR_CONFIGS = [
   {
-    id: '21f782c3-834a-45be-ac0f-d4ea9095d46f', // ID de un sensor de Temperatura
-    type: 'temperature',
-    unit: '°C',
-    // Rango operacional 'normal' (valores más comunes)
-    normalMin: 20,
-    normalMax: 30,
-    // Rango total del sensor
-    min: 0,
-    max: 100,
-    variation: 1.5 // Cuánto puede variar el valor en cada lectura (un poco más pequeño para ver mejor el efecto)
+    // ID de un sensor de ejemplo que maneja los 4 umbrales
+    // Asegúrate de que este ID existe en tu tabla 'public.sensors'
+    id: '10000000-0000-0000-0000-000000000001', 
+    type: 'temperature', 
+    unit: '°C',     
+    // Tus umbrales específicos (los que tienes en el JSONB de la DB)
+    normalMin: 30,
+    normalMax: 80,
+    criticalMin: 20,
+    criticalMax: 90,
+    variation: 1.5 // Cuánto puede variar el valor en cada lectura
   },
-  {
-    id: '3a69bd34-7e05-4e7b-9674-920ed835f924', // ID de un sensor de Humedad
-    type: 'humidity',
-    unit: '%',
-    // Rango operacional 'normal' (valores más comunes)
-    normalMin: 40,
-    normalMax: 60,
-    // Rango total del sensor
-    min: 0,
-    max: 100,
-    variation: 3 // Un poco más de variación para humedad
-  },
+  // {
+  //   id: '3a69bd34-7e05-4e7b-9674-920ed835f924', // Otro ID de sensor de ejemplo
+  //   type: 'humidity',
+  //   unit: '%',
+  //   normalMin: 40,
+  //   normalMax: 60,
+  //   criticalMin: 0,
+  //   criticalMax: 100,
+  //   variation: 3
+  // },
   // Puedes añadir más sensores aquí si los tienes en tu DB
 ];
 
 // URL de tu Nuxt Server Route para la ingesta de datos
 const INGEST_URL = 'http://localhost:3000/api/sensors/ingest'; // Asegúrate de que tu Nuxt app esté corriendo en este puerto
-const SEND_INTERVAL_MS = 5000; // Enviar data cada 3 segundos (más rápido para ver alertas)
+const SEND_INTERVAL_MS = 5000; // Enviar data cada 5 segundos
 
-// Valores iniciales (se irán actualizando)
+// Valores y estados iniciales de los sensores (se irán actualizando en la simulación)
 const currentSensorValues = {};
-const currentSensorStatus = {}; // Nuevo: Para simular el estado del sensor
-let statusChangeCounter = 0; // Nuevo: Contador para disparar cambios de estado
-let dataIssueCounter = 0; // Nuevo: Contador para disparar problemas de datos
+const currentSensorStatus = {}; // Para simular el estado del sensor ('active', 'inactive', 'maintenance', 'error')
+let statusChangeCounter = 0; // Contador para disparar cambios de estado
+let dataIssueCounter = 0; // Contador para disparar problemas de datos (valor null)
 
 SENSOR_CONFIGS.forEach(config => {
   currentSensorValues[config.id] = (config.normalMin + config.normalMax) / 2; // Iniciar en el promedio normal
@@ -49,6 +49,7 @@ SENSOR_CONFIGS.forEach(config => {
 
 // --- LÓGICA DEL SIMULADOR ---
 
+// Genera una lectura aleatoria para un sensor
 function generateRandomReading(sensorConfig) {
   let currentValue = currentSensorValues[sensorConfig.id];
 
@@ -56,39 +57,33 @@ function generateRandomReading(sensorConfig) {
   const change = (Math.random() * 2 * sensorConfig.variation) - sensorConfig.variation; // Valor entre -variation y +variation
   let newValue = currentValue + change;
 
-  // Asegurarse de que el valor esté dentro de los límites del sensor
-  if (newValue > sensorConfig.max) {
-    newValue = sensorConfig.max - (Math.random() * sensorConfig.variation); // Retrocede un poco si excede
-  } else if (newValue < sensorConfig.min) {
-    newValue = sensorConfig.min + (Math.random() * sensorConfig.variation); // Avanza un poco si está por debajo
-  }
-
-  // A veces, empujar el valor cerca de los umbrales para probar alertas de baja prioridad
-  // Aumentamos la probabilidad a 30% para ver más alertas de prioridad baja
-  if (Math.random() < 0.3) { // 30% de probabilidad de empujar hacia un umbral normal
+  // Empujar el valor cerca de los umbrales para probar alertas de baja prioridad
+  if (Math.random() < 0.3) { // 30% de probabilidad de empujar hacia un umbral
     if (Math.random() < 0.5) { // Empujar hacia el límite inferior de normal
-      newValue = sensorConfig.normalMin - (Math.random() * sensorConfig.variation * 0.5); // Un poco más suave
+      newValue = sensorConfig.normalMin - (Math.random() * sensorConfig.variation * 0.8);
     } else { // Empujar hacia el límite superior de normal
-      newValue = sensorConfig.normalMax + (Math.random() * sensorConfig.variation * 0.5); // Un poco más suave
+      newValue = sensorConfig.normalMax + (Math.random() * sensorConfig.variation * 0.8);
     }
-    // Asegurarse de que no se sale del rango total del sensor ni de los umbrales de advertencia
-    if (newValue > sensorConfig.max) newValue = sensorConfig.max - 0.1;
-    if (newValue < sensorConfig.min) newValue = sensorConfig.min + 0.1;
-
-    // Asegurarse de que no caiga en el rango de advertencia (min/max) si la intención es baja prioridad
-    if (newValue < sensorConfig.min) newValue = sensorConfig.min + (sensorConfig.variation * 0.1);
-    if (newValue > sensorConfig.max) newValue = sensorConfig.max - (sensorConfig.variation * 0.1);
   }
 
+  // Asegurarse de que el valor no exceda los límites críticos definidos en la configuración local del simulador
+  // (aunque la lógica de alerta final usa los de la DB)
+  if (newValue > sensorConfig.criticalMax) {
+    newValue = sensorConfig.criticalMax - (Math.random() * sensorConfig.variation * 0.1);
+  } else if (newValue < sensorConfig.criticalMin) {
+    newValue = sensorConfig.criticalMin + (Math.random() * sensorConfig.variation * 0.1);
+  }
 
   currentSensorValues[sensorConfig.id] = newValue; // Actualizar el valor actual
 
   return {
     sensorId: sensorConfig.id,
-    value: parseFloat(newValue.toFixed(2)) // Redondear a 2 decimales
+    value: parseFloat(newValue.toFixed(2)), // Redondear a 2 decimales
+    unit: sensorConfig.unit // Incluir la unidad aquí
   };
 }
 
+// Envía un lote de lecturas al servidor de ingesta
 async function sendReadings() {
   console.log(`[${new Date().toLocaleTimeString()}] Generando y enviando lecturas...`);
   const batchReadings = [];
@@ -96,7 +91,7 @@ async function sendReadings() {
   dataIssueCounter++;
 
   for (const config of SENSOR_CONFIGS) {
-    let readingValue = generateRandomReading(config).value; // Obtener un valor potencial
+    let reading = generateRandomReading(config); // Obtener una lectura potencial
     let sensorStatusToSend = currentSensorStatus[config.id]; // Obtener el estado actual simulado
 
     // Simular cambios de estado periódicamente (menos frecuente)
@@ -106,28 +101,28 @@ async function sendReadings() {
       currentSensorStatus[config.id] = newStatus;
       sensorStatusToSend = newStatus;
       console.log(`Simulando cambio de estado para ${config.id} a ${newStatus}`);
-      // Si el sensor está inactivo o en error, simular que no envía datos válidos
-      if (newStatus === 'inactive' || newStatus === 'error' || newStatus === 'maintenance') {
-        readingValue = null; // Simular que no hay lectura
+      // Si el sensor está inactivo o en error/mantenimiento, simular que no envía datos válidos
+      if (newStatus !== 'active') {
+        reading.value = null; // Simular que no hay lectura numérica
       }
     } else if (currentSensorStatus[config.id] !== 'active' && Math.random() < 0.3) { // 30% de probabilidad de recuperarse
       currentSensorStatus[config.id] = 'active';
       sensorStatusToSend = 'active';
       console.log(`Simulando recuperación para ${config.id} a active`);
       // Asegurarse de que se envía una lectura válida al recuperarse
-      readingValue = generateRandomReading(config).value;
+      reading = generateRandomReading(config); // Generar nueva lectura válida
     }
 
     // Simular lectura inválida (data_issue) ocasionalmente si el sensor está activo
-    // Este `dataIssueCounter` es para que no sea *demasiado* frecuente, pero lo suficiente para verlo
     if (dataIssueCounter % 7 === 0 && sensorStatusToSend === 'active' && Math.random() < 0.4) { // 40% de prob cada 7 intervalos
-      readingValue = null;
+      reading.value = null;
       console.log(`Simulando lectura inválida (data_issue) para ${config.id}`);
     }
 
     batchReadings.push({
       sensorId: config.id,
-      value: readingValue,
+      value: reading.value,
+      unit: reading.unit, // Incluir la unidad en la lectura enviada
       sensorStatus: sensorStatusToSend // Incluir el estado simulado del sensor
     });
   }
@@ -151,3 +146,4 @@ async function sendReadings() {
 console.log(`Simulador de Sensores Iniciado. Enviando data a ${INGEST_URL} cada ${SEND_INTERVAL_MS / 1000} segundos.`);
 setInterval(sendReadings, SEND_INTERVAL_MS);
 sendReadings(); // Enviar una lectura al inicio
+
