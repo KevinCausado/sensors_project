@@ -71,7 +71,6 @@ export default defineEventHandler(async (event) => {
       console.log(`Valor: ${reading.value}, Unidad: ${reading.unit}, Tiempo: ${reading.timestamp}`);
 
       // 1. Obtener los detalles completos del sensor desde la tabla 'sensors'
-      // CORREGIDO: Eliminado 'last_alert_message' de la selección de 'sensors'
       const { data: sensorData, error: fetchSensorError } = await supabase
         .from('sensors') // Usar el nombre de tabla 'sensors' en minúsculas
         .select(`
@@ -152,6 +151,7 @@ export default defineEventHandler(async (event) => {
         if (value < thresholds.criticalMin || value > thresholds.criticalMax) {
           severity = 'critical';
           alertTitle = `${sensorTypeSpanish} Crítica ${value < thresholds.criticalMin ? 'Baja' : 'Alta'}`;
+          // Mensaje de alerta crítica con la estructura solicitada
           alertMessage = `¡Valor crítico ${value < thresholds.criticalMin ? 'bajo' : 'alto'}! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, fuera del rango crítico [${thresholds.criticalMin}-${thresholds.criticalMax}] ${sensorData.unit}.`;
           alertPriority = 'high';
         }
@@ -162,6 +162,7 @@ export default defineEventHandler(async (event) => {
         ) {
           severity = 'warning';
           alertTitle = `${sensorTypeSpanish} Advertencia ${value < thresholds.normalMin ? 'Baja' : 'Alta'}`;
+          // Mensaje de alerta de advertencia con la estructura solicitada
           alertMessage = `¡Advertencia de valor ${value < thresholds.normalMin ? 'bajo' : 'alto'}! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, fuera del rango normal [${thresholds.normalMin}-${thresholds.normalMax}] ${sensorData.unit}, pero dentro del rango crítico [${thresholds.criticalMin}-${thresholds.criticalMax}] ${sensorData.unit}.`;
           alertPriority = 'medium';
         }
@@ -215,7 +216,7 @@ export default defineEventHandler(async (event) => {
               title: alertTitle,
               description: alertMessage, // Este es el campo de mensaje de la alerta
               priority: alertPriority,
-              value_at_alert: typeof reading.value === 'number' ? reading.value : null, // Nuevo campo
+              value_at_alert: typeof reading.value === 'number' ? reading.value : null,
               // Llenar solo los campos de umbral relevantes para tu estructura de BD
               threshold_normal_min: sensorData.thresholds?.normalMin || null,
               threshold_normal_max: sensorData.thresholds?.normalMax || null,
@@ -242,12 +243,10 @@ export default defineEventHandler(async (event) => {
         }
 
         // 3. Actualizar el estado de alerta del sensor en la tabla 'sensors'
-        // CORREGIDO: Eliminado 'alert_triggered_at' y 'alert_value_at_trigger'
         const { error: updateSensorAlertStateError } = await supabase
           .from('sensors') // Usar el nombre de tabla 'sensors' en minúsculas
           .update({
             current_alert_type: alertTypeForDb,
-            // Ya no se actualiza 'last_alert_message' en 'sensors'
           })
           .eq('id', sensorData.id);
 
@@ -277,12 +276,10 @@ export default defineEventHandler(async (event) => {
           }
 
           // Limpiar el estado de alerta del sensor en la tabla 'sensors'
-          // CORREGIDO: Eliminado 'alert_triggered_at' y 'alert_value_at_trigger'
           const { error: clearSensorAlertStateError } = await supabase
             .from('sensors') // Usar el nombre de tabla 'sensors' en minúsculas
             .update({
               current_alert_type: null,
-              // Ya no se actualiza 'last_alert_message' en 'sensors'
             })
             .eq('id', sensorData.id);
 

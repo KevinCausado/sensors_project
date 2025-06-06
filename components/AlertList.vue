@@ -24,7 +24,7 @@
                 <span class="text-xs text-gray-500">{{ formatTimeAgo(alert.alert_time) }}</span>
               </div>
 
-              <p class="text-xs text-gray-600 mt-1">{{ alert.message }}</p>
+              <p class="text-xs text-gray-600 mt-1">{{ alert.description }}</p>
 
               <div class="mt-2 flex items-center justify-between flex-wrap gap-2">
                 <div>
