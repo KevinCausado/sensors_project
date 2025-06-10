@@ -8,15 +8,7 @@
         <div class="flex gap-2">
           <NuxtLink to="/vibration-profiles" class="btn btn-secondary">Volver</NuxtLink>
           <PermissionGuard moduleId="vibration_profiles" permission="manage">
-            <NuxtLink
-              v-if="vibrationProfileStore.currentVibrationProfile"
-              :to="`/vibration-profiles/edit/${vibrationProfileStore.currentVibrationProfile.id}`"
-              class="btn btn-primary"
-            >
-              <!-- Icono de Lápiz (Editar) -->
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M19.75 3.16c-.2-.2-.45-.3-.72-.3s-.52.1-.71.29l-10.74 10.74c-.39.39-.39 1.02 0 1.41l2.5 2.5c.39.39 1.02.39 1.41 0l10.74-10.74c.39-.39.39-1.02 0-1.41l-2.5-2.5c-.19-.19-.45-.29-.71-.29zm-13.43 14.12l-2.5-2.5c-.39-.39-1.02-.39-1.41 0L.97 16.94a1 1 0 0 0 0 1.41l2.5 2.5c.39.39 1.02.39 1.41 0l2.5-2.5c.39-.39.39-1.02 0-1.41z"/></svg>
-              Editar
-            </NuxtLink>
+            
           </PermissionGuard>
         </div>
       </template>
