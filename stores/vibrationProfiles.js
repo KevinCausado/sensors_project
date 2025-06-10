@@ -1,51 +1,38 @@
 // stores/vibrationProfiles.js
 import { defineStore } from 'pinia';
 import { useNuxtApp } from '#app';
-import { useOrganizationStore } from './organizations'; // Para filtrar por organización
+// No necesitamos useOrganizationStore aquí si los perfiles son globales,
+// pero la mantengo comentada por si se decide un filtro por organización en esta tabla.
+// import { useOrganizationStore } from './organizations'; 
 
 export const useVibrationProfileStore = defineStore('vibrationProfiles', {
   state: () => ({
     vibrationProfiles: [],
     currentVibrationProfile: null,
     vibrationRanges: [], // Para los dropdowns en los formularios
-    assets: [], // Para los dropdowns en los formularios (activos a los que se puede asociar)
     isLoading: false,
     error: null,
   }),
 
   getters: {
-    // Filtra los perfiles de vibración por la organización seleccionada globalmente
+    // Si los perfiles de vibración son plantillas globales, no se filtran por organización.
+    // Si la tabla 'assets_vibration_config' tuviera 'organization_id', entonces se filtraría.
+    // Por ahora, se asume que son globales.
     filteredVibrationProfiles: (state) => {
-      const organizationStore = useOrganizationStore();
-      // Si no hay una organización seleccionada, mostramos todos los perfiles cargados
-      if (!organizationStore.selectedOrganizationId) {
-        return state.vibrationProfiles;
-      }
-      // Filtramos por la organización del activo asociado al perfil
-      return state.vibrationProfiles.filter(profile => {
-        const associatedAsset = state.assets.find(asset => asset.id === profile.asset_id);
-        return associatedAsset && associatedAsset.organization_id === organizationStore.selectedOrganizationId;
-      });
+      // const organizationStore = useOrganizationStore();
+      // Si la tabla 'assets_vibration_config' tuviera un campo 'organization_id', la lógica sería:
+      // if (organizationStore.selectedOrganizationId) {
+      //   return state.vibrationProfiles.filter(profile => 
+      //     profile.organization_id === organizationStore.selectedOrganizationId
+      //   );
+      // }
+      return state.vibrationProfiles; // Devuelve todos los perfiles si son globales
     },
     // Devuelve el perfil de vibración actualmente seleccionado
     getCurrentVibrationProfile: (state) => state.currentVibrationProfile,
     // Devuelve la lista de rangos de vibración para dropdowns
     getVibrationRanges: (state) => state.vibrationRanges,
-    
-    /**
-     * Devuelve la lista de activos disponibles para los selectores de formulario.
-     * Si no hay una organización globalmente seleccionada, devuelve todos los activos.
-     * Si hay una organización seleccionada, filtra los activos por esa organización.
-     */
-    getAvailableAssets: (state) => {
-      const organizationStore = useOrganizationStore();
-      if (!organizationStore.selectedOrganizationId) {
-        return state.assets; // Si no hay organización seleccionada, devuelve TODOS los activos
-      }
-      return state.assets.filter(asset => 
-        asset.organization_id === organizationStore.selectedOrganizationId
-      );
-    },
+    // getAvailableAssets ya no es necesario aquí, la asignación se hace en el módulo de activos.
     // Estado de carga
     isLoadingVibrationProfiles: (state) => state.isLoading,
     // Estado de error
@@ -55,14 +42,13 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
   actions: {
     /**
      * Inicializa los datos de referencia necesarios para los formularios
-     * (rangos de vibración y activos).
+     * (solo rangos de vibración).
      */
     async initializeDataForForms() {
       this.isLoading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const organizationStore = useOrganizationStore(); // Asegurarse de tener el store de organizaciones
 
         // Obtener rangos de vibración
         const { data: rangesData, error: rangesError } = await $supabase
@@ -72,21 +58,12 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
         if (rangesError) throw rangesError;
         this.vibrationRanges = rangesData;
 
-        // Obtener activos base. NO APLICAMOS EL FILTRO POR ORGANIZACIÓN AQUÍ
-        // ya que el getter `getAvailableAssets` se encarga de eso.
-        // Esto asegura que `state.assets` tenga todos los activos disponibles
-        // y el getter los filtre dinámicamente.
-        const { data: assetsData, error: assetsError } = await $supabase
-          .from('assets_base')
-          .select('id, name, organization_id') // Necesitamos organization_id para el filtrado del getter
-          .order('name', { ascending: true });
-        
-        if (assetsError) throw assetsError;
-        this.assets = assetsData;
+        // Ya no es necesario obtener activos aquí, ya que el perfil de vibración
+        // es una plantilla y no se asocia directamente a un activo en este store.
+        // La relación y asignación se hará desde el módulo de activos.
 
         console.log('[VibrationProfiles Store] Datos de formulario inicializados:', {
           vibrationRanges: this.vibrationRanges.length,
-          assets: this.assets.length
         });
 
       } catch (e) {
@@ -99,43 +76,37 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
 
     /**
      * Carga todos los perfiles de vibración desde la base de datos.
-     * Enriqueciendo con los nombres del activo y rango de vibración.
+     * Enriqueciendo con los nombres del rango de vibración.
      */
     async fetchVibrationProfiles() {
       this.isLoading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        // No necesitamos el store de organización aquí para la consulta principal
-        // El filtrado por organización se hace en el getter filteredVibrationProfiles
 
+        // Seleccionar perfiles y hacer join solo con vibration_ranges
         const { data, error } = await $supabase
           .from('assets_vibration_config')
           .select(`
             id,
-            asset_id,
             measurement_point,
             direction,
             thresholds,
             created_at,
             updated_at,
             vibration_range_id,
-            vibration_ranges ( id, name, unit ),
-            assets_base ( id, name, organization_id, asset_type_id )
+            vibration_ranges ( id, name, unit )
           `)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // Enriquecer y filtrar datos después de la consulta
-        // Supabase ya hace el join y anida los datos, por lo que los mapeamos para aplanarlos
+        // Enriquecer datos después de la consulta
         const enrichedData = data.map(profile => ({
           ...profile,
           vibration_range_name: profile.vibration_ranges?.name || 'N/A',
           vibration_range_unit: profile.vibration_ranges?.unit || 'N/A',
-          asset_name: profile.assets_base?.name || 'Activo Desconocido',
-          asset_organization_id: profile.assets_base?.organization_id || null, // Necesario para el getter
-          // Asegúrate de que 'thresholds' sea un objeto manejable
+          // asset_name y asset_organization_id ya no son parte de esta tabla
           thresholds: profile.thresholds || {}, 
         }));
 
@@ -163,15 +134,13 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
           .from('assets_vibration_config')
           .select(`
             id,
-            asset_id,
             measurement_point,
             direction,
             thresholds,
             created_at,
             updated_at,
             vibration_range_id,
-            vibration_ranges ( id, name, unit ),
-            assets_base ( id, name, organization_id )
+            vibration_ranges ( id, name, unit )
           `)
           .eq('id', id)
           .single();
@@ -188,8 +157,7 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
           ...data,
           vibration_range_name: data.vibration_ranges?.name || 'N/A',
           vibration_range_unit: data.vibration_ranges?.unit || 'N/A',
-          asset_name: data.assets_base?.name || 'Activo Desconocido',
-          asset_organization_id: data.assets_base?.organization_id || null,
+          // asset_name y asset_organization_id ya no son parte de esta tabla
           thresholds: data.thresholds || {}, // Asegurarse de que sea un objeto
         };
         console.log('[VibrationProfiles Store] Perfil de vibración cargado:', this.currentVibrationProfile);
@@ -207,16 +175,19 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
 
     /**
      * Crea un nuevo perfil de vibración.
-     * @param {object} profileData - Los datos del nuevo perfil.
+     * @param {object} profileData - Los datos del nuevo perfil. No debe contener asset_id.
      */
     async createVibrationProfile(profileData) {
       this.isLoading = true;
       this.error = null;
       try {
+        // Asegurarse de que asset_id no esté en el payload si fue pasado por error
+        const { asset_id, ...dataToInsert } = profileData; 
+
         const { $supabase } = useNuxtApp();
         const { data, error } = await $supabase
           .from('assets_vibration_config')
-          .insert([profileData])
+          .insert([dataToInsert])
           .select()
           .single();
 
@@ -238,16 +209,19 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
     /**
      * Actualiza un perfil de vibración existente.
      * @param {string} id - El ID del perfil a actualizar.
-     * @param {object} updatedData - Los datos actualizados.
+     * @param {object} updatedData - Los datos actualizados. No debe contener asset_id.
      */
     async updateVibrationProfile(id, updatedData) {
       this.isLoading = true;
       this.error = null;
       try {
+        // Asegurarse de que asset_id no esté en el payload si fue pasado por error
+        const { asset_id, ...dataToUpdate } = updatedData;
+
         const { $supabase } = useNuxtApp();
         const { data, error } = await $supabase
           .from('assets_vibration_config')
-          .update(updatedData)
+          .update(dataToUpdate)
           .eq('id', id)
           .select()
           .single();
@@ -258,7 +232,7 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
         await this.fetchVibrationProfiles();
         // Si el perfil actualizado es el current, también actualizalo
         if (this.currentVibrationProfile && this.currentVibrationProfile.id === id) {
-          this.currentVibrationProfile = { ...this.currentVibrationProfile, ...updatedData };
+          this.currentVibrationProfile = { ...this.currentVibrationProfile, ...dataToUpdate };
           console.log('[VibrationProfiles Store] currentVibrationProfile actualizado localmente');
         }
         console.log('[VibrationProfiles Store] Perfil de vibración actualizado:', data);

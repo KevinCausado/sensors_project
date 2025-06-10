@@ -141,8 +141,8 @@
                 <td class="px-6 py-4 whitespace-nowrap">{{ asset.description || "N/A" }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ getAssetLocation(asset) }}</td>
                  <td class="px-6 py-4 whitespace-nowrap">
-                 <span :class="`badge ${organization.is_active ? 'badge-success' : 'badge-danger'}`">
-                    {{ organization.is_active ? "Activo" : "Inactivo" }}
+                 <span :class="`badge ${asset.is_active ? 'badge-success' : 'badge-danger'}`">
+                    {{ asset.is_active ? "Activo" : "Inactivo" }}
                   </span>
                 </td>              
                 <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(asset.created_at) }}</td>

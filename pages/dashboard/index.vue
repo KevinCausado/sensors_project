@@ -2,7 +2,7 @@
   <div>
     <PageHeader
       title="Dashboard"
-      subtitle="Monitorear y estadísticas del sistema" />
+      subtitle="Monitoreo y estadísticas del sistema" />
 
     <div class="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-4">
       <StatCard
@@ -241,21 +241,37 @@ const totalSensors = computed(() => {
 
 const activeAlerts = computed(() => {
   const selectedOrgId = organizationStore.selectedOrganizationId;
-  const filtered = alertStore.alerts.filter(alert => 
-    (alert.status === 'new' || alert.status === 'acknowledged') && 
-    (selectedOrgId === null || alert.organizationId === selectedOrgId) 
-  );
+  console.log(`[activeAlerts Computed] selectedOrganizationId: ${selectedOrgId}`);
+  console.log(`[activeAlerts Computed] alertStore.alerts ANTES DE FILTRAR:`, JSON.parse(JSON.stringify(alertStore.alerts)));
+
+  const filtered = alertStore.alerts.filter(alert => {
+    const statusMatch = (alert.status === 'active');
+    // MANTENEMOS ESTA LÍNEA TAL CUAL COMO EN TU CÓDIGO ORIGINAL
+    const orgMatch = (selectedOrgId === null || alert.organization_id === selectedOrgId); 
+    
+    console.log(`  - Alerta ID: ${alert.id} | Status: ${alert.status} (Match: ${statusMatch}) | Alert Org ID: ${alert.organization_id} | Selected Org ID: ${selectedOrgId} (Match: ${orgMatch}) | TOTAL MATCH: ${statusMatch && orgMatch}`);
+    
+    return statusMatch && orgMatch;
+  });
   const count = filtered.length;
-  console.log(`[Dashboard Computed] activeAlerts: ${count} (filtrado por org: ${selectedOrgId})`);
+  console.log(`[activeAlerts Computed] activeAlerts count DESPUÉS DE FILTRAR: ${count}`);
   return count;
 }); 
 
 const totalAlerts = computed(() => {
   const selectedOrgId = organizationStore.selectedOrganizationId;
-  const filtered = alertStore.alerts.filter(alert => 
-    selectedOrgId === null || alert.organizationId === selectedOrgId 
-  );
-  return filtered.length;
+  console.log(`[totalAlerts Computed] selectedOrganizationId: ${selectedOrgId}`);
+  console.log(`[totalAlerts Computed] alertStore.alerts ANTES DE FILTRAR:`, JSON.parse(JSON.stringify(alertStore.alerts)));
+
+  const filtered = alertStore.alerts.filter(alert => {
+    // MANTENEMOS ESTA LÍNEA TAL CUAL COMO EN TU CÓDIGO ORIGINAL
+    const orgMatch = (selectedOrgId === null || alert.organization_id === selectedOrgId);
+    console.log(`  - Alerta ID: ${alert.id} | Org ID: ${alert.organization_id} | Selected Org ID: ${selectedOrgId} (Match: ${orgMatch})`); // Añadido más detalle aquí también
+    return orgMatch;
+  });
+  const count = filtered.length;
+  console.log(`[totalAlerts Computed] totalAlerts count DESPUÉS DE FILTRAR: ${count}`);
+  return count;
 }); 
 
 const activeSensors = computed(() => {
@@ -468,8 +484,8 @@ const getAssetIconBgClass = (isActive) => {
 const getBadgeSecondaryClass = () => 'badge bg-gray-200 text-gray-700'; 
 const getBadgeInfoClass = () => 'badge bg-blue-100 text-blue-700';     
 const getBadgeTimeClass = () => 'badge bg-gray-100 text-gray-600';     
-const getBadgeLocationClass = () => 'badge bg-sky-100 text-sky-700'; // CAMBIADO: indigo a sky para menos chillon
-const getBadgeDescriptionClass = () => 'badge bg-rose-100 text-rose-700'; // CAMBIADO: purple a rose para menos chillon
+const getBadgeLocationClass = () => 'badge bg-sky-100 text-sky-700'; 
+const getBadgeDescriptionClass = () => 'badge bg-rose-100 text-rose-700'; 
 
 
 // --- Watchers y Ciclo de Vida ---
@@ -630,8 +646,8 @@ onUnmounted(async () => {
 .bg-gray-200 { background-color: #E5E7EB; } 
 
 /* Colores NUEVOS y más suaves para Ubicación y Descripción */
-.bg-sky-100 { background-color: #E0F2FE; } /* Un azul más claro que el índigo */
-.bg-rose-100 { background-color: #FFE4E6; } /* Un rosa suave */
+.bg-sky-100 { background-color: #E0F2FE; } 
+.bg-rose-100 { background-color: #FFE4E6; } 
 
 
 /* Colores de TEXTO para CÍRCULO de ÍCONO (copiados de AlertList.vue) */
@@ -649,8 +665,8 @@ onUnmounted(async () => {
 .text-gray-600 { color: #4B5563; } 
 
 /* Colores NUEVOS y más suaves para Ubicación y Descripción */
-.text-sky-700 { color: #0369A1; } /* Texto oscuro para el azul cielo */
-.text-rose-700 { color: #BE185D; } /* Texto oscuro para el rosa */
+.text-sky-700 { color: #0369A1; } 
+.text-rose-700 { color: #BE185D; } 
 
 
 /* Estilos para los badges genéricos definidos en el template */
@@ -664,10 +680,10 @@ onUnmounted(async () => {
   @apply bg-gray-100 text-gray-600;
 }
 .badge-location {
-  @apply bg-sky-100 text-sky-700; /* Actualizado */
+  @apply bg-sky-100 text-sky-700; 
 }
 .badge-description {
-  @apply bg-rose-100 text-rose-700; /* Actualizado */
+  @apply bg-rose-100 text-rose-700; 
 }
 
 </style>

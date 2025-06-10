@@ -99,6 +99,10 @@
             <p class="text-sm font-medium text-gray-500">Tipo de Acoplamiento</p>
             <p class="form-input-static">{{ asset.coupling_type_name || 'N/A' }}</p>
           </div>
+           <div>
+            <p class="text-sm font-medium text-gray-500">Perfil de Vibración</p>
+            <p class="form-input-static">{{ asset.vibration_profile_display_name || 'N/A' }}</p>
+          </div>
         </div>
       </div>
 

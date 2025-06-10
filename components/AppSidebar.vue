@@ -4,7 +4,8 @@
       <div class="h-16 border-b border-gray-200 flex items-center px-6">
         <h2 class="text-xl font-bold text-primary-800">Menu Principal</h2>
         <button @click="toggleSidebar" class="p-1 ml-auto text-gray-400 md:hidden focus:outline-none">
-          <XIcon class="h-6 w-6" />
+          <!-- Directamente usa el componente Icon de @nuxt/icon -->
+          <Icon name="heroicons:x-mark" class="h-6 w-6" />
         </button>
       </div>
 
@@ -12,7 +13,14 @@
         <div class="space-y-1">
           <template v-for="item in processedNavigationItems" :key="item.name">
             <PermissionGuard :moduleId="item.moduleId" :permission="item.permissionAction">
-              <SidebarLink :to="item.to" :icon="item.iconComponent" :label="item.name" :has-children="!!item.children" :is-active="isActiveRoute(item)" />
+              <!-- SidebarLink ahora recibe el nombre del icono ya formateado por processedNavigationItems -->
+              <SidebarLink 
+                :to="item.to" 
+                :icon="item.icon" 
+                :label="item.name" 
+                :has-children="!!item.children" 
+                :is-active="isActiveRoute(item)" 
+              />
             </PermissionGuard>
           </template>
         </div>
@@ -55,7 +63,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, defineComponent, h } from "vue";
+import { ref, computed, onMounted } from "vue"; // Ya no necesitamos defineComponent, h
 import { useAuthStore } from "~/stores/auth";
 import { useOrganizationStore } from "~/stores/organizations";
 import { useRoute, useRouter } from "vue-router";
@@ -64,38 +72,15 @@ import { navigationItems } from "~/utils/navigation";
 // IMPORTA TU COMPONENTE PermissionGuard
 import PermissionGuard from "~/components/PermissionGuard.vue";
 
-// --- DEFINICIÓN DE ICONOS ---
-const IconComponents = {
-  "i-heroicons-x-mark": defineComponent({ render: () => h("div", { class: "i-heroicons-x-mark" }) }),
-  "i-heroicons-home": defineComponent({ render: () => h("div", { class: "i-heroicons-home" }) }),
-  "i-heroicons-chip": defineComponent({ render: () => h("div", { class: "i-heroicons-chip" }) }), // Ya tienes este
-  "i-heroicons-bell": defineComponent({ render: () => h("div", { class: "i-heroicons-bell" }) }), // Ya tienes este
-  "i-heroicons-building-office": defineComponent({ render: () => h("div", { class: "i-heroicons-building-office" }) }), // Ya tienes este
-  "i-heroicons-users": defineComponent({ render: () => h("div", { class: "i-heroicons-users" }) }), // Ya tienes este
-  "i-heroicons-lock-closed": defineComponent({ render: () => h("div", { class: "i-heroicons-lock-closed" }) }), // Ya tienes este
-  "i-heroicons-cog-6-tooth": defineComponent({ render: () => h("div", { class: "i-heroicons-cog-6-tooth" }) }), // Ya tienes este
-
-  // **NUEVOS ICONOS AÑADIDOS DESDE navigationItems.js**
-  "i-heroicons-map-pin": defineComponent({ render: () => h("div", { class: "i-heroicons-map-pin" }) }),
-  "i-heroicons-cpu-chip": defineComponent({ render: () => h("div", { class: "i-heroicons-cpu-chip" }) }),
-  "i-heroicons-cube": defineComponent({ render: () => h("div", { class: "i-heroicons-cube" }) }),
-  "i-heroicons-document-text": defineComponent({ render: () => h("div", { class: "i-heroicons-document-text" }) }),
-  "i-heroicons-chart-bar": defineComponent({ render: () => h("div", { class: "i-heroicons-chart-bar" }) }),
-  "i-heroicons-wave-pulse": defineComponent({ render: () => h("div", { class: "i-heroicons-wave-pulse" }) }),
-  "i-heroicons-clipboard-document-check": defineComponent({ render: () => h("div", { class: "i-heroicons-clipboard-document-check" }) }),
-  // Agrega cualquier otro icono que utilices en navigationItems.js
-};
-
-// Mapea las cadenas de iconos a los componentes reales
+// Mapea las cadenas de iconos de navigationItems al formato esperado por <Icon>
+// Ejemplo: "i-heroicons-home" se convierte en "heroicons:home"
 const processedNavigationItems = computed(() => {
   return navigationItems.map((item) => ({
     ...item,
-    iconComponent: IconComponents[item.icon],
+    // La propiedad 'icon' ahora se transforma al formato que @nuxt/icon espera
+    icon: item.icon.replace('i-heroicons-', 'heroicons:'), 
   }));
 });
-
-// Exponer XIcon para el template
-const XIcon = IconComponents["i-heroicons-x-mark"];
 
 // Props
 const props = defineProps({
@@ -132,7 +117,7 @@ const userInitials = computed(() => {
   }
   const initialFirstName = firstName ? firstName.charAt(0).toUpperCase() : "";
   const initialLastName = lastName ? lastName.charAt(0).toUpperCase() : "";
-  return `<span class="math-inline">\{initialFirstName\}</span>{initialLastName}`;
+  return `${initialFirstName}${initialLastName}`;
 });
 
 // Organization data
@@ -150,7 +135,6 @@ const shouldShowOrganizationFilter = computed(() => {
     currentPath.startsWith("/alerts");
 
   // El filtro se mostrará si AMBAS condiciones son verdaderas.
-  // Ya NO se requiere una verificación de permisos específicos para este filtro.
   return hasOrganizations && isOnRelevantPage;
 });
 
@@ -165,7 +149,6 @@ const logout = async () => {
 };
 
 const changeOrganization = () => {
-  // Cuando el usuario cambia la selección, el store se actualiza
   organizationStore.setSelectedOrganizationId(organizationStore.selectedOrganizationId);
 };
 
@@ -179,9 +162,8 @@ const isActiveRoute = (item) => {
 
 // Initialize organization selector
 onMounted(async () => {
-  await organizationStore.fetchOrganizations(); // <<< CAMBIO CLAVE AQUÍ: Siempre establecer a null al montar, ignorando cualquier valor guardado
-
-  organizationStore.setSelectedOrganization(null);
+  await organizationStore.fetchOrganizations(); 
+  organizationStore.setSelectedOrganization(null); // Establecer la selección inicial a "Todas las Organizaciones"
   console.log('[AppSidebar] Estableciendo la selección inicial a "Todas las Organizaciones".');
 });
 </script>

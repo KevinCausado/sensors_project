@@ -47,7 +47,7 @@
             class="form-select block w-full sm:w-48 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
           >
             <option :value="null">Todos los tipos</option>
-            <option v-for="type in assetStore.assetTypes" :key="type.id" :value="type.id">
+            <option v-for="type in assetStore.getAssetTypes" :key="type.id" :value="type.id">
               {{ type.name }}
             </option>
           </select>
@@ -58,7 +58,7 @@
             class="form-select block w-full sm:w-48 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
           >
             <option :value="null">Todos los grupos ISO</option>
-            <option v-for="group in assetStore.isoGroups" :key="group.id" :value="group.id">
+            <option v-for="group in assetStore.getIsoGroups" :key="group.id" :value="group.id">
               {{ group.name }}
             </option>
           </select>
@@ -86,7 +86,10 @@
               <th scope="col" class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Grupo ISO
               </th>
-                <th scope="col" class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Perfil de Vibración <!-- NUEVA COLUMNA -->
+              </th>
+              <th scope="col" class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ubicación
               </th>
               <th scope="col" class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -99,13 +102,13 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-if="assetStore.isLoading">
-                <td colspan="7" class="px-6 py-4 text-center text-gray-500">Cargando activos...</td>
+                <td colspan="8" class="px-6 py-4 text-center text-gray-500">Cargando activos...</td> <!-- COLSPAN AJUSTADO -->
             </tr>
             <tr v-else-if="assetStore.getError">
-                <td colspan="7" class="px-6 py-4 text-center text-red-600">Error: {{ assetStore.getError }}</td>
+                <td colspan="8" class="px-6 py-4 text-center text-red-600">Error: {{ assetStore.getError }}</td> <!-- COLSPAN AJUSTADO -->
             </tr>
             <tr v-else-if="paginatedAssets.length === 0">
-                <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron activos.</td>
+                <td colspan="8" class="px-6 py-4 text-center text-gray-500">No se encontraron activos.</td> <!-- COLSPAN AJUSTADO -->
             </tr>
 
             <tr v-else v-for="asset in paginatedAssets" :key="asset.id" class="hover:bg-gray-50">
@@ -123,12 +126,15 @@
                 <div class="text-sm text-gray-900">{{ asset.asset_code }}</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ asset.asset_type_name }}
+                {{ asset.assetTypeName }} <!-- Usar la propiedad enriquecida -->
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ asset.iso_group_name }}
+                {{ asset.iso_group_name }} <!-- Usar la propiedad enriquecida -->
               </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"> <!-- NUEVA CELDA -->
+                {{ asset.vibration_profile_name || 'N/A' }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ getCombinedLocation(asset) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
@@ -175,6 +181,7 @@
       </div>
 
       <!-- Modal de confirmación de eliminación (Implementación básica si no tienes ConfirmModal) -->
+      <!-- Se mantiene la implementación básica del modal asumiendo que no tienes el componente ConfirmModal centralizado -->
       <div v-if="showDeleteModal" class="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
           <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
@@ -222,15 +229,28 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, defineComponent, h } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAssetStore } from '~/stores/assets';
 import PageHeader from '~/components/PageHeader.vue';
 import ActionButton from '~/components/ActionButton.vue';
 import Pagination from '~/components/Pagination.vue'; 
 
+// Iconos (placeholders o importaciones reales si usas una librería como Heroicons)
+const PlusIcon = defineComponent({
+  render: () => h('svg', { class: 'h-5 w-5', viewBox: '0 0 24 24', fill: 'currentColor' }, [
+    h('path', { d: 'M12 4a.75.75 0 0 1 .75.75v6.5h6.5a.75.75 0 0 1 0 1.5h-6.5v6.5a.75.75 0 0 1-1.5 0v-6.5h-6.5a.75.75 0 0 1 0-1.5h6.5v-6.5A.75.75 0 0 1 12 4z' })
+  ])
+});
+const SearchIcon = defineComponent({
+  render: () => h('svg', { class: 'h-4 w-4', viewBox: '0 0 24 24', fill: 'currentColor' }, [
+    h('path', { d: 'M10.5 2a8.5 8.5 0 0 1 6.545 13.914l5.352 5.353a.75.75 0 1 1-1.06 1.06l-5.354-5.353A8.502 8.502 0 0 1 2 10.5C2 6.91 4.91 4 8.5 4a8.5 8.5 0 0 1 2 0zM10.5 3.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z' })
+  ])
+});
+
+
 definePageMeta({
-  // middleware: ['auth']
+  // middleware: ['auth'] // Uncomment if you have auth middleware
 });
 
 const assetStore = useAssetStore();
@@ -303,8 +323,9 @@ const filteredAndSortedAssets = computed(() => {
       (asset.city && asset.city.toLowerCase().includes(query)) ||
       (asset.state && asset.state.toLowerCase().includes(query)) ||
       (asset.country && asset.country.toLowerCase().includes(query)) ||
-      (asset.asset_type_name && asset.asset_type_name.toLowerCase().includes(query)) ||
-      (asset.iso_group_name && asset.iso_group_name.toLowerCase().includes(query))
+      (asset.assetTypeName && asset.assetTypeName.toLowerCase().includes(query)) || // Ahora usa assetTypeName
+      (asset.iso_group_name && asset.iso_group_name.toLowerCase().includes(query)) ||
+      (asset.vibration_profile_name && asset.vibration_profile_name.toLowerCase().includes(query)) // NUEVO: Buscar por nombre de perfil de vibración
     );
   }
 
@@ -379,7 +400,9 @@ const deleteConfirmed = async () => {
 
 onMounted(async () => {
   console.log('[AssetsListPage] Componente AssetsList onMounted. Iniciando carga de datos...');
+  // Cargar todos los datos de referencia necesarios para los filtros y selectores
   await assetStore.initializeDataForForms(); 
+  // Luego, cargar los activos principales
   await assetStore.fetchAssets(); 
   console.log('[AssetsListPage] Carga de datos iniciales completada.');
 });

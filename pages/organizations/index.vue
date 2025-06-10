@@ -26,6 +26,20 @@
           />
           <SearchIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
+
+        <!-- Nuevo Selector: Filtrar por Estado -->
+        <div class="w-full sm:w-64">
+          <label for="status-filter" class="sr-only">Filtrar por Estado</label>
+          <select
+            id="status-filter"
+            v-model="selectedStatus"
+            class="form-select"
+          >
+            <option :value="null">Todos los Estados</option>
+            <option value="active">Activo</option>
+            <option value="inactive">Inactivo</option>
+          </select>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
@@ -60,11 +74,11 @@
     <tr v-else-if="organizationStore.error">
         <td colspan="7" class="px-6 py-4 text-center text-error-600">Error: {{ organizationStore.error }}</td>
     </tr>
-    <tr v-else-if="filteredOrganizations.length === 0">
+    <tr v-else-if="paginatedOrganizations.length === 0"> <!-- Usar paginatedOrganizations aquí -->
         <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron organizaciones.</td> 
     </tr>
     
-    <tr v-else v-for="org in filteredOrganizations" :key="org.id" class="hover:bg-gray-50">
+    <tr v-else v-for="org in paginatedOrganizations" :key="org.id" class="hover:bg-gray-50">
       <td class="px-6 py-4 whitespace-nowrap">
         <div class="flex items-center">
          <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700"> 
@@ -136,6 +150,7 @@
         <Pagination 
           :total-items="totalFilteredOrganizations" 
           :current-page="currentPage"
+          :items-per-page="itemsPerPage"
           @page-change="handlePageChange" />
       </div>
     </div>
@@ -145,20 +160,35 @@
       title="Eliminar Organización"
       :message="`¿Estás seguro que deseas eliminar la organización '${orgToDelete?.name}'? Esta acción no se puede deshacer.`"
       @confirm="confirmDelete"
-      @cancel="cancelDelete" />
+      @cancel="cancelDelete" 
+      :is-loading="deleting"
+      :error-message="organizationStore.error"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, defineComponent, h } from 'vue';
 import { useOrganizationStore } from '~/stores/organizations';
+import { useRouter } from 'vue-router'; // Importar useRouter
 
-// Icons (placeholders)
+// Componentes
+import PageHeader from '~/components/PageHeader.vue';
+import ActionButton from '~/components/ActionButton.vue'; 
+import Pagination from '~/components/Pagination.vue';     
+import ConfirmModal from '~/components/ConfirmModal.vue'; 
+import PermissionGuard from '~/components/PermissionGuard.vue';
+
+// Iconos (placeholders)
 const PlusIcon = defineComponent({
-  render: () => h('div', { class: 'i-heroicons-plus' })
+  render: () => h('svg', { class: 'h-5 w-5', viewBox: '0 0 24 24', fill: 'currentColor' }, [
+    h('path', { d: 'M12 4a.75.75 0 0 1 .75.75v6.5h6.5a.75.75 0 0 1 0 1.5h-6.5v6.5a.75.75 0 0 1-1.5 0v-6.5h-6.5a.75.75 0 0 1 0-1.5h6.5v-6.5A.75.75 0 0 1 12 4z' })
+  ])
 });
 const SearchIcon = defineComponent({
-  render: () => h('div', { class: 'i-heroicons-magnifying-glass' })
+  render: () => h('svg', { class: 'h-4 w-4', viewBox: '0 0 24 24', fill: 'currentColor' }, [
+    h('path', { d: 'M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm-8 8a10 10 0 1 1 17.32 5.92l4.68 4.68a1 1 0 0 1-1.42 1.42l-4.68-4.68A10 10 0 0 1 2 10z' })
+  ])
 });
 
 definePageMeta({
@@ -172,14 +202,21 @@ const router = useRouter();
 // Estado
 const searchQuery = ref('');
 const currentPage = ref(1);
+const itemsPerPage = ref(10); // Añadido para la paginación
 const showDeleteModal = ref(false);
 const orgToDelete = ref(null);
+const deleting = ref(false); // Estado para la carga de eliminación
+
+// Nuevo ref para el filtro de estado
+const selectedStatus = ref(null); // null para "Todos", 'active' para Activo, 'inactive' para Inactivo
 
 // Computed
 const organizations = computed(() => organizationStore.organizations);
+
 const filteredOrganizations = computed(() => {
   let result = [...organizations.value];
   
+  // Filtrado por búsqueda
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     result = result.filter(org => 
@@ -191,9 +228,31 @@ const filteredOrganizations = computed(() => {
       (org.country && org.country.toLowerCase().includes(query))
     );
   }
+
+  // Filtrado por estado (is_active)
+  if (selectedStatus.value !== null) {
+    result = result.filter(org => {
+      if (selectedStatus.value === 'active') {
+        return org.is_active === true;
+      } else if (selectedStatus.value === 'inactive') {
+        return org.is_active === false;
+      }
+      return true; // Si selectedStatus.value es null, no aplica este filtro
+    });
+  }
+
   return result;
 });
+
 const totalFilteredOrganizations = computed(() => filteredOrganizations.value.length);
+const totalPages = computed(() => Math.ceil(totalFilteredOrganizations.value / itemsPerPage.value)); // Añadido para paginación
+
+const paginatedOrganizations = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value;
+  const end = start + itemsPerPage.value;
+  return filteredOrganizations.value.slice(start, end);
+});
+
 
 // Métodos
 const getOrgInitials = (name) => {
@@ -218,17 +277,23 @@ const showDeleteConfirm = (org) => {
   showDeleteModal.value = true;
 };
 const confirmDelete = async () => {
+  deleting.value = true; // Activar estado de carga
+  organizationStore.error = null; // Limpiar errores previos
   try {
     await organizationStore.deleteOrganization(orgToDelete.value.id);
     showDeleteModal.value = false;
     orgToDelete.value = null;
   } catch (error) {
     console.error('Error al eliminar organización:', error);
+    organizationStore.error = error.message; // Establecer el error en el store para el modal
+  } finally {
+    deleting.value = false; // Desactivar estado de carga
   }
 };
 const cancelDelete = () => {
   showDeleteModal.value = false;
   orgToDelete.value = null;
+  organizationStore.error = null; // Limpiar error al cancelar
 };
 
 // Function to get the badge class based on is_active status
@@ -246,3 +311,34 @@ onMounted(async () => {
   await organizationStore.fetchOrganizations();
 });
 </script>
+
+<style scoped>
+/* Estilos para badges */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+.bg-green-100 { background-color: #D1FAE5; }
+.text-green-800 { color: #065F46; }
+.bg-red-100 { background-color: #FEE2E2; }
+.text-red-800 { color: #991B1B; }
+
+/* Estilos de tabla y formulario */
+.card {
+  @apply bg-white shadow rounded-lg p-6;
+}
+.form-input {
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+}
+.form-select {
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2;
+}
+.btn {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors;
+}
+.btn-primary {
+  @apply bg-primary-600 text-white hover:bg-primary-700;
+}
+.btn-secondary {
+  @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+}
+</style>

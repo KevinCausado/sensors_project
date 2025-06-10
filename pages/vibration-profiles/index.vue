@@ -19,7 +19,10 @@
     </PageHeader>
 
     <div class="card">
+      <!-- Contenedor principal de filtros: flex para control de alineación -->
       <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
+        
+        <!-- Barra de búsqueda a la izquierda -->
         <div class="relative w-full sm:w-64">
           <input
             v-model="searchQuery"
@@ -30,33 +33,55 @@
           <!-- Icono de Búsqueda -->
           <SearchIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
-        <!-- Selector de organización si el usuario es super-admin o para probar filtros -->
-        <div v-if="organizationStore.allOrganizations.length > 1 || !organizationStore.selectedOrganizationId" class="w-full sm:w-64">
-          <label for="organization-filter" class="sr-only">Filtrar por Organización</label>
-          <select
-            id="organization-filter"
-            v-model="organizationStore.selectedOrganizationId"
-            class="form-select"
-          >
-            <option :value="null">Todas las Organizaciones</option>
-            <option
-              v-for="org in organizationStore.allOrganizations"
-              :key="org.id"
-              :value="org.id"
+        
+        <!-- Contenedor de los nuevos filtros, alineado a la derecha y con espaciado -->
+        <div class="flex flex-col sm:flex-row gap-4 w-full sm:w-auto ml-0 sm:ml-auto">
+          <!-- Selector: Filtrar por Rango de Vibración -->
+          <div class="w-full sm:w-64">
+            <label for="vibration-range-filter" class="sr-only">Filtrar por Rango de Vibración</label>
+            <select
+              id="vibration-range-filter"
+              v-model="selectedVibrationRangeId"
+              class="form-select"
+              :disabled="loading || vibrationProfileStore.isLoading"
             >
-              {{ org.name }}
-            </option>
-          </select>
+              <option :value="null">Todos los Rangos</option>
+              <option
+                v-for="range in vibrationProfileStore.getVibrationRanges"
+                :key="range.id"
+                :value="range.id"
+              >
+                {{ range.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Selector: Filtrar por Dirección -->
+          <div class="w-full sm:w-64">
+            <label for="direction-filter" class="sr-only">Filtrar por Dirección</label>
+            <select
+              id="direction-filter"
+              v-model="selectedDirection"
+              class="form-select"
+              :disabled="loading || vibrationProfileStore.isLoading"
+            >
+              <option :value="null">Todas las Direcciones</option>
+              <option
+                v-for="direction in availableDirections"
+                :key="direction"
+                :value="direction"
+              >
+                {{ direction }}
+              </option>
+            </select>
+          </div>
         </div>
       </div>
 
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead>
-            <tr>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Activo Asociado
-              </th>
+            <tr>             
               <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Punto de Medición
               </th>
@@ -97,10 +122,7 @@
                 </td>
             </tr>
             <template v-else>
-              <tr v-for="profile in paginatedProfiles" :key="profile.id" class="hover:bg-gray-50">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {{ profile.asset_name }}
-                </td>
+              <tr v-for="profile in paginatedProfiles" :key="profile.id" class="hover:bg-gray-50">                
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                   {{ profile.measurement_point }}
                 </td>
@@ -138,7 +160,7 @@
                         icon="pencil"
                         tooltip="Editar perfil"
                         color="warning"
-                        @click="router.push(`/vibration-profiles/edit/${profile.id}`)"
+                        @click="router.push(`/vibration-profiles/${profile.id}/edit`)" 
                       />
                     </PermissionGuard>
                     <PermissionGuard moduleId="vibration_profiles" permission="delete">
@@ -184,7 +206,7 @@
 import { ref, computed, onMounted, watch, defineComponent, h } from 'vue';
 import { useRouter } from 'vue-router';
 import { useVibrationProfileStore } from '~/stores/vibrationProfiles';
-import { useOrganizationStore } from '~/stores/organizations';
+// REMOVED: import { useOrganizationStore } from '~/stores/organizations';
 import PageHeader from '~/components/PageHeader.vue';
 import ActionButton from '~/components/ActionButton.vue'; // Asumimos que existe
 import Pagination from '~/components/Pagination.vue';     // Asumimos que existe
@@ -192,7 +214,6 @@ import ConfirmModal from '~/components/ConfirmModal.vue'; // Asumimos que existe
 import PermissionGuard from '~/components/PermissionGuard.vue';
 
 // Iconos (placeholders o importaciones reales si usas una librería como Heroicons)
-// Nota: Puedes reemplazar estos con importaciones de tu librería de iconos si usas una.
 const PlusIcon = defineComponent({
   render: () => h('svg', { class: 'h-5 w-5', viewBox: '0 0 24 24', fill: 'currentColor' }, [
     h('path', { d: 'M12 4a.75.75 0 0 1 .75.75v6.5h6.5a.75.75 0 0 1 0 1.5h-6.5v6.5a.75.75 0 0 1-1.5 0v-6.5h-6.5a.75.75 0 0 1 0-1.5h6.5v-6.5A.75.75 0 0 1 12 4z' })
@@ -209,7 +230,7 @@ definePageMeta({
 });
 
 const vibrationProfileStore = useVibrationProfileStore();
-const organizationStore = useOrganizationStore();
+// REMOVED: const organizationStore = useOrganizationStore();
 const router = useRouter();
 
 const searchQuery = ref('');
@@ -217,17 +238,32 @@ const currentPage = ref(1);
 const itemsPerPage = ref(10); // Puedes ajustar esto
 const loading = ref(false); // Para el estado de carga general de la página
 
+// Nuevos refs para los filtros
+const selectedVibrationRangeId = ref(null);
+const selectedDirection = ref(null);
+
 const showDeleteModal = ref(false);
 const profileToDeleteId = ref(null);
 const profileToDeleteName = ref('');
 const deleting = ref(false); // Para el estado de eliminación en el modal
 
+// Propiedad computada para obtener direcciones únicas disponibles para el filtro
+const availableDirections = computed(() => {
+  const directions = new Set();
+  vibrationProfileStore.vibrationProfiles.forEach(profile => {
+    if (profile.direction) {
+      directions.add(profile.direction);
+    }
+  });
+  return Array.from(directions).sort();
+});
+
+
 // Propiedades computadas para filtrado y paginación
 const filteredProfiles = computed(() => {
   const query = searchQuery.value.toLowerCase();
-  const profiles = vibrationProfileStore.filteredVibrationProfiles; // Usa el getter filtrado
-
-  let result = profiles;
+  // Usamos filteredVibrationProfiles del store, que ya considera la organización global
+  let result = vibrationProfileStore.filteredVibrationProfiles; 
 
   if (query) {
     result = result.filter(
@@ -241,6 +277,21 @@ const filteredProfiles = computed(() => {
         ))
     );
   }
+
+  // Aplicar filtro por rango de vibración
+  if (selectedVibrationRangeId.value) {
+    result = result.filter(
+      (profile) => profile.vibration_range_id === selectedVibrationRangeId.value
+    );
+  }
+
+  // Aplicar filtro por dirección
+  if (selectedDirection.value) {
+    result = result.filter(
+      (profile) => profile.direction === selectedDirection.value
+    );
+  }
+
   console.log(`[VibrationProfilesList] Perfiles filtrados: ${result.length}`);
   return result;
 });
@@ -294,14 +345,10 @@ const deleteConfirmed = async () => {
   try {
     console.log(`[VibrationProfilesList] Confirmando eliminación de perfil con ID: ${profileToDeleteId.value}`);
     await vibrationProfileStore.deleteVibrationProfile(profileToDeleteId.value);
-    // No es necesario llamar fetchVibrationProfiles() aquí porque el store ya actualiza su estado.
-    // También el watch de organizationStore.selectedOrganizationId lo podría triggerear si aplica.
   } catch (e) {
     console.error('[VibrationProfilesList] Error al eliminar perfil:', e);
-    // El error se establece en el store y se pasa al modal
   } finally {
     deleting.value = false;
-    // Si la eliminación fue exitosa (no hubo error en el catch), cerrar el modal
     if (!vibrationProfileStore.getVibrationProfilesError) {
       cancelDelete();
     }
@@ -309,24 +356,23 @@ const deleteConfirmed = async () => {
   }
 };
 
-// Watcher para recargar perfiles cuando cambia la organización seleccionada
-watch(() => organizationStore.selectedOrganizationId, async (newOrgId, oldOrgId) => {
-  if (newOrgId !== oldOrgId) {
-    console.log(`[VibrationProfilesList] Organización seleccionada cambió de ${oldOrgId} a ${newOrgId}. Recargando perfiles.`);
-    loading.value = true;
-    await vibrationProfileStore.initializeDataForForms(); // Re-inicializar data para que getAvailableAssets se actualice
-    await vibrationProfileStore.fetchVibrationProfiles();
-    currentPage.value = 1; // Resetear paginación
-    loading.value = false;
-  }
-}, { immediate: true }); // Carga inicial al montar
-
-
 // Carga inicial de datos al montar el componente
 onMounted(async () => {
-  // La carga inicial ya está cubierta por el watcher con `immediate: true`
-  console.log('[VibrationProfilesList] Componente montado. Carga inicial manejada por watcher de organización.');
+  loading.value = true;
+  try {
+    // Asegurar que los rangos de vibración y los perfiles se carguen
+    await vibrationProfileStore.initializeDataForForms(); // Carga vibration_ranges
+    await vibrationProfileStore.fetchVibrationProfiles(); // Carga los perfiles reales
+  } catch (error) {
+    console.error('[VibrationProfilesList] Error al cargar los datos iniciales:', error);
+  } finally {
+    loading.value = false;
+  }
 });
+
+// No se necesita un watcher para organizationStore.selectedOrganizationId aquí,
+// ya que vibrationProfileStore.filteredVibrationProfiles ya reacciona a eso.
+// Los filtros de rango y dirección reaccionarán a sus propios v-model.
 </script>
 
 <style scoped>

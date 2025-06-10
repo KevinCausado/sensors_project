@@ -10,6 +10,7 @@ export default defineNuxtConfig({
   modules: [
     '@nuxtjs/tailwindcss',
     '@pinia/nuxt',
+    '@nuxt/icon'
     // Si NO quieres usar el módulo @nuxtjs/supabase, déjalo comentado.
     // Si lo comentas, debes manejar el cliente Supabase manualmente en plugins y server routes.
     // '@nuxtjs/supabase',

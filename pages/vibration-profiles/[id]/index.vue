@@ -7,13 +7,11 @@
       <template #actions>
         <div class="flex gap-2">
           <NuxtLink to="/vibration-profiles" class="btn btn-secondary">Volver</NuxtLink>
-          <PermissionGuard moduleId="vibration_profiles" permission="manage">
-            
+          <PermissionGuard moduleId="vibration_profiles" permission="manage">            
           </PermissionGuard>
         </div>
       </template>
     </PageHeader>
-
     <div v-if="loading" class="flex items-center justify-center py-8">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
       <p class="ml-3 text-gray-500">Cargando detalles del perfil...</p>
@@ -31,10 +29,7 @@
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Información General</h2>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <p class="detail-label">Activo Asociado:</p>
-            <p class="detail-value">{{ vibrationProfileStore.currentVibrationProfile.asset_name }}</p>
-          </div>
+          <!-- Ya no se muestra "Activo Asociado" aquí -->
           <div>
             <p class="detail-label">Punto de Medición:</p>
             <p class="detail-value">{{ vibrationProfileStore.currentVibrationProfile.measurement_point }}</p>
@@ -105,6 +100,8 @@ import { useRoute } from 'vue-router';
 import { useVibrationProfileStore } from '~/stores/vibrationProfiles';
 import PageHeader from '~/components/PageHeader.vue';
 import PermissionGuard from '~/components/PermissionGuard.vue';
+// No necesitas ActionButton en esta página directamente si solo es un NuxtLink
+// import ActionButton from '~/components/ActionButton.vue'; 
 
 definePageMeta({
   permission: 'vibration_profiles.view',
@@ -117,6 +114,7 @@ const loading = ref(true);
 
 const hasThresholds = (thresholds) => {
   if (!thresholds) return false;
+  // Verifica si al menos uno de los valores no es null
   return Object.values(thresholds).some(value => value !== null);
 };
 
@@ -165,7 +163,8 @@ watch(() => route.params.id, async (newId) => {
   @apply block text-sm font-medium text-gray-500;
 }
 .detail-value {
-  @apply mt-0.5 text-sm text-gray-900 font-semibold;
+  /* Se eliminó 'font-semibold' para que el texto no esté en negrita */
+  @apply mt-0.5 text-sm text-gray-900; 
 }
 .btn {
   @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors;

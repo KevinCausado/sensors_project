@@ -2,10 +2,7 @@
   <div>
     <PageHeader 
       title="Configuración" 
-      subtitle="Administrar configuración y permisos del sistema" />
-    
-   -
-    
+      subtitle="Administrar configuración y permisos del sistema" />   
     <div class="space-y-6">
       <!-- Configuración de la Organización -->
       <div class="card">

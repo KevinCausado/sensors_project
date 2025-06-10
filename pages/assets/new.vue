@@ -122,6 +122,19 @@
                 </option>
               </select>
             </div>
+            <!-- NUEVO CAMPO: Perfil de Vibración -->
+            <div>
+              <label class="form-label">Perfil de Vibración</label>
+              <select v-model="form.vibration_profile_id" class="form-input">
+                <option :value="null">Ningún perfil</option>
+                <option v-for="profile in assetStore.vibrationProfiles" :key="profile.id" :value="profile.id">
+                  {{ profile.measurement_point }} ({{ profile.direction }})
+                </option>
+              </select>
+              <p v-if="assetStore.vibrationProfiles.length === 0 && !assetStore.isLoading" class="text-xs text-gray-500 mt-1">
+                No hay perfiles de vibración disponibles. Crea uno primero en la sección de Perfiles de Vibración.
+              </p>
+            </div>
           </div>
 
           <!-- Otros Parámetros -->
@@ -222,20 +235,19 @@ const saving = ref(false);
 const form = ref({
   organization_id: null,
   name: '',
-  // REMOVIDO: location: '',
   asset_code: '',
   serial_number: '',
   model_number: '',
-  // NUEVOS CAMPOS DE UBICACIÓN GEOGRÁFICA
   country: '',
   state: '',
   city: '',
-  description: '', // Mover descripción aquí para que esté con los campos generales
+  description: '',
   asset_type_id: null,
   iso_group_id: null,
   rigidity_type_id: null,
   foundation_type_id: null,
   coupling_type_id: null,
+  vibration_profile_id: null, // NUEVO: Campo para el ID del perfil de vibración
   manufacture_date: null,
   installation_date: null,
   last_maintenance_date: null,
@@ -266,6 +278,11 @@ const createAsset = async () => {
       }
     }
 
+    // Asegurarse de que vibration_profile_id sea null si es una cadena vacía (del select)
+    if (payload.vibration_profile_id === '') {
+      payload.vibration_profile_id = null;
+    }
+
     await assetStore.createAsset(payload);
     router.push('/assets');
   } catch (e) {
@@ -279,6 +296,7 @@ const createAsset = async () => {
 onMounted(async () => {
   loadingInitialData.value = true;
   try {
+    // La función initializeDataForForms de assetStore ahora carga los perfiles de vibración
     await Promise.all([
       assetStore.initializeDataForForms(),
       organizationStore.fetchOrganizations()

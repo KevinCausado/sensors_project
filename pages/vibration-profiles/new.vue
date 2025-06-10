@@ -25,32 +25,7 @@
     <div v-else class="card">
       <form @submit.prevent="handleSubmit">
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <!-- Campo: Activo Asociado -->
-          <div>
-            <label for="asset" class="form-label">Activo Asociado <span class="text-error-500">*</span></label>
-            <select
-              id="asset"
-              v-model="profileForm.asset_id"
-              class="form-select"
-              required
-              :disabled="loading || vibrationProfileStore.isLoadingVibrationProfiles || vibrationProfileStore.getAvailableAssets.length === 0"
-            >
-              <option :value="null" disabled>Selecciona un activo</option>
-              <option
-                v-for="asset in vibrationProfileStore.getAvailableAssets"
-                :key="asset.id"
-                :value="asset.id"
-              >
-                {{ asset.name }}
-              </option>
-            </select>
-            <p v-if="!profileForm.asset_id && formSubmitted" class="text-error-500 text-xs mt-1">El activo es obligatorio.</p>
-            <!-- Mensajes de carga/no hay activos para este selector -->
-            <p v-if="vibrationProfileStore.isLoadingVibrationProfiles" class="text-sm text-gray-500 mt-1">Cargando activos...</p>
-            <p v-else-if="vibrationProfileStore.getAvailableAssets.length === 0" class="text-sm text-gray-500 mt-1">No hay activos disponibles para la organización seleccionada. Crea uno primero o cambia la organización.</p>
-          </div>
-
-          <!-- Campo: Punto de Medición -->
+          <!-- Campo: Punto de Medición (Ya no hay Campo de Activo Asociado) -->
           <div>
             <label for="measurement-point" class="form-label">Punto de Medición <span class="text-error-500">*</span></label>
             <input
@@ -58,7 +33,7 @@
               v-model="profileForm.measurement_point"
               type="text"
               class="form-input"
-              placeholder="Ej: Motor lado bomba, Rodamiento delantero"
+              placeholder="Ej: Montaje flexible, Rodamiento estándar"
               required
               :disabled="loading"
             />
@@ -210,7 +185,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useVibrationProfileStore } from '~/stores/vibrationProfiles';
-import { useOrganizationStore } from '~/stores/organizations';
+import { useOrganizationStore } from '~/stores/organizations'; // Aunque ya no se usa para asset_id, se mantiene por el error general
 import PageHeader from '~/components/PageHeader.vue';
 import PermissionGuard from '~/components/PermissionGuard.vue';
 
@@ -220,14 +195,14 @@ definePageMeta({
 
 const router = useRouter();
 const vibrationProfileStore = useVibrationProfileStore();
-const organizationStore = useOrganizationStore();
+const organizationStore = useOrganizationStore(); // Se mantiene por la lógica de error general, aunque no se usa directamente para filtrar assets aquí.
 
 const loading = ref(false); // Para el estado de envío del formulario
 const loadingInitialData = ref(true); // Para la carga inicial de datos (activos y rangos)
 const formSubmitted = ref(false); // Para mostrar errores de validación al enviar
 
 const profileForm = ref({
-  asset_id: null,
+  // asset_id ya no es parte de este formulario
   measurement_point: '',
   direction: null,
   vibration_range_id: null, // Opcional
@@ -244,8 +219,8 @@ const profileForm = ref({
 const handleSubmit = async () => {
   formSubmitted.value = true; // Marca el formulario como enviado para activar validaciones
   
-  // Validación básica del formulario
-  if (!profileForm.value.asset_id || !profileForm.value.measurement_point || !profileForm.value.direction) {
+  // Validación básica del formulario (sin asset_id)
+  if (!profileForm.value.measurement_point || !profileForm.value.direction) {
     // Si falta algún campo requerido, no envíes el formulario y muestra un error
     console.error('Formulario inválido: Faltan campos requeridos.');
     return;
@@ -256,7 +231,7 @@ const handleSubmit = async () => {
 
   try {
     const newProfileData = {
-      asset_id: profileForm.value.asset_id,
+      // asset_id ya no se envía aquí
       measurement_point: profileForm.value.measurement_point,
       direction: profileForm.value.direction,
       vibration_range_id: profileForm.value.vibration_range_id,
@@ -282,16 +257,25 @@ onMounted(async () => {
   vibrationProfileStore.error = null; // Limpiar errores del store al inicio
 
   try {
-    // Primero cargar las organizaciones para asegurar que selectedOrganizationId esté disponible
-    await organizationStore.fetchOrganizations();
-    // Luego inicializar los datos del formulario (activos y rangos), que dependerán de la organización seleccionada
+    // Ya no es necesario cargar organizaciones aquí para obtener el selectedOrganizationId
+    // si el store de perfiles de vibración ya no necesita asset_id para initializeDataForForms.
+    // Sin embargo, si 'organizationStore.error' se muestra en el template, podría ser útil mantenerlo.
+    // Para simplificar, lo elimino si no tiene un uso directo aquí.
+
+    // La carga de organizaciones es solo si organizationStore.error se muestra en el template
+    // y si organizationStore.fetchOrganizations() fuera la que lo establece.
+    // Como vibrationProfileStore.initializeDataForForms() ya no depende de ello,
+    // y para evitar dependencias innecesarias, se puede omitir si no se usa para mostrar errores.
+    // Por ahora, se mantiene por si hay un error general en el template que lo utiliza.
+    await organizationStore.fetchOrganizations(); // Se mantiene si se usa su estado de error en el template
+
+    // Inicializar los datos del formulario (solo rangos de vibración ahora)
     await vibrationProfileStore.initializeDataForForms();
     
-    // Opcional: si queremos preseleccionar el asset_id si la organización ya está seleccionada
-    // y hay activos disponibles para esa organización
-    if (organizationStore.selectedOrganizationId && vibrationProfileStore.getAvailableAssets.length > 0) {
-      profileForm.value.asset_id = vibrationProfileStore.getAvailableAssets[0].id;
-    }
+    // Ya no hay preselección de asset_id
+    // if (organizationStore.selectedOrganizationId && vibrationProfileStore.getAvailableAssets.length > 0) {
+    //   profileForm.value.asset_id = vibrationProfileStore.getAvailableAssets[0].id;
+    // }
   } catch (error) {
     console.error('[NewVibrationProfile] Error en la carga inicial de datos:', error);
     // Los errores ya se propagan al store, se mostrarán en el template

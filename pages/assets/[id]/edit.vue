@@ -125,6 +125,19 @@
                 </option>
               </select>
             </div>
+            <!-- NUEVO CAMPO: Perfil de Vibración -->
+            <div>
+              <label class="form-label">Perfil de Vibración</label>
+              <select v-model="form.vibration_profile_id" class="form-input">
+                <option :value="null">Ningún perfil</option>
+                <option v-for="profile in assetStore.vibrationProfiles" :key="profile.id" :value="profile.id">
+                  {{ profile.measurement_point }} ({{ profile.direction }})
+                </option>
+              </select>
+              <p v-if="assetStore.vibrationProfiles.length === 0 && !assetStore.isLoading" class="text-xs text-gray-500 mt-1">
+                No hay perfiles de vibración disponibles. Crea uno primero en la sección de Perfiles de Vibración.
+              </p>
+            </div>
           </div>
 
           <!-- Otros Parámetros -->
@@ -237,16 +250,16 @@ const form = ref({
   asset_code: '',
   serial_number: '',
   model_number: '',
-  // NUEVOS CAMPOS DE UBICACIÓN GEOGRÁFICA
   country: '',
   state: '',
   city: '',
-  description: '', // Mover descripción aquí para que esté con los campos generales
+  description: '',
   asset_type_id: null,
   iso_group_id: null,
   rigidity_type_id: null,
   foundation_type_id: null,
   coupling_type_id: null,
+  vibration_profile_id: null, // NUEVO: Campo para el ID del perfil de vibración
   manufacture_date: null,
   installation_date: null,
   last_maintenance_date: null,
@@ -270,6 +283,7 @@ const loadAssetForEdit = async () => {
 
   loading.value = true;
   try {
+    // Asegurarse de que los datos de referencia (incluidos los perfiles de vibración) estén cargados
     await assetStore.initializeDataForForms();
     await organizationStore.fetchOrganizations();
 
@@ -282,16 +296,16 @@ const loadAssetForEdit = async () => {
         asset_code: fetchedAsset.asset_code || '',
         serial_number: fetchedAsset.serial_number || '',
         model_number: fetchedAsset.model_number || '',
-        // NUEVOS CAMPOS DE UBICACIÓN DESDE EL ACTIVO RECUPERADO
         country: fetchedAsset.country || '',
         state: fetchedAsset.state || '',
         city: fetchedAsset.city || '',
-        description: fetchedAsset.description || '', // Asignar descripción aquí
+        description: fetchedAsset.description || '',
         asset_type_id: fetchedAsset.asset_type_id || null,
         iso_group_id: fetchedAsset.iso_group_id || null,
         rigidity_type_id: fetchedAsset.rigidity_type_id || null,
         foundation_type_id: fetchedAsset.foundation_type_id || null,
         coupling_type_id: fetchedAsset.coupling_type_id || null,
+        vibration_profile_id: fetchedAsset.vibration_profile_id || null, // NUEVO: Precargar el perfil de vibración
         manufacture_date: fetchedAsset.manufacture_date ? new Date(fetchedAsset.manufacture_date).toISOString().split('T')[0] : null,
         installation_date: fetchedAsset.installation_date ? new Date(fetchedAsset.installation_date).toISOString().split('T')[0] : null,
         last_maintenance_date: fetchedAsset.last_maintenance_date ? new Date(fetchedAsset.last_maintenance_date).toISOString().split('T')[0] : null,
@@ -329,6 +343,11 @@ const saveAsset = async () => {
       if (payload[key] === '') {
         payload[key] = null;
       }
+    }
+
+    // Asegurarse de que vibration_profile_id sea null si es una cadena vacía (del select)
+    if (payload.vibration_profile_id === '') {
+      payload.vibration_profile_id = null;
     }
 
     await assetStore.updateAsset(route.params.id, payload);

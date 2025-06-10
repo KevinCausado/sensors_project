@@ -14,7 +14,7 @@
       <p class="ml-3 text-gray-500">Cargando datos del perfil...</p>
     </div>
 
-    <div v-else-if="vibrationProfileStore.getVibrationProfilesError && !vibrationProfileStore.currentVibrationProfile" class="text-center py-8 text-error-600">
+    <div v-else-if="vibrationProfileStore.getVibrationProfilesError" class="text-center py-8 text-error-600">
       <p>Error al cargar el perfil: {{ vibrationProfileStore.getVibrationProfilesError }}</p>
     </div>
 
@@ -25,31 +25,7 @@
     <div v-else class="card">
       <form @submit.prevent="handleSubmit">
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <!-- Campo: Activo Asociado -->
-          <div>
-            <label for="asset" class="form-label">Activo Asociado <span class="text-error-500">*</span></label>
-            <select
-              id="asset"
-              v-model="profileForm.asset_id"
-              class="form-select"
-              required
-              :disabled="loading || vibrationProfileStore.isLoadingVibrationProfiles"
-            >
-              <option :value="null" disabled>Selecciona un activo</option>
-              <option
-                v-for="asset in vibrationProfileStore.getAvailableAssets"
-                :key="asset.id"
-                :value="asset.id"
-              >
-                {{ asset.name }}
-              </option>
-            </select>
-            <p v-if="!profileForm.asset_id && formSubmitted" class="text-error-500 text-xs mt-1">El activo es obligatorio.</p>
-            <p v-if="vibrationProfileStore.isLoadingVibrationProfiles && vibrationProfileStore.getAvailableAssets.length === 0" class="text-sm text-gray-500 mt-1">Cargando activos...</p>
-            <p v-else-if="!vibrationProfileStore.isLoadingVibrationProfiles && vibrationProfileStore.getAvailableAssets.length === 0" class="text-sm text-gray-500 mt-1">No hay activos disponibles para tu organización. Crea uno primero.</p>
-          </div>
-
-          <!-- Campo: Punto de Medición -->
+          <!-- Campo: Punto de Medición (El campo Activo Asociado ha sido eliminado) -->
           <div>
             <label for="measurement-point" class="form-label">Punto de Medición <span class="text-error-500">*</span></label>
             <input
@@ -57,7 +33,7 @@
               v-model="profileForm.measurement_point"
               type="text"
               class="form-input"
-              placeholder="Ej: Motor lado bomba, Rodamiento delantero"
+              placeholder="Ej: Montaje rígido, Motor vertical"
               required
               :disabled="loading"
             />
@@ -89,7 +65,7 @@
               id="vibration-range"
               v-model="profileForm.vibration_range_id"
               class="form-select"
-              :disabled="loading || vibrationProfileStore.isLoadingVibrationProfiles"
+              :disabled="loading || vibrationProfileStore.isLoadingVibrationProfiles || vibrationProfileStore.getVibrationRanges.length === 0"
             >
               <option :value="null">Selecciona un rango (Opcional)</option>
               <option
@@ -100,8 +76,9 @@
                 {{ range.name }} ({{ range.min_value }} - {{ range.max_value }} {{ range.unit }})
               </option>
             </select>
-            <p v-if="vibrationProfileStore.isLoadingVibrationProfiles && vibrationProfileStore.getVibrationRanges.length === 0" class="text-sm text-gray-500 mt-1">Cargando rangos...</p>
-            <p v-else-if="!vibrationProfileStore.isLoadingVibrationProfiles && vibrationProfileStore.getVibrationRanges.length === 0" class="text-sm text-gray-500 mt-1">No hay rangos de vibración disponibles. Crea uno primero.</p>
+            <!-- Mensajes de carga/no hay rangos para este selector -->
+            <p v-if="vibrationProfileStore.isLoadingVibrationProfiles" class="text-sm text-gray-500 mt-1">Cargando rangos...</p>
+            <p v-else-if="vibrationProfileStore.getVibrationRanges.length === 0" class="text-sm text-gray-500 mt-1">No hay rangos de vibración disponibles. Crea uno primero.</p>
           </div>
         </div>
 
@@ -208,6 +185,8 @@
 import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useVibrationProfileStore } from '~/stores/vibrationProfiles';
+// Ya no necesitamos useOrganizationStore para la carga de assets aquí
+// import { useOrganizationStore } from '~/stores/organizations';
 import PageHeader from '~/components/PageHeader.vue';
 import PermissionGuard from '~/components/PermissionGuard.vue';
 
@@ -218,6 +197,7 @@ definePageMeta({
 const route = useRoute();
 const router = useRouter();
 const vibrationProfileStore = useVibrationProfileStore();
+// const organizationStore = useOrganizationStore(); // Eliminado ya que no se usa para assets aquí
 
 const loading = ref(false); // Para el estado de envío del formulario
 const loadingInitialData = ref(true); // Para la carga inicial de datos
@@ -226,7 +206,7 @@ const formSubmitted = ref(false);
 const profileId = route.params.id;
 
 const profileForm = ref({
-  asset_id: null,
+  // asset_id se ha eliminado de aquí
   measurement_point: '',
   direction: null,
   vibration_range_id: null,
@@ -244,14 +224,14 @@ const loadProfileData = async () => {
   loadingInitialData.value = true;
   vibrationProfileStore.error = null; // Limpiar errores previos
   try {
-    // Cargar activos y rangos primero para que los selectores estén listos
+    // Cargar rangos de vibración (initializeDataForForms ya no carga assets)
     await vibrationProfileStore.initializeDataForForms();
     
     // Luego, cargar el perfil específico
     const profile = await vibrationProfileStore.fetchVibrationProfile(profileId);
     if (profile) {
       profileForm.value = {
-        asset_id: profile.asset_id,
+        // asset_id ya no es parte del profileForm
         measurement_point: profile.measurement_point,
         direction: profile.direction,
         vibration_range_id: profile.vibration_range_id,
@@ -268,7 +248,6 @@ const loadProfileData = async () => {
       console.log('[EditVibrationProfile] Formulario precargado con:', profileForm.value);
     } else {
       console.warn('[EditVibrationProfile] Perfil no encontrado para el ID:', profileId);
-      // Podrías redirigir o mostrar un mensaje de error diferente aquí
     }
   } catch (e) {
     console.error('[EditVibrationProfile] Error al cargar el perfil para edición:', e);
@@ -280,8 +259,8 @@ const loadProfileData = async () => {
 const handleSubmit = async () => {
   formSubmitted.value = true;
   
-  // Validación básica del formulario
-  if (!profileForm.value.asset_id || !profileForm.value.measurement_point || !profileForm.value.direction) {
+  // Validación básica del formulario (sin asset_id)
+  if (!profileForm.value.measurement_point || !profileForm.value.direction) {
     console.error('Formulario inválido: Faltan campos requeridos.');
     return;
   }
@@ -291,7 +270,7 @@ const handleSubmit = async () => {
 
   try {
     const updatedProfileData = {
-      asset_id: profileForm.value.asset_id,
+      // asset_id se ha eliminado del payload
       measurement_point: profileForm.value.measurement_point,
       direction: profileForm.value.direction,
       vibration_range_id: profileForm.value.vibration_range_id,
