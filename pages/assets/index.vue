@@ -28,6 +28,46 @@
           <!-- Icono de Búsqueda -->
           <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M10.5 2a8.5 8.5 0 0 1 6.545 13.914l5.352 5.353a.75.75 0 1 1-1.06 1.06l-5.354-5.353A8.502 8.502 0 0 1 2 10.5C2 6.91 4.91 4 8.5 4a8.5 8.5 0 0 1 2 0zM10.5 3.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z"/></svg>
         </div>
+
+        <!-- Filtros de Estado, Tipo y Grupo ISO (Agrupados) -->
+        <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <!-- Filtro por Estado -->
+          <select
+            v-model="statusFilter"
+            class="form-select block w-full sm:w-48 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+          >
+            <option :value="null">Todos los estados</option>
+            <option :value="true">Activo</option>
+            <option :value="false">Inactivo</option>
+          </select>
+
+          <!-- Filtro por Tipo de Activo -->
+          <select
+            v-model="typeFilter"
+            class="form-select block w-full sm:w-48 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+          >
+            <option :value="null">Todos los tipos</option>
+            <option v-for="type in assetStore.assetTypes" :key="type.id" :value="type.id">
+              {{ type.name }}
+            </option>
+          </select>
+
+          <!-- Filtro por Grupo ISO -->
+          <select
+            v-model="isoGroupFilter"
+            class="form-select block w-full sm:w-48 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+          >
+            <option :value="null">Todos los grupos ISO</option>
+            <option v-for="group in assetStore.isoGroups" :key="group.id" :value="group.id">
+              {{ group.name }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Mensaje de Paginación y Filtrado -->
+      <div class="mb-4 text-sm text-gray-700">
+        Mostrando {{ startIndex }} a {{ endIndex }} de {{ totalFilteredAssets }} activos.
       </div>
 
       <div class="overflow-x-auto">
@@ -59,16 +99,16 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-if="assetStore.isLoading">
-                <td colspan="7" class="px-6 py-4 text-center text-gray-500">Cargando activos...</td> <!-- Colspan ajustado -->
+                <td colspan="7" class="px-6 py-4 text-center text-gray-500">Cargando activos...</td>
             </tr>
             <tr v-else-if="assetStore.getError">
-                <td colspan="7" class="px-6 py-4 text-center text-red-600">Error: {{ assetStore.getError }}</td> <!-- Colspan ajustado -->
+                <td colspan="7" class="px-6 py-4 text-center text-red-600">Error: {{ assetStore.getError }}</td>
             </tr>
-            <tr v-else-if="filteredAssets.length === 0">
-                <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron activos.</td> <!-- Colspan ajustado -->
+            <tr v-else-if="paginatedAssets.length === 0">
+                <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron activos.</td>
             </tr>
 
-            <tr v-else v-for="asset in filteredAssets" :key="asset.id" class="hover:bg-gray-50">
+            <tr v-else v-for="asset in paginatedAssets" :key="asset.id" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700">
@@ -89,7 +129,7 @@
                 {{ asset.iso_group_name }}
               </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ getCombinedLocation(asset) }} <!-- USAR FUNCIÓN AUXILIAR AQUÍ -->
+                {{ getCombinedLocation(asset) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span
@@ -123,6 +163,15 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Paginación -->
+      <div class="mt-4">
+        <Pagination 
+          :total-items="totalFilteredAssets" 
+          :items-per-page="itemsPerPage"
+          :current-page="currentPage"
+          @page-change="handlePageChange" />
       </div>
 
       <!-- Modal de confirmación de eliminación (Implementación básica si no tienes ConfirmModal) -->
@@ -178,6 +227,7 @@ import { useRouter } from 'vue-router';
 import { useAssetStore } from '~/stores/assets';
 import PageHeader from '~/components/PageHeader.vue';
 import ActionButton from '~/components/ActionButton.vue';
+import Pagination from '~/components/Pagination.vue'; 
 
 definePageMeta({
   // middleware: ['auth']
@@ -187,10 +237,18 @@ const assetStore = useAssetStore();
 const router = useRouter();
 
 const searchQuery = ref('');
+const statusFilter = ref(null); 
+const typeFilter = ref(null); 
+const isoGroupFilter = ref(null); 
+
 const showDeleteModal = ref(false);
 const assetToDeleteId = ref(null);
 const assetToDeleteName = ref('');
 const deleting = ref(false);
+
+// --- ESTADO DE PAGINACIÓN ---
+const currentPage = ref(1);
+const itemsPerPage = ref(10); 
 
 watch(() => assetStore.isLoading, (newValue) => {
   console.log(`[AssetsListPage] assetStore.isLoading ha cambiado a: ${newValue}`);
@@ -202,6 +260,7 @@ watch(() => assetStore.getError, (newValue) => {
 });
 watch(() => assetStore.getAssets, (newValue) => {
   console.log(`[AssetsListPage] assetStore.getAssets ha cambiado. Cantidad de activos: ${newValue.length}`, newValue);
+  currentPage.value = 1;
 });
 
 // Función para concatenar la ubicación
@@ -231,29 +290,66 @@ const translateAssetStatus = (isActive) => {
   return isActive ? 'Activo' : 'Inactivo';
 };
 
-const filteredAssets = computed(() => {
-  console.log(`[AssetsListPage] Computed filteredAssets. Total activos en store: ${assetStore.getAssets.length}`);
+// --- PROPIEDADES COMPUTADAS PARA PAGINACIÓN Y FILTRADO ---
+const filteredAndSortedAssets = computed(() => {
   let result = [...assetStore.getAssets];
 
+  // Aplicar filtro de búsqueda
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     result = result.filter(asset =>
       asset.name.toLowerCase().includes(query) ||
       (asset.asset_code && asset.asset_code.toLowerCase().includes(query)) ||
-      // Modificar búsqueda para incluir los nuevos campos de ubicación
       (asset.city && asset.city.toLowerCase().includes(query)) ||
       (asset.state && asset.state.toLowerCase().includes(query)) ||
       (asset.country && asset.country.toLowerCase().includes(query)) ||
-      // Se puede mantener asset.location si aún existe en la base de datos y se quiere buscar por ahí
-      // (asset.location && asset.location.toLowerCase().includes(query)) ||
       (asset.asset_type_name && asset.asset_type_name.toLowerCase().includes(query)) ||
       (asset.iso_group_name && asset.iso_group_name.toLowerCase().includes(query))
     );
   }
-  console.log(`[AssetsListPage] Activos filtrados: ${result.length}`);
+
+  // Aplicar filtro de estado
+  if (statusFilter.value !== null) {
+    result = result.filter(asset => asset.is_active === statusFilter.value);
+  }
+
+  // Aplicar filtro de tipo de activo
+  if (typeFilter.value !== null) {
+    result = result.filter(asset => asset.asset_type_id === typeFilter.value);
+  }
+
+  // Aplicar filtro de grupo ISO
+  if (isoGroupFilter.value !== null) {
+    result = result.filter(asset => asset.iso_group_id === isoGroupFilter.value);
+  }
+
   return result;
 });
 
+const totalFilteredAssets = computed(() => filteredAndSortedAssets.value.length);
+
+const paginatedAssets = computed(() => {
+  const startIndex = (currentPage.value - 1) * itemsPerPage.value;
+  const endIndex = startIndex + itemsPerPage.value;
+  return filteredAndSortedAssets.value.slice(startIndex, endIndex);
+});
+
+// --- PROPIEDADES COMPUTADAS PARA EL MENSAJE "MOSTRANDO X a Y de Z" ---
+const startIndex = computed(() => {
+  if (totalFilteredAssets.value === 0) return 0;
+  return (currentPage.value - 1) * itemsPerPage.value + 1;
+});
+
+const endIndex = computed(() => {
+  const end = currentPage.value * itemsPerPage.value;
+  return Math.min(end, totalFilteredAssets.value);
+});
+
+
+// --- MÉTODOS DE PAGINACIÓN ---
+const handlePageChange = (page) => {
+  currentPage.value = page;
+};
 
 const showDeleteConfirm = (id, name) => {
   assetToDeleteId.value = id;
@@ -283,9 +379,7 @@ const deleteConfirmed = async () => {
 
 onMounted(async () => {
   console.log('[AssetsListPage] Componente AssetsList onMounted. Iniciando carga de datos...');
-  // Cargar primero los datos de referencia (tipos, grupos ISO)
   await assetStore.initializeDataForForms(); 
-  // Luego cargar los activos, que ahora mapearán los nombres usando los datos de referencia
   await assetStore.fetchAssets(); 
   console.log('[AssetsListPage] Carga de datos iniciales completada.');
 });
@@ -300,5 +394,10 @@ onMounted(async () => {
 }
 .badge-danger {
   @apply bg-red-100 text-red-800;
+}
+
+/* Aplica un estilo uniforme a los selects para que se vean compactos */
+.form-select {
+  @apply block w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm;
 }
 </style>

@@ -30,6 +30,7 @@
           </div>
            <div>
             <p class="text-sm font-medium text-gray-500">Activo</p>
+            <!-- Asegúrate de que assetName está llegando -->
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.assetName || "N/A" }}</p>
           </div>
           <div>
@@ -201,6 +202,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useSensorStore } from "@/stores/sensors";
 import { useAlertStore } from "@/stores/alerts";
 import { useOrganizationStore } from "@/stores/organizations";
+import { useAssetStore } from "@/stores/assets"; // Asegúrate de importar el AssetStore aquí
 import AlertList from "@/components/AlertList.vue";
 import SensorChart from "@/components/SensorChart.vue"; 
 import PageHeader from "@/components/PageHeader.vue";
@@ -210,6 +212,8 @@ const router = useRouter();
 const sensorStore = useSensorStore();
 const alertStore = useAlertStore();
 const organizationStore = useOrganizationStore();
+const assetStore = useAssetStore(); // Instancia el AssetStore aquí
+
 
 const itemsPerPage = ref(10);
 const currentPage = ref(1);
@@ -285,6 +289,7 @@ const alertsForCurrentSensor = computed(() => {
 
   const filtered = alertStore.alerts.filter((alert) => alert.sensor_id === currentSensorId);
 
+  // --- CRÍTICO: Aquí enriquecimos las alertas para AlertList ---
   return filtered.map((alert) => {
     const sensor = sensorStore.sensors.find((s) => s.id === alert.sensor_id);
     const sensorName = sensor ? sensor.name : "Desconocido";
@@ -293,10 +298,23 @@ const alertsForCurrentSensor = computed(() => {
     const organization = organizationStore.organizations.find((org) => org.id === organizationId);
     const organizationName = organization ? organization.name : "Desconocida";
 
+    // --- NUEVO: Traer el nombre del activo para la alerta aquí ---
+    let assetName = 'N/A';
+    // Prioriza alert.asset_id, luego sensor.assetId
+    const effectiveAssetId = alert.asset_id || sensor?.assetId; 
+    if (effectiveAssetId && assetStore.assets.length > 0) {
+        const asset = assetStore.assets.find(a => a.id === effectiveAssetId);
+        assetName = asset ? asset.name : 'Activo Desconocido';
+    } else if (effectiveAssetId && assetStore.assets.length === 0) {
+        console.log(`[idSensorPage] alertsForCurrentSensor: assetStore.assets está vacío, no se puede mapear assetName para alerta ${alert.id}.`);
+    }
+
+
     return {
       ...alert,
       sensorName: sensorName,
       organizationName: organizationName,
+      assetName: assetName, // ¡Añadir assetName aquí!
     };
   });
 });
@@ -309,15 +327,13 @@ const sensorForChart = computed(() => {
   };
 });
 
-// NUEVO: Propiedad computada para la ubicación geográfica consolidada del activo
 const combinedAssetLocation = computed(() => {
   const sensor = sensorStore.currentSensor;
   if (!sensor) return 'N/A';
 
   const parts = [];
   // Usa assetCity, assetState, assetCountry que vienen del join con assets_base
-  // Añadimos console.log aquí para depurar
-  console.log('Debugging combinedAssetLocation:', {
+  console.log('[idSensorPage] Debugging combinedAssetLocation:', {
     assetCity: sensor.assetCity,
     assetState: sensor.assetState,
     assetCountry: sensor.assetCountry
@@ -328,7 +344,7 @@ const combinedAssetLocation = computed(() => {
   if (sensor.assetCountry && sensor.assetCountry !== 'N/A') parts.push(sensor.assetCountry);
 
   const result = parts.length > 0 ? parts.join(', ') : 'N/A';
-  console.log('Resulting combined location:', result);
+  console.log('[idSensorPage] Resulting combined location:', result);
   return result;
 });
 
@@ -336,6 +352,8 @@ const combinedAssetLocation = computed(() => {
 onMounted(async () => {
   try {
     // Asegurar que los stores estén poblados antes de acceder a sus datos
+    // Cargar assets PRIMERO, ya que alerts y sensors pueden depender de ellos
+    await assetStore.fetchAssets(); // ¡CRÍTICO! Necesario para el mapeo de nombres de activos
     await organizationStore.fetchOrganizations(); // Necesario para organizationName
     await sensorStore.fetchSensors(); // Necesario para sensorStore.sensors y para el mapeo de alertas
     
@@ -348,10 +366,12 @@ onMounted(async () => {
     await alertStore.subscribeToAlertUpdates();
 
     // Depuración: Confirma que currentSensor tiene los datos esperados
-    console.log('[idSensorPage] sensorStore.currentSensor onMounted:', sensorStore.currentSensor);
+    console.log('[idSensorPage] onMounted: sensorStore.currentSensor FINAL:', JSON.parse(JSON.stringify(sensorStore.currentSensor)));
+    console.log('[idSensorPage] onMounted: assetStore.assets FINAL:', assetStore.assets.slice(0,5)); // Muestra primeros 5 assets para verificar
+    console.log('[idSensorPage] onMounted: alertStore.alerts FINAL:', alertStore.alerts.slice(0,5)); // Muestra primeros 5 alerts para verificar
 
   } catch (error) {
-    console.error("Error al cargar sensor o configurar suscripción:", error);
+    console.error("[idSensorPage] Error al cargar sensor o configurar suscripción:", error);
     sensorStore.error = error.message || "Error desconocido al cargar el sensor.";
   }
 });
@@ -365,19 +385,22 @@ watch(
   () => route.params.id,
   async (newId, oldId) => {
     if (newId && newId !== oldId) {
-      console.log(`ID del sensor cambió de ${oldId} a ${newId}. Recargando y re-suscribiéndose a lecturas y alertas.`);
+      console.log(`[idSensorPage] ID del sensor cambió de ${oldId} a ${newId}. Recargando y re-suscribiéndose a lecturas y alertas.`);
       try {
         await sensorStore.unsubscribeFromDetailReadings();
         await alertStore.unsubscribeFromAlertUpdates();
 
-        // No es necesario fetchSensors/Organizations aquí de nuevo si ya están en onMounted
-        // Se asume que el store ya los tiene precargados o los puede re-fetch si el watcher anterior lo dispara.
-        await sensorStore.fetchSensor(newId); // Vuelve a cargar el sensor con los nuevos datos del ID
+        // Recargar assets y organizations es buena práctica en un watcher si la organización cambia
+        // pero para un cambio de SENSOR ID, solo recargar el sensor y las alertas relativas
+        await sensorStore.fetchSensor(newId); 
         await sensorStore.fetchAndSubscribeToDetailReadings(newId);
-        await alertStore.fetchAlerts();
+        await alertStore.fetchAlerts(); // Esto recargará todas las alertas, que luego serán filtradas
         await alertStore.subscribeToAlertUpdates();
+
+        console.log('[idSensorPage] Watcher: sensorStore.currentSensor (después de cambio de ID):', JSON.parse(JSON.stringify(sensorStore.currentSensor)));
+
       } catch (error) {
-        console.error("Error al cambiar de sensor o configurar suscripción:", error);
+        console.error("[idSensorPage] Error al cambiar de sensor o configurar suscripción:", error);
         sensorStore.error = error.message || "Error desconocido al cargar el sensor.";
       }
     }

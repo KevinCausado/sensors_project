@@ -1,5 +1,5 @@
 <template>
-  <div class="alert-list">
+  <div class="alert-list w-full">
     <div v-if="loading" class="flex items-center justify-center py-4">
       <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
       <p class="ml-2 text-gray-500">Cargando alertas...</p>
@@ -12,39 +12,57 @@
 
     <div v-else class="space-y-3 max-h-80 overflow-y-auto pr-1">
       <TransitionGroup name="fade">
-        <div v-for="alert in alerts" :key="alert.id" class="p-3 rounded-md border border-gray-100 transition-all hover:shadow-sm" :class="getAlertBgClass(alert.priority)">
-          <div class="flex items-start">
-            <div :class="getAlertIconClass(alert.priority)" class="flex-shrink-0 rounded-full p-1">
-              <component :is="getAlertIcon(alert.type)" class="h-4 w-4" />
+        <div v-for="alert in alerts" :key="alert.id" 
+             class="relative flex flex-col p-3 rounded-md border 
+                    transition-all hover:shadow-sm" 
+             :class="getAlertBgClass(alert.priority)">
+          
+          <!-- Botón de Acción/Estado (Arriba a la derecha) -->
+          <PermissionGuard moduleId="alerts" permission="resolve">
+            <div class="absolute top-3 right-3 z-10">
+              <button v-if="alert.status === 'active'" 
+                      @click="handleResolveAlert(alert.id)" 
+                      class="text-xs text-primary-600 hover:text-primary-500 font-semibold transition-colors duration-200">
+                Resolver
+              </button>
+              <span v-else class="text-xs text-success-600 font-semibold flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.535-1.28-1.28a.75.75 0 0 0-1.06 1.06l1.75 1.75a.75.75 0 0 0 1.135-.082l3.75-5.25Z" clip-rule="evenodd" /></svg>
+                Resuelta
+              </span>
+            </div>
+          </PermissionGuard>
+
+          <div class="flex items-start mb-2 pr-16 sm:pr-24"> 
+            <div :class="getAlertIconClass(alert.priority)" 
+                 class="flex-shrink-0 rounded-full p-2 
+                        flex items-center justify-center shadow-sm">
+              <component :is="getAlertIcon(alert.type)" class="h-5 w-5" />
             </div>
 
-            <div class="ml-3 flex-1">
-              <div class="flex items-center justify-between">
-                <p class="text-sm font-medium text-gray-900">{{ alert.title }}</p>
-                <span class="text-xs text-gray-500">{{ formatTimeAgo(alert.alert_time) }}</span>
-              </div>
-
-              <p class="text-xs text-gray-600 mt-1">{{ alert.description }}</p>
-
-              <div class="mt-2 flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :class="getAlertBadgeClass(alert.priority)">
-                    {{ translatePriority(alert.priority) }}
-                  </span>
-                  <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                    {{ alert.sensorName || "Sensor Desconocido" }}
-                  </span>
-                  <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                    {{ alert.organizationName || "Organización Desconocida" }}
-                  </span>
-                </div>
-
-                <PermissionGuard moduleId="alerts" permission="resolve">
-                  <button v-if="alert.status === 'active'" @click="handleResolveAlert(alert.id)" class="text-xs text-primary-600 hover:text-primary-500 font-semibold transition-colors duration-200">Resolver</button>
-                  <span v-else class="text-xs text-success-600 font-semibold">Resuelta</span>
-                </PermissionGuard>
-              </div>
+            <div class="ml-3 flex-1 min-w-0">
+              <p class="text-base font-semibold text-gray-900 truncate">{{ alert.title }}</p>
+              <!-- DESCRIPCIÓN: Letra más pequeña (text-xs) -->
+              <p class="text-xs text-gray-600 mt-1 line-clamp-2">{{ alert.description }}</p>
             </div>
+          </div>
+
+          <!-- Detalles adicionales y badges -->
+          <div class="flex items-center justify-between flex-wrap gap-2 text-xs">
+            <div class="flex flex-wrap gap-1">
+              <span class="badge" :class="getAlertBadgeClass(alert.priority)">
+                {{ translatePriority(alert.priority) }}
+              </span>
+              <span class="badge badge-secondary">
+                Sensor: {{ alert.sensorName || "Desconocido" }}
+              </span>
+              <span class="badge badge-secondary">
+                Organización: {{ alert.organizationName || "Desconocida" }}
+              </span>
+              <span v-if="alert.assetName && alert.assetName !== 'N/A'" class="badge badge-secondary">
+                Activo: {{ alert.assetName }}
+              </span>
+            </div>
+            <span class="text-gray-500 flex-shrink-0">Generada {{ formatTimeAgo(alert.alert_time) }}</span>
           </div>
         </div>
       </TransitionGroup>
@@ -53,62 +71,54 @@
 </template>
 
 <script setup>
-import { defineComponent, h } from "vue"; // Asegúrate de importar 'h'
+import { defineComponent, h } from "vue"; 
 import { useAlertStore } from "~/stores/alerts";
-import { useNuxtApp } from "#app"; // Necesario para acceder a $supabase
+import { useNuxtApp } from "#app"; 
+import PermissionGuard from "~/components/PermissionGuard.vue"; 
+import { ExclamationTriangleIcon, ExclamationCircleIcon, InformationCircleIcon, ArrowPathIcon } from '@heroicons/vue/24/outline';
 
-// Iconos - Asegúrate de que las clases 'i-heroicons-...' estén configuradas con tu librería de iconos (ej. UnoCSS, Font Awesome)
-const createHeroicon = (iconName) =>
-  defineComponent({
-    render: () => h("div", { class: `i-heroicons-${iconName} inline-block` }),
-  });
 
-const WarningIcon = createHeroicon("exclamation-triangle");
-const ErrorIcon = createHeroicon("exclamation-circle");
-const InfoIcon = createHeroicon("information-circle");
-const StatusChangeIcon = createHeroicon("arrow-path"); // Para alertas de tipo 'status_change'
-const DataIssueIcon = createHeroicon("exclamation-triangle"); // Para alertas de tipo 'data_issue'
+// Para los íconos, usaré los de Heroicons directamente si estás usando la librería.
+const getAlertIcon = (type) => {
+  switch (type) {
+    case "threshold":
+      return ExclamationTriangleIcon; 
+    case "status_change":
+      return ArrowPathIcon; 
+    case "data_issue":
+      return ExclamationTriangleIcon; 
+    case "error":
+      return ExclamationCircleIcon; 
+    default:
+      return InformationCircleIcon; 
+  }
+};
 
 // Props del componente
 const props = defineProps({
   alerts: {
     type: Array,
-    default: () => [],
+    default: () => []
   },
   loading: {
     type: Boolean,
-    default: false,
-  },
+    default: false
+  }
 });
 
 const alertStore = useAlertStore();
-const { $supabase } = useNuxtApp(); // Obtenemos la instancia de Supabase
+const { $supabase } = useNuxtApp(); 
 
 // --- Funciones Auxiliares para la UI ---
-
-const getAlertIcon = (type) => {
-  switch (type) {
-    case "threshold":
-      return WarningIcon;
-    case "status_change":
-      return StatusChangeIcon;
-    case "data_issue":
-      return DataIssueIcon;
-    case "error":
-      return ErrorIcon;
-    default:
-      return InfoIcon;
-  }
-};
 
 const getAlertIconClass = (priority) => {
   switch (priority) {
     case "high":
-      return "bg-error-100 text-error-700"; // Rojo para Alta
+      return "bg-red-100 text-red-700"; 
     case "medium":
-      return "bg-warning-100 text-warning-700"; // Naranja/Amarillo para Media
+      return "bg-yellow-100 text-yellow-700"; 
     case "low":
-      return "bg-success-100 text-success-700"; // Verde para Baja (como lo tenías)
+      return "bg-green-100 text-green-700"; 
     default:
       return "bg-gray-100 text-gray-700";
   }
@@ -117,39 +127,39 @@ const getAlertIconClass = (priority) => {
 const getAlertBgClass = (priority) => {
   switch (priority) {
     case "high":
-      return "bg-error-50"; // Rojo claro
+      return "bg-red-50 border-red-200"; 
     case "medium":
-      return "bg-warning-50"; // Naranja/Amarillo claro
+      return "bg-yellow-50 border-yellow-200"; 
     case "low":
-      return "bg-success-50"; // Verde claro
+      return "bg-green-50 border-green-200"; 
     default:
-      return "bg-white";
+      return "bg-white border-gray-200";
   }
 };
 
 const getAlertBadgeClass = (priority) => {
   switch (priority) {
     case "high":
-      return "bg-error-100 text-error-800"; // Texto más oscuro en rojo
+      return "bg-red-200 text-red-800 font-semibold"; 
     case "medium":
-      return "bg-warning-100 text-warning-800"; // Texto más oscuro en naranja/amarillo
+      return "bg-yellow-200 text-yellow-800 font-semibold"; 
     case "low":
-      return "bg-success-100 text-success-800"; // Texto más oscuro en verde
+      return "bg-green-200 text-green-800 font-semibold"; 
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-gray-200 text-gray-800 font-semibold";
   }
 };
 
 const translatePriority = (priority) => {
   switch (priority) {
     case "high":
-      return "Alta";
+      return "Prioridad: Alta";
     case "medium":
-      return "Media"; // Corregido: faltaba un 'return'
+      return "Prioridad: Media"; 
     case "low":
-      return "Baja";
+      return "Prioridad: Baja";
     default:
-      return "Desconocida"; // Mejor manejar un caso por defecto
+      return "Prioridad: Desconocida"; 
   }
 };
 
@@ -170,20 +180,19 @@ const formatTimeAgo = (createdAt) => {
     { label: "hora", seconds: 3600 },
     { label: "día", seconds: 86400 },
     { label: "semana", seconds: 604800 },
-    { label: "mes", seconds: 2592000 }, // Aprox. 30 días
-    { label: "año", seconds: 31536000 }, // Aprox. 365 días
+    { label: "mes", seconds: 2592000 }, 
+    { label: "año", seconds: 31536000 }, 
   ];
 
   for (let i = intervals.length - 1; i >= 0; i--) {
     const interval = intervals[i];
     if (seconds >= interval.seconds) {
       const value = Math.floor(seconds / interval.seconds);
-      // Caso especial para "hace un instante"
       if (interval.label === "segundo" && value < 5) return "hace un instante";
       return `hace ${value} ${interval.label}${value > 1 ? (interval.label === "mes" ? "es" : "s") : ""}`;
     }
   }
-  return "justo ahora"; // Para eventos muy recientes, menos de un segundo
+  return "justo ahora"; 
 };
 
 // --- Manejadores de Acciones ---
@@ -191,16 +200,11 @@ const formatTimeAgo = (createdAt) => {
 /**
  * Llama a la acción de la store para resolver una alerta.
  * @param {string} alertId - El ID de la alerta a resolver.
- * @param {string} sensorId - El ID del sensor asociado a la alerta.
  */
 const handleResolveAlert = async (alertId) => {
-  // Eliminado sensorId ya que no se usa aquí.
-  // La lógica para actualizar la alerta y el sensor se manejará en la store
   await alertStore.resolveAlert(alertId);
 };
 </script>
-
----
 
 <style scoped>
 /* Estilos para la transición de entrada/salida de elementos */
@@ -214,4 +218,22 @@ const handleResolveAlert = async (alertId) => {
   opacity: 0;
   transform: translateX(-30px);
 }
+
+/* Estilos de badges personalizados (si no se cubren completamente con Tailwind) */
+.badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  white-space: nowrap; /* Evita que los badges se dividan en varias líneas */
+}
+
+.badge-secondary {
+  @apply bg-gray-100 text-gray-700;
+}
+
+/* Estas clases no son necesarias si el botón "Resolver" se cambia a texto */
+/* .btn-sm {
+    @apply px-3 py-1.5 text-sm rounded-md;
+}
+.btn-primary {
+  @apply bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+} */
 </style>

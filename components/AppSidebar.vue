@@ -166,7 +166,7 @@ const logout = async () => {
 
 const changeOrganization = () => {
   // Cuando el usuario cambia la selección, el store se actualiza
-  organizationStore.setSelectedOrganization(organizationStore.selectedOrganizationId);
+  organizationStore.setSelectedOrganizationId(organizationStore.selectedOrganizationId);
 };
 
 // Helper functions

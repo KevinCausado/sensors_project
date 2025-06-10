@@ -2,44 +2,74 @@
 import { defineStore } from 'pinia';
 import { useNuxtApp } from '#app';
 import { useOrganizationStore } from './organizations';
+import { useAssetStore } from './assets'; 
 
 export const useSensorStore = defineStore('sensors', {
   state: () => ({
     sensors: [],
     isLoading: false,
     error: null,
-    currentSensor: null, // Para el sensor que se está viendo/editando
-    currentSensorReadings: [], // Este es para la página de detalle de UN sensor
+    currentSensor: null, 
+    currentSensorReadings: [], 
 
-    // --- NUEVOS ESTADOS PARA EL DASHBOARD ---
-    allSensorRecentReadings: {}, // { sensorId: [{value, timestamp}, ...], ... }
-    dashboardRealtimeSubscriptions: {}, // Store individual subscriptions for the chart
+    allSensorRecentReadings: {}, 
+    dashboardRealtimeSubscriptions: {}, 
     detailRealtimeSubscription: null,
-    dashboardSensorUpdatesChannel: null, // For general sensor updates (status, etc.)
-    // Add a specific channel for dashboard chart readings if you manage them separately
+    dashboardSensorUpdatesChannel: null, 
     dashboardChartReadingsChannel: null,
   }),
 
   getters: {
     filteredSensors: (state) => {
       const organizationStore = useOrganizationStore();
-      if (!organizationStore.selectedOrganizationId) {
-        return state.sensors;
+      const assetStore = useAssetStore(); 
+      let filtered = state.sensors;
+
+      console.log('[Sensor Store] filteredSensors - Dependencias:');
+      console.log(`  - organizationStore.selectedOrganizationId: ${organizationStore.selectedOrganizationId}`);
+      console.log(`  - assetStore.assets.length (dentro de SensorStore getter): ${assetStore.assets.length}`);
+
+      if (organizationStore.selectedOrganizationId) {
+        filtered = filtered.filter(sensor =>
+          // ¡CORRECCIÓN CRÍTICA AQUÍ! Cambiado de sensor.organization_id a sensor.organizationId
+          sensor.organizationId === organizationStore.selectedOrganizationId 
+        );
       }
-      return state.sensors.filter(sensor =>
-        sensor.organizationId === organizationStore.selectedOrganizationId
-      );
+
+      const enrichedSensors = filtered.map(sensor => {
+        let assetName = 'N/A';
+        if (assetStore.assets.length > 0 && sensor.assetId) { 
+          const asset = assetStore.assets.find(a => a.id === sensor.assetId);
+          assetName = asset ? asset.name : 'Activo Desconocido';
+          if (!asset) {
+              console.warn(`  - [Sensor Store] filteredSensors: Activo con ID ${sensor.assetId} NO ENCONTRADO para el sensor ${sensor.name}.`);
+          }
+        } else if (sensor.assetId && assetStore.assets.length === 0) {
+            console.log(`  - [Sensor Store] filteredSensors: assetStore.assets está vacío, no se puede mapear assetName para sensor ${sensor.name}.`);
+        }
+        
+        return {
+          ...sensor,
+          assetName: assetName, 
+        };
+      });
+      console.log('[Sensor Store] filteredSensors - Sensores enriquecidos (primeros 5):', enrichedSensors.slice(0,5));
+      return enrichedSensors;
     },
 
-     recentSensors: (state) => {
-      const sortedSensors = [...state.filteredSensors].sort((a, b) => {
+    recentSensors: (state) => {
+      const sensorsToProcess = state.filteredSensors;
+
+      const filtered = sensorsToProcess.filter(sensor => sensor.last_communication);
+
+      const sorted = filtered.sort((a, b) => {
         if (!a.last_communication && !b.last_communication) return 0;
         if (!b.last_communication) return -1;
         if (!a.last_communication) return 1;
         return new Date(b.last_communication).getTime() - new Date(a.last_communication).getTime();
       });
 
-      const latestFive = sortedSensors.slice(0, 5);
+      const latestFive = sorted.slice(0, 5);
 
       return latestFive.map(sensor => ({
         ...sensor,
@@ -56,16 +86,18 @@ export const useSensorStore = defineStore('sensors', {
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        // CÓDIGO CLAVE: Asegúrate de que assets_base trae name, city, state, country
         const { data, error } = await $supabase
           .from('sensors')
           .select(`
             *,
             organizations(name),           
-            assets_base(name, city, state, country)  -- <<< ESTO ES LO CRÍTICO >>>
+            assets_base(name, city, state, country)
           `);
 
-        if (error) throw error;
+        if (error) {
+            console.error('[Sensor Store] Supabase error fetching sensors:', error);
+            throw error;
+        }
 
         this.sensors = data.map(sensor => ({
           id: sensor.id,
@@ -74,11 +106,10 @@ export const useSensorStore = defineStore('sensors', {
           model: sensor.model,
           location_description: sensor.location_description,
           status: sensor.status,
-          organizationId: sensor.organization_id,
+          organizationId: sensor.organization_id, // Esto es correcto: mapea el snake_case de DB a camelCase en el store
           organizationName: sensor.organizations ? sensor.organizations.name : 'N/A',
-          assetId: sensor.asset_id,
+          assetId: sensor.asset_id, 
           assetName: sensor.assets_base ? sensor.assets_base.name : 'N/A', 
-          // Mapeo de los campos de ubicación del activo
           assetCity: sensor.assets_base ? sensor.assets_base.city : 'N/A',
           assetState: sensor.assets_base ? sensor.assets_base.state : 'N/A',
           assetCountry: sensor.assets_base ? sensor.assets_base.country : 'N/A',
@@ -88,20 +119,18 @@ export const useSensorStore = defineStore('sensors', {
           thresholds: sensor.thresholds,
           type: sensor.type,
           unit: sensor.unit, 
-          // Campos 'city', 'state', 'country' directamente en el sensor.
-          // Si ya eliminaste estas columnas de la tabla 'sensors' en tu DB,
-          // estas propiedades siempre serán null/undefined. Puedes eliminarlas del mapeo si lo deseas.
           city: sensor.city, 
           state: sensor.state, 
           country: sensor.country,
           last_value : sensor.last_value,           
           last_unit: sensor.last_unit,
-          last_reading_timestamp : sensor.last_reading_timestamp
+          last_reading_timestamp : sensor.last_reading_timestamp,
+          created_at : sensor.created_at,
         }));
-        console.log('Fetched sensors (with asset/org names and asset location):', this.sensors);
+        console.log('[Sensor Store] fetchSensors - FINALMENTE CARGADOS Y MAPEADOS:', this.sensors);
       } catch (e) {
         this.error = 'Failed to fetch sensors: ' + e.message;
-        console.error('Error fetching sensors:', e);
+        console.error('[Sensor Store] Error fetching sensors:', e);
       } finally {
         this.isLoading = false;
       }
@@ -114,18 +143,27 @@ export const useSensorStore = defineStore('sensors', {
 
         try {
             const { $supabase } = useNuxtApp();
-            // CÓDIGO CLAVE: Asegúrate de que assets_base trae name, city, state, country
+            // --- DEPURACIÓN: Log para ver la llamada a Supabase ---
+            console.log(`[Sensor Store] fetchSensor: Intentando cargar sensor con ID: ${id}`);
             const { data, error } = await $supabase
                 .from('sensors')
-                .select('*, organizations(name), assets_base(name, city, state, country)') // <<< ESTO ES LO CRÍTICO >>>
+                .select('*, organizations(name), assets_base(name, city, state, country)')
                 .eq('id', id)
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error('[Sensor Store] Supabase error fetching single sensor:', error);
+                throw error;
+            }
             if (!data) {
                 this.error = `Sensor con ID ${id} no encontrado.`;
+                console.warn(`[Sensor Store] Sensor con ID ${id} no encontrado en la respuesta de Supabase.`);
                 return null;
             }
+
+            // --- DEPURACIÓN: Log para ver los datos brutos de Supabase ---
+            console.log('[Sensor Store] fetchSensor: Datos brutos de Supabase para el sensor:', data);
+
 
             const mappedSensor = {
                 id: data.id,
@@ -139,8 +177,8 @@ export const useSensorStore = defineStore('sensors', {
                 organizationId: data.organization_id,
                 organizationName: data.organizations ? data.organizations.name : 'N/A',
                 assetId: data.asset_id,
+                // --- CRÍTICO: Asegurarse de que data.assets_base existe antes de acceder a .name ---
                 assetName: data.assets_base ? data.assets_base.name : 'N/A',
-                // Mapeo de los campos de ubicación del activo
                 assetCity: data.assets_base ? data.assets_base.city : 'N/A',
                 assetState: data.assets_base ? data.assets_base.state : 'N/A',
                 assetCountry: data.assets_base ? data.assets_base.country : 'N/A',
@@ -148,22 +186,21 @@ export const useSensorStore = defineStore('sensors', {
                 battery_level: data.battery_level,
                 signal_strength: data.signal_strength,
                 thresholds: data.thresholds,
-                // Campos 'city', 'state', 'country' directamente en el sensor.
-                // Si ya eliminaste estas columnas de la tabla 'sensors' en tu DB,
-                // estas propiedades siempre serán null/undefined. Puedes eliminarlas del mapeo si lo deseas.
                 city: data.city, 
-               state: data.state,
-               country: data.country,
-               last_value : data.last_value,           
-               last_unit: data.last_unit,
-               last_reading_timestamp : data.last_reading_timestamp
+                state: data.state,
+                country: data.country,
+                last_value : data.last_value,           
+                last_unit: data.last_unit,
+                last_reading_timestamp : data.last_reading_timestamp,
+                created_at: data.created_at
             };
             this.currentSensor = mappedSensor;
-            console.log('Fetched single sensor with asset and organization name and asset location:', this.currentSensor);
+            // --- DEPURACIÓN: Log para ver el objeto mapeado final ---
+            console.log('[Sensor Store] fetchSensor: Objeto currentSensor mapeado:', this.currentSensor);
             return mappedSensor;
         } catch (e) {
             this.error = 'Failed to fetch sensor: ' + e.message;
-            console.error('Error fetching single sensor:', e);
+            console.error('[Sensor Store] Error fetching single sensor:', e);
             return null;
         } finally {
             this.isLoading = false;
@@ -180,21 +217,21 @@ export const useSensorStore = defineStore('sensors', {
           asset_id: sensorData.asset_id, 
         };
         delete dataToSend.organizationId;
-        // Si ya moviste city, state, country de la tabla sensors a assets_base,
-        // asegúrate de que NO se envíen en sensorData aquí.
-        // Si la tabla 'sensors' no tiene estas columnas, Supabase las ignorará.
         
         const { data, error } = await useNuxtApp().$supabase
           .from('sensors')
           .insert([dataToSend])
           .select();
-        if (error) throw error;
-
+        if (error) {
+            console.error('[Sensor Store] Supabase error creating sensor:', error);
+            throw error;
+        }
         await this.fetchSensors(); 
+        console.log('[Sensor Store] Sensor creado:', data[0]);
         return data[0];
       } catch (e) {
         this.error = 'Failed to create sensor: ' + e.message;
-        console.error('Error creating sensor:', e);
+        console.error('[Sensor Store] Error creating sensor:', e);
         throw e;
       } finally {
         this.isLoading = false;
@@ -211,24 +248,25 @@ export const useSensorStore = defineStore('sensors', {
           asset_id: sensorData.asset_id, 
         };
         delete dataToSend.organizationId;
-        // Igual que en createSensor: asegúrate de que NO se envíen
-        // si ya moviste estos campos de la tabla 'sensors'.
         
         const { data, error } = await useNuxtApp().$supabase
           .from('sensors')
           .update(dataToSend)
           .eq('id', id)
           .select();
-        if (error) throw error;
-
+        if (error) {
+            console.error('[Sensor Store] Supabase error updating sensor:', error);
+            throw error;
+        }
         await this.fetchSensors();
         if (this.currentSensor && this.currentSensor.id === id) {
           await this.fetchSensor(id); 
         }
+        console.log(`[Sensor Store] Sensor actualizado ID: ${id}`, data[0]);
         return data[0];
       } catch (e) {
         this.error = 'Failed to update sensor: ' + e.message;
-        console.error('Error updating sensor:', e);
+        console.error('[Sensor Store] Error updating sensor:', e);
         throw e;
       } finally {
         this.isLoading = false;
@@ -243,15 +281,18 @@ export const useSensorStore = defineStore('sensors', {
           .from('sensors')
           .delete()
           .eq('id', id);
-        if (error) throw error;
-
+        if (error) {
+            console.error('[Sensor Store] Supabase error deleting sensor:', error);
+            throw error;
+        }
         this.sensors = this.sensors.filter(s => s.id !== id);
         if (this.currentSensor && this.currentSensor.id === id) {
           this.currentSensor = null;
         }
+        console.log(`[Sensor Store] Sensor eliminado ID: ${id}`);
       } catch (e) {
         this.error = 'Failed to delete sensor: ' + e.message;
-        console.error('Error deleting sensor:', e);
+        console.error('[Sensor Store] Error deleting sensor:', e);
         throw e;
       } finally {
         this.isLoading = false;
@@ -260,6 +301,7 @@ export const useSensorStore = defineStore('sensors', {
 
      async subscribeToSensorUpdates() {
       if (this.dashboardSensorUpdatesChannel) {
+        console.log('[Sensors Store] Ya suscrito a cambios generales de sensores.');
         return;
       }
       try {
@@ -267,7 +309,7 @@ export const useSensorStore = defineStore('sensors', {
         const channel = $supabase
           .channel('public:sensors_general_updates')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'sensors' }, (payload) => {
-            console.log('[Sensors Store] Cambio general en tabla de sensores:', payload);
+            console.log('[Sensors Store] Cambio general en tabla de sensores (Realtime):', payload);
             this.fetchSensors(); 
           })
           .subscribe();
@@ -282,18 +324,19 @@ export const useSensorStore = defineStore('sensors', {
       if (this.dashboardSensorUpdatesChannel) {
         await this.dashboardSensorUpdatesChannel.unsubscribe();
         this.dashboardSensorUpdatesChannel = null;
-        console.log('Desuscrito de cambios generales en la tabla de sensores.');
+        console.log('[Sensors Store] Desuscrito de cambios generales en la tabla de sensores.');
       }
     },
 
     async subscribeToDashboardReadings(sensorIds) {
       const { $supabase } = useNuxtApp();
+      console.log('[Sensors Store] subscribeToDashboardReadings llamado con IDs:', sensorIds);
 
       for (const id in this.dashboardRealtimeSubscriptions) {
         if (!sensorIds.includes(id)) {
           await this.dashboardRealtimeSubscriptions[id].unsubscribe();
           delete this.dashboardRealtimeSubscriptions[id];
-          console.log(`Unsubscribed from sensor readings for sensor ${id}`);
+          console.log(`[Sensors Store] Desuscrito de lecturas de sensor para sensor ${id} (ya no seleccionado).`);
         }
       }
 
@@ -307,7 +350,10 @@ export const useSensorStore = defineStore('sensors', {
                 .order('timestamp', { ascending: false })
                 .limit(50); 
 
-            if (error) throw error;
+            if (error) {
+                console.error(`[Sensors Store] Error al cargar lecturas históricas para sensor ${sensorId}:`, error);
+                throw error;
+            }
 
             this.allSensorRecentReadings[sensorId] = data.reverse(); 
 
@@ -318,7 +364,7 @@ export const useSensorStore = defineStore('sensors', {
               table: 'sensor_readings',
               filter: `sensor_id=eq.${sensorId}`
             }, payload => {
-              console.log(`New reading for chart sensor ${sensorId}:`, payload.new);
+              console.log(`[Sensors Store] Nueva lectura en tiempo real para sensor ${sensorId}:`, payload.new);
               const newReading = {
                 value: payload.new.value,
                 timestamp: payload.new.timestamp,
@@ -331,9 +377,9 @@ export const useSensorStore = defineStore('sensors', {
             }).subscribe();
 
             this.dashboardRealtimeSubscriptions[sensorId] = channel;
-            console.log(`Subscribed to real-time chart readings for sensor ${sensorId}.`);
+            console.log(`[Sensors Store] Suscrito a lecturas en tiempo real para gráfico del sensor ${sensorId}.`);
           } catch (e) {
-            console.error(`Error subscribing to chart readings for sensor ${sensorId}:`, e);
+            console.error(`[Sensors Store] Error al suscribirse a lecturas de gráfico para sensor ${sensorId}:`, e);
           }
         }
       }
@@ -344,26 +390,26 @@ export const useSensorStore = defineStore('sensors', {
         await this.dashboardRealtimeSubscriptions[id].unsubscribe();
         delete this.dashboardRealtimeSubscriptions[id];
       }
-      console.log('Unsubscribed from all dashboard chart readings.');
+      console.log('[Sensors Store] Desuscrito de todas las lecturas de gráfico del dashboard.');
 
-      if (this.dashboardSensorUpdatesChannel) {
-        await this.dashboardSensorUpdatesChannel.unsubscribe();
-        this.dashboardSensorUpdatesChannel = null;
-        console.log('Unsubscribed from general dashboard sensor updates.');
+      if (this.dashboardChartReadingsChannel) {
+        await this.dashboardChartReadingsChannel.unsubscribe();
+        this.dashboardChartReadingsChannel = null;
+        console.log('[Sensors Store] Desuscrito del canal de lecturas de gráfico del dashboard.');
       }
     },
 
     async subscribeToDashboardRecentReadings() {
       if (this.dashboardSensorUpdatesChannel) { 
-        await this.dashboardSensorUpdatesChannel.unsubscribe();
-        this.dashboardSensorUpdatesChannel = null;
+        console.log('[Sensors Store] Ya suscrito a dashboardSensorUpdatesChannel.');
+        return; 
       }
 
       const { $supabase } = useNuxtApp();
       try {
         const channel = $supabase.channel('dashboard_sensor_readings_changes');
         channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sensor_readings' }, payload => {
-          console.log('Cambio en lecturas de sensor para dashboard (recent):', payload);
+          console.log('[Sensors Store] Cambio en lecturas de sensor para dashboard (recent):', payload);
           const sensorId = payload.new.sensor_id;
           const newReading = {
             value: payload.new.value,
@@ -371,16 +417,15 @@ export const useSensorStore = defineStore('sensors', {
             unit: payload.new.unit
           };
 
-          if (!this.allSensorRecentReadings[sensorId]) {
-            this.allSensorRecentReadings[sensorId] = [];
-          }
-          this.allSensorRecentReadings[sensorId].unshift(newReading);
-          this.allSensorRecentReadings[sensorId] = this.allSensorRecentReadings[sensorId].slice(0, 1);
+          this.allSensorRecentReadings[sensorId] = [newReading]; 
+
+          this.fetchSensors(); 
+
         }).subscribe();
-        this.dashboardSensorUpdatesChannel = channel;
-        console.log('Suscrito a actualizaciones de lecturas recientes para el dashboard (StatCard).');
+        this.dashboardSensorUpdatesChannel = channel; 
+        console.log('[Sensors Store] Suscrito a actualizaciones de lecturas recientes para el dashboard (StatCard).');
       } catch (e) {
-        console.error('Error al suscribirse a actualizaciones de lecturas recientes para el dashboard:', e);
+        console.error('[Sensors Store] Error al suscribirse a actualizaciones de lecturas recientes para el dashboard:', e);
       }
     },
 
@@ -388,7 +433,7 @@ export const useSensorStore = defineStore('sensors', {
       if (this.dashboardSensorUpdatesChannel) {
         await this.dashboardSensorUpdatesChannel.unsubscribe();
         this.dashboardSensorUpdatesChannel = null;
-        console.log('Desuscrito de actualizaciones de lecturas recientes para el dashboard (StatCard).');
+        console.log('[Sensors Store] Desuscrito de actualizaciones de lecturas recientes para el dashboard (StatCard).');
       }
     },
 
@@ -410,9 +455,12 @@ export const useSensorStore = defineStore('sensors', {
           .order('timestamp', { ascending: false })
           .limit(50);
 
-        if (error) throw error;
+        if (error) {
+            console.error(`[Sensors Store] Supabase error fetching detail readings for sensor ${sensorId}:`, error);
+            throw error;
+        }
         this.currentSensorReadings = data;
-        console.log(`Lecturas iniciales para sensor ${sensorId}:`, this.currentSensorReadings);
+        console.log(`[Sensors Store] Lecturas iniciales para sensor ${sensorId}:`, this.currentSensorReadings);
 
         const channel = $supabase.channel(`sensor_readings_${sensorId}`);
         channel.on('postgres_changes', {
@@ -421,7 +469,7 @@ export const useSensorStore = defineStore('sensors', {
           table: 'sensor_readings',
           filter: `sensor_id=eq.${sensorId}`
         }, payload => {
-          console.log(`Cambio en lecturas de sensor ${sensorId}:`, payload);
+          console.log(`[Sensors Store] Cambio en lecturas de sensor ${sensorId} (Realtime):`, payload);
           if (payload.eventType === 'INSERT') {
             this.currentSensorReadings.unshift(payload.new);
           } else if (payload.eventType === 'UPDATE') {
@@ -434,10 +482,10 @@ export const useSensorStore = defineStore('sensors', {
           }
         }).subscribe();
         this.detailRealtimeSubscription = channel;
-        console.log(`Suscrito a lecturas en tiempo real para sensor ${sensorId}.`);
+        console.log(`[Sensors Store] Suscrito a lecturas en tiempo real para sensor ${sensorId}.`);
       } catch (e) {
         this.error = 'Failed to fetch or subscribe to detail readings: ' + e.message;
-        console.error('Error fetching/subscribing to detail readings:', e);
+        console.error('[Sensors Store] Error fetching/subscribing to detail readings:', e);
       } finally {
         this.isLoading = false;
       }
@@ -447,7 +495,7 @@ export const useSensorStore = defineStore('sensors', {
       if (this.detailRealtimeSubscription) {
         await this.detailRealtimeSubscription.unsubscribe();
         this.detailRealtimeSubscription = null;
-        console.log('Desuscrito de lecturas de detalle.');
+        console.log('[Sensors Store] Desuscrito de lecturas de detalle.');
       }
     },
 
@@ -461,13 +509,15 @@ export const useSensorStore = defineStore('sensors', {
                 .eq('sensor_id', sensorId)
                 .order('timestamp', { ascending: false })
                 .limit(limit);
-            if (error) throw error;
-
+            if (error) {
+                console.error(`[Sensors Store] Supabase error fetching readings for sensor ${sensorId}:`, error);
+                throw error;
+            }
             this.currentSensorReadings = data;
-            console.log('Fetched sensor readings:', this.currentSensorReadings);
+            console.log('[Sensors Store] Fetched sensor readings (historial):', this.currentSensorReadings);
         } catch (e) {
             this.error = 'Failed to fetch readings: ' + e.message;
-            console.error('Error fetching readings:', e);
+            console.error('[Sensors Store] Error fetching readings:', e);
         } finally {
             this.isLoading = false;
         }

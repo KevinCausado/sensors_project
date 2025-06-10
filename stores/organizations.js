@@ -34,6 +34,11 @@ export const useOrganizationStore = defineStore('organizations', {
         }
 
         this.organizations = data;
+        // Opcional: Si no hay una organización seleccionada y hay organizaciones,
+        // puedes establecer una por defecto aquí, por ejemplo, la primera o "Todas" (si su ID es null)
+        // if (!this.selectedOrganizationId && this.organizations.length > 0) {
+        //   this.setSelectedOrganizationId(this.organizations[0].id);
+        // }
       } catch (err) {
         console.error('Error fetching organizations:', err);
         this.error = err.message || 'Error al cargar las organizaciones.';
@@ -135,7 +140,7 @@ export const useOrganizationStore = defineStore('organizations', {
       }
     },
 
-    async fetchOrganizationWithRelations(organizationId) {
+     async fetchOrganizationWithRelations(organizationId) {
       this.isLoading = true;
       this.error = null;
       try {
@@ -195,7 +200,9 @@ export const useOrganizationStore = defineStore('organizations', {
               asset_id,
               sensor_id,            
               threshold_normal_min,
-              threshold_normal_max
+              threshold_normal_max,
+              assets_base(name) 
+                                               
             )
           `)
           .eq('id', organizationId)
@@ -211,7 +218,7 @@ export const useOrganizationStore = defineStore('organizations', {
           throw error;
         }
 
-        // Post-processing: Flatten roleName and assetTypeName for easier access
+        // Post-processing: Flatten roleName, assetTypeName, and add assetName for alerts
         if (data) {
           if (data.users) {
             data.users = data.users.map(user => ({
@@ -225,8 +232,24 @@ export const useOrganizationStore = defineStore('organizations', {
               assetTypeName: asset.assets_types ? asset.assets_types.name : null
             }));
           }
+           if (data.sensors) {
+              data.sensors = data.sensors.map(sensor => ({
+                  ...sensor,
+                  thresholds: sensor.thresholds && sensor.thresholds.length > 0 ? sensor.thresholds[0] : null,
+              }));
+          }
+          // INICIO DEL CAMBIO: Mapear el nombre del activo para las alertas
+          if (data.alerts) {
+            data.alerts = data.alerts.map(alert => ({
+              ...alert,
+              // Accede a la propiedad 'name' dentro del objeto 'assets_base' anidado que Supabase retorna.
+              // 'assets_base' aquí es el nombre de la relación que Supabase te dio al hacer el .select()
+              assetName: alert.assets_base ? alert.assets_base.name : 'N/A' 
+            }));
+          }
+          // FIN DEL CAMBIO
         }
-
+        console.log('Organización cargada con relaciones (para depuración):', data); // Depuración crítica
         this.selectedOrganization = data;
         return data;
 
@@ -238,6 +261,16 @@ export const useOrganizationStore = defineStore('organizations', {
       } finally {
         this.isLoading = false;
       }
+    },
+
+    /**
+     * Establece el ID de la organización actualmente seleccionada en el estado.
+     * Esta acción es usada por componentes como el sidebar para cambiar el filtro global.
+     * @param {string|null} orgId - El ID de la organización a seleccionar, o null para "Todas las organizaciones".
+     */
+    setSelectedOrganizationId(orgId) {
+      console.log(`[Organization Store] setSelectedOrganizationId llamado con ID: ${orgId}`);
+      this.selectedOrganizationId = orgId;
     },
   },
 });

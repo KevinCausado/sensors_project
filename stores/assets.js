@@ -14,6 +14,7 @@ export const useAssetStore = defineStore('assets', {
     loading: false, // General loading state for the store
     error: null, // General error state for the store
     currentAsset: null, // For when a single asset is edited/viewed
+    _dataInitialized: false, // Nueva bandera para controlar la inicialización de datos de formularios
   }),
 
   getters: {
@@ -37,25 +38,35 @@ export const useAssetStore = defineStore('assets', {
         const { $supabase } = useNuxtApp();
         const organizationStore = useOrganizationStore(); // Obtener instancia del store de organizaciones
 
-        // Seleccionar todas las columnas de assets_base. No usar uniones explícitas aquí para evitar el error de caché.
+        // Asegurarse de que los datos de referencia (assetTypes, etc.) estén inicializados
+        // antes de intentar mapear. Esto es CRÍTICO para asegurar que assetTypes tenga datos.
+        if (!this._dataInitialized) {
+            await this.initializeDataForForms();
+        }
+        // También aseguramos que las organizaciones estén cargadas si vamos a mapear organization_name
+        if (organizationStore.organizations.length === 0) {
+            await organizationStore.fetchOrganizations();
+        }
+
+
         const { data, error } = await $supabase
           .from('assets_base')
-          .select(`*`)
+          .select(`*, asset_type_id, organization_id, iso_group_id, rigidity_type_id, foundation_type_id, coupling_type_id`)
           .order('name', { ascending: true });
 
         if (error) throw error;
 
-        // Mapear los datos para incluir nombres legibles buscando en los arrays pre-cargados
         this.assets = data.map(asset => ({
           ...asset,
-          // Buscar el nombre de la organización usando el ID y el array `organizations` del store
           organization_name: organizationStore.organizations.find(org => org.id === asset.organization_id)?.name || 'N/A',
-          asset_type_name: this.assetTypes.find(type => type.id === asset.asset_type_id)?.name || 'N/A',       
-          iso_group_name: this.isoGroups.find(group => group.id === asset.iso_group_id)?.name || 'N/A',         
+          assetTypeName: this.assetTypes.find(type => type.id === asset.asset_type_id)?.name || 'N/A',       
+          iso_group_name: this.isoGroups.find(group => group.id === asset.iso_group_id)?.name || 'N/A',      
           rigidity_type_name: this.rigidityTypes.find(type => type.id === asset.rigidity_type_id)?.name || 'N/A', 
           foundation_type_name: this.foundationTypes.find(type => type.id === asset.foundation_type_id)?.name || 'N/A', 
           coupling_type_name: this.couplingTypes.find(type => type.id === asset.coupling_type_id)?.name || 'N/A', 
         }));
+        console.log('[Assets Store] Activos cargados (con assetTypeName):', this.assets);
+
       } catch (e) {
         console.error('Error fetching assets:', e);
         this.error = e.message;
@@ -71,27 +82,33 @@ export const useAssetStore = defineStore('assets', {
         const { $supabase } = useNuxtApp();
         const organizationStore = useOrganizationStore(); // Obtener instancia del store de organizaciones
 
-        // CÓDIGO CORREGIDO: Seleccionar todas las columnas (*) y mapear manualmente.
-        // Esto evita el error de "relationship not found" en la vista de detalle.
+        // Asegurarse de que los datos de referencia (assetTypes, etc.) estén inicializados
+        if (!this._dataInitialized) {
+            await this.initializeDataForForms();
+        }
+        if (organizationStore.organizations.length === 0) {
+            await organizationStore.fetchOrganizations();
+        }
+
         const { data, error } = await $supabase
           .from('assets_base')
-          .select(`*`) // Seleccionar todas las columnas de assets_base
+          .select(`*`) // Aquí puedes usar '*' si sabes que trae todos los IDs de relaciones
           .eq('id', id)
           .single();
 
         if (error) throw error;
 
         if (data) {
-          // Mapear para incluir nombres legibles buscando en los arrays pre-cargados
           this.currentAsset = {
             ...data,
             organization_name: organizationStore.organizations.find(org => org.id === data.organization_id)?.name || 'N/A',
-            asset_type_name: this.assetTypes.find(type => type.id === data.asset_type_id)?.name || 'N/A',
+            assetTypeName: this.assetTypes.find(type => type.id === data.asset_type_id)?.name || 'N/A',
             iso_group_name: this.isoGroups.find(group => group.id === data.iso_group_id)?.name || 'N/A',
             rigidity_type_name: this.rigidityTypes.find(type => type.id === data.rigidity_type_id)?.name || 'N/A',
             foundation_type_name: this.foundationTypes.find(type => type.id === data.foundation_type_id)?.name || 'N/A',
             coupling_type_name: this.couplingTypes.find(type => type.id === data.coupling_type_id)?.name || 'N/A',
           };
+          console.log('[Assets Store] Activo individual cargado (con assetTypeName):', this.currentAsset);
           return this.currentAsset;
         }
         return null;
@@ -112,12 +129,12 @@ export const useAssetStore = defineStore('assets', {
         const { $supabase } = useNuxtApp();
         const { data, error } = await $supabase
           .from('assets_base')
-          .insert(assetData)
+          .insert([assetData])
           .select()
           .single();
 
         if (error) throw error;
-        await this.fetchAssets(); // Refresh the main list
+        await this.fetchAssets(); // Refresh the main list to include the new asset with mapped names
         return data;
       } catch (e) {
         console.error('Error creating asset:', e);
@@ -141,10 +158,14 @@ export const useAssetStore = defineStore('assets', {
           .single();
 
         if (error) throw error;
-        await this.fetchAssets(); // Refresh the main list
+        await this.fetchAssets(); // Refresh the main list to reflect changes with mapped names
+        if (this.currentAsset && this.currentAsset.id === id) {
+          // Re-fetch para el currentAsset para asegurar que todos los campos mapeados se actualicen
+          await this.fetchAssetById(id); 
+        }
         return data;
       } catch (e) {
-        console.error(`Error updating asset with ID ${id}:`, e);
+        console.error('Error updating asset:', e);
         this.error = e.message;
         throw e;
       } finally {
@@ -165,7 +186,7 @@ export const useAssetStore = defineStore('assets', {
         if (error) throw error;
         this.assets = this.assets.filter(asset => asset.id !== id);
       } catch (e) {
-        console.error(`Error deleting asset with ID ${id}:`, e);
+        console.error('Error deleting asset:', e);
         this.error = e.message;
         throw e;
       } finally {
@@ -173,7 +194,14 @@ export const useAssetStore = defineStore('assets', {
       }
     },
 
+    // Cargar datos de referencia para formularios (tipos de activo, grupos ISO, etc.)
     async initializeDataForForms() {
+      // Si ya se ha inicializado, salir. Esto previene llamadas redundantes.
+      if (this._dataInitialized) {
+        console.log('[Assets Store] initializeDataForForms: Datos ya inicializados. Saliendo.');
+        return;
+      }
+
       this.loading = true; 
       this.error = null;
       try {
@@ -205,9 +233,13 @@ export const useAssetStore = defineStore('assets', {
         this.foundationTypes = foundationTypesData;
         this.couplingTypes = couplingTypesData;
 
+        this._dataInitialized = true; // Establecer la bandera a true
+        console.log('[Assets Store] initializeDataForForms: Datos de formularios inicializados con éxito.');
+
       } catch (error) {
         console.error('Error loading form initialization data:', error);
         this.error = error.message;
+        throw error;
       } finally {
         this.loading = false;
       }

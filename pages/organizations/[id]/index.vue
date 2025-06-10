@@ -101,7 +101,7 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="user in organization.users" :key="user.id">
-               <td class="px-6 py-4 whitespace-nowrap">{{ user.first_name }} {{ user.last_name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ user.first_name }} {{ user.last_name }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ user.email }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="`badge ${getRoleBadgeClass(user.roleName)}`">{{ translateRole(user.roleName) }}</span>
@@ -130,6 +130,7 @@
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación Geográfica</th>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
               </tr>
             </thead>
@@ -139,6 +140,11 @@
                 <td class="px-6 py-4 whitespace-nowrap">{{ asset.assetTypeName || "N/A" }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ asset.description || "N/A" }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ getAssetLocation(asset) }}</td>
+                 <td class="px-6 py-4 whitespace-nowrap">
+                 <span :class="`badge ${organization.is_active ? 'badge-success' : 'badge-danger'}`">
+                    {{ organization.is_active ? "Activo" : "Inactivo" }}
+                  </span>
+                </td>              
                 <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(asset.created_at) }}</td>
               </tr>
             </tbody>
@@ -182,6 +188,8 @@
           <table class="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activo</th>
+                <!-- NUEVO: Columna para el nombre del Activo -->
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mensaje</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
@@ -192,10 +200,12 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="alert in organization.alerts" :key="alert.id">
-                <td class="px-6 py-4 whitespace-nowrap">{{ alert.type || 'N/A' }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ alert.assetName || "N/A" }}</td>
+                <!-- NUEVO: Celda para el nombre del Activo -->
+                <td class="px-6 py-4 whitespace-nowrap">{{ alert.type || "N/A" }}</td>
                 <!-- Modificación aquí: Permitir salto de línea y texto más pequeño -->
                 <td class="px-6 py-4 text-xs text-gray-600 align-top max-w-xs break-words">
-                    {{ alert.description || 'N/A' }}
+                  {{ alert.description || "N/A" }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="`badge ${getAlertPriorityBadgeClass(alert.priority)}`">
@@ -333,9 +343,8 @@ const getAssetLocation = (asset) => {
   if (asset.city) parts.push(asset.city);
   if (asset.state) parts.push(asset.state);
   if (asset.country) parts.push(asset.country);
-  return parts.length > 0 ? parts.join(', ') : "N/A";
+  return parts.length > 0 ? parts.join(", ") : "N/A";
 };
-
 
 onMounted(async () => {
   const orgId = route.params.id;
