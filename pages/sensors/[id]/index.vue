@@ -1,186 +1,10 @@
-<script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useSensorStore } from "@/stores/sensors";
-import { useAlertStore } from "@/stores/alerts";
-import { useOrganizationStore } from "@/stores/organizations"; // Import organization store
-import AlertList from "@/components/AlertList.vue"; // Make sure this path is correct
-
-// 1. Declare stores and other dependencies first
-const route = useRoute();
-const router = useRouter();
-const sensorStore = useSensorStore();
-const alertStore = useAlertStore();
-const organizationStore = useOrganizationStore(); // Initialize organization store
-
-// --- Paginación para Lecturas Recientes ---
-const itemsPerPage = ref(10); // Puedes ajustar cuántas lecturas mostrar por página
-const currentPage = ref(1);
-
-// 2. Then, define computed properties that depend on the stores
-const sortedAllReadings = computed(() => {
-  if (!sensorStore.currentSensorReadings) return [];
-  return [...sensorStore.currentSensorReadings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-});
-
-const totalPages = computed(() => {
-  if (!sortedAllReadings.value.length) return 1;
-  return Math.ceil(sortedAllReadings.value.length / itemsPerPage.value);
-});
-
-const paginatedReadings = computed(() => {
-  const startIndex = (currentPage.value - 1) * itemsPerPage.value;
-  const endIndex = startIndex + itemsPerPage.value;
-  return sortedAllReadings.value.slice(startIndex, endIndex);
-});
-
-const nextPage = () => {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++;
-  }
-};
-
-const prevPage = () => {
-  if (currentPage.value > 1) {
-    currentPage.value--;
-  }
-};
-
-watch(
-  () => sensorStore.currentSensorReadings,
-  () => {
-    currentPage.value = 1;
-  },
-  { deep: true }
-);
-
-// Métodos para clases de estado y traducción
-const getSensorStatusClass = (status) => {
-  switch (status) {
-    case "active":
-      return "bg-green-100 text-green-800";
-    case "maintenance":
-      return "bg-yellow-100 text-yellow-800";
-    case "inactive":
-      return "bg-red-100 text-red-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-};
-
-const translateSensorStatus = (status) => {
-  switch (status) {
-    case "active":
-      return "Activo";
-    case "maintenance":
-      return "Mantenimiento";
-    case "inactive":
-      return "Inactivo";
-    default:
-      return status;
-  }
-};
-
-const getAlertClass = (severity) => {
-  switch (severity) {
-    case "critical":
-      return "bg-red-100 text-red-800 border-red-200";
-    case "warning":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "info":
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-200";
-  }
-};
-
-// Propiedad computada para filtrar y ENRIQUECER las alertas para el sensor actual
-const alertsForCurrentSensor = computed(() => {
-  const currentSensorId = sensorStore.currentSensor?.id;
-  if (!currentSensorId || !alertStore.alerts || alertStore.alerts.length === 0) {
-    return [];
-  }
-
-  // Filter alerts by the current sensor's ID
-  const filtered = alertStore.alerts.filter((alert) => alert.sensor_id === currentSensorId);
-
-  // Now, enrich each filtered alert with sensor and organization details
-  return filtered.map((alert) => {
-    // Find the sensor associated with this alert
-    const sensor = sensorStore.sensors.find((s) => s.id === alert.sensor_id);
-    const sensorName = sensor ? sensor.name : "Desconocido";
-
-    // Find the organization associated with this alert
-    // If the alert has an organization_id, use it. Otherwise, try to get from the sensor.
-    const organizationId = alert.organization_id || sensor?.organization_id;
-    const organization = organizationStore.organizations.find((org) => org.id === organizationId);
-    const organizationName = organization ? organization.name : "Desconocida";
-
-    return {
-      ...alert,
-      sensorName: sensorName,
-      organizationName: organizationName,
-    };
-  });
-});
-
-// Propiedad computada para el SensorChart
-const sensorForChart = computed(() => {
-  if (!sensorStore.currentSensor) return null;
-  return {
-    ...sensorStore.currentSensor,
-    readings: sensorStore.currentSensorReadings, // SensorChart espera las lecturas dentro del objeto sensor
-  };
-});
-
-// Lifecycle Hooks
-onMounted(async () => {
-  try {
-    await sensorStore.fetchSensors(); // Fetch all sensors to populate sensorStore.sensors
-    await organizationStore.fetchOrganizations(); // Fetch all organizations
-    await sensorStore.fetchSensor(route.params.id);
-    await sensorStore.fetchAndSubscribeToDetailReadings(route.params.id);
-    await alertStore.fetchAlerts(); // Fetch all alerts
-    await alertStore.subscribeToAlertUpdates(); // Subscribe to real-time alert updates
-  } catch (error) {
-    console.error("Error al cargar sensor o configurar suscripción:", error);
-    sensorStore.error = error.message || "Error desconocido al cargar el sensor.";
-  }
-});
-
-onUnmounted(async () => {
-  await sensorStore.unsubscribeFromDetailReadings();
-  await alertStore.unsubscribeFromAlertUpdates();
-});
-
-watch(
-  () => route.params.id,
-  async (newId, oldId) => {
-    if (newId && newId !== oldId) {
-      console.log(`ID del sensor cambió de ${oldId} a ${newId}. Recargando y re-suscribiéndose a lecturas y alertas.`);
-      try {
-        await sensorStore.unsubscribeFromDetailReadings();
-        await alertStore.unsubscribeFromAlertUpdates();
-
-        await sensorStore.fetchSensor(newId);
-        await sensorStore.fetchAndSubscribeToDetailReadings(newId);
-        await alertStore.fetchAlerts(); // Re-fetch alerts for potential changes
-        await alertStore.subscribeToAlertUpdates(); // Re-subscribe for real-time updates
-      } catch (error) {
-        console.error("Error al cambiar de sensor o configurar suscripción:", error);
-        sensorStore.error = error.message || "Error desconocido al cargar el sensor.";
-      }
-    }
-  }
-);
-</script>
-
 <template>
   <div>
     <PageHeader title="Detalles del Sensor" :subtitle="sensorStore.currentSensor?.name">
       <template #actions>
         <div class="flex gap-2">
           <NuxtLink to="/sensors" class="btn btn-secondary">Volver</NuxtLink>
+          <!-- Botón de edición del sensor -->         
         </div>
       </template>
     </PageHeader>
@@ -204,38 +28,38 @@ watch(
             <p class="text-sm font-medium text-gray-500">Nombre</p>
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.name }}</p>
           </div>
+           <div>
+            <p class="text-sm font-medium text-gray-500">Activo</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.assetName || "N/A" }}</p>
+          </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Número de Serie</p>
-            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.serial_number }}</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.serial_number || "N/A" }}</p>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Modelo</p>
-            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.model }}</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.model || "N/A" }}</p>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Tipo</p>
-            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.type }}</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.type || "N/A" }}</p>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Unidad</p>
-            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.unit }}</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.unit || "N/A" }}</p>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Organización</p>
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.organizationName || "N/A" }}</p>
           </div>
+          <!-- NUEVO: Ubicación Geográfica del Activo -->
           <div>
-            <p class="text-sm font-medium text-gray-500">Ubicación Geográfica:</p>
-            <p class="mt-1 text-gray-900">
-              {{ sensorStore.currentSensor?.city || "N/A" }}
-              <span v-if="sensorStore.currentSensor?.city && (sensorStore.currentSensor?.state || sensorStore.currentSensor?.country)">,</span>
-              {{ sensorStore.currentSensor?.state || "" }}
-              <span v-if="(sensorStore.currentSensor?.city || sensorStore.currentSensor?.state) && sensorStore.currentSensor?.country">,</span>
-              {{ sensorStore.currentSensor?.country || "" }}
-            </p>
+            <p class="text-sm font-medium text-gray-500">Ubicación Geográfica (Activo)</p>
+            <p class="mt-1 text-gray-900">{{ combinedAssetLocation || "N/A" }}</p>
           </div>
+          <!-- DESCRIPCION DE UBICACIÓN DEL SENSOR (SE MANTIENE SEPARADA) -->
           <div>
-            <p class="text-sm font-medium text-gray-500">Descripción de la ubicación</p>
+            <p class="text-sm font-medium text-gray-500">Descripción de la ubicación (Sensor)</p>
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.location_description || "No especificada" }}</p>
           </div>
           <div>
@@ -370,6 +194,196 @@ watch(
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useSensorStore } from "@/stores/sensors";
+import { useAlertStore } from "@/stores/alerts";
+import { useOrganizationStore } from "@/stores/organizations";
+import AlertList from "@/components/AlertList.vue";
+import SensorChart from "@/components/SensorChart.vue"; 
+import PageHeader from "@/components/PageHeader.vue";
+
+const route = useRoute();
+const router = useRouter();
+const sensorStore = useSensorStore();
+const alertStore = useAlertStore();
+const organizationStore = useOrganizationStore();
+
+const itemsPerPage = ref(10);
+const currentPage = ref(1);
+
+const sortedAllReadings = computed(() => {
+  if (!sensorStore.currentSensorReadings) return [];
+  return [...sensorStore.currentSensorReadings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+});
+
+const totalPages = computed(() => {
+  if (!sortedAllReadings.value.length) return 1;
+  return Math.ceil(sortedAllReadings.value.length / itemsPerPage.value);
+});
+
+const paginatedReadings = computed(() => {
+  const startIndex = (currentPage.value - 1) * itemsPerPage.value;
+  const endIndex = startIndex + itemsPerPage.value;
+  return sortedAllReadings.value.slice(startIndex, endIndex);
+});
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++;
+  }
+};
+
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--;
+  }
+};
+
+watch(
+  () => sensorStore.currentSensorReadings,
+  () => {
+    currentPage.value = 1;
+  },
+  { deep: true }
+);
+
+const getSensorStatusClass = (status) => {
+  switch (status) {
+    case "active": return "bg-green-100 text-green-800";
+    case "maintenance": return "bg-yellow-100 text-yellow-800";
+    case "inactive": return "bg-red-100 text-red-800";
+    default: return "bg-gray-100 text-gray-800";
+  }
+};
+
+const translateSensorStatus = (status) => {
+  switch (status) {
+    case "active": return "Activo";
+    case "maintenance": return "Mantenimiento";
+    case "inactive": return "Inactivo";
+    default: return status;
+  }
+};
+
+const getAlertClass = (severity) => {
+  switch (severity) {
+    case "critical": return "bg-red-100 text-red-800 border-red-200";
+    case "warning": return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "info": return "bg-blue-100 text-blue-800 border-blue-200";
+    default: return "bg-gray-100 text-gray-800 border-gray-200";
+  }
+};
+
+const alertsForCurrentSensor = computed(() => {
+  const currentSensorId = sensorStore.currentSensor?.id;
+  if (!currentSensorId || !alertStore.alerts || alertStore.alerts.length === 0) {
+    return [];
+  }
+
+  const filtered = alertStore.alerts.filter((alert) => alert.sensor_id === currentSensorId);
+
+  return filtered.map((alert) => {
+    const sensor = sensorStore.sensors.find((s) => s.id === alert.sensor_id);
+    const sensorName = sensor ? sensor.name : "Desconocido";
+
+    const organizationId = alert.organization_id || sensor?.organization_id;
+    const organization = organizationStore.organizations.find((org) => org.id === organizationId);
+    const organizationName = organization ? organization.name : "Desconocida";
+
+    return {
+      ...alert,
+      sensorName: sensorName,
+      organizationName: organizationName,
+    };
+  });
+});
+
+const sensorForChart = computed(() => {
+  if (!sensorStore.currentSensor) return null;
+  return {
+    ...sensorStore.currentSensor,
+    readings: sensorStore.currentSensorReadings,
+  };
+});
+
+// NUEVO: Propiedad computada para la ubicación geográfica consolidada del activo
+const combinedAssetLocation = computed(() => {
+  const sensor = sensorStore.currentSensor;
+  if (!sensor) return 'N/A';
+
+  const parts = [];
+  // Usa assetCity, assetState, assetCountry que vienen del join con assets_base
+  // Añadimos console.log aquí para depurar
+  console.log('Debugging combinedAssetLocation:', {
+    assetCity: sensor.assetCity,
+    assetState: sensor.assetState,
+    assetCountry: sensor.assetCountry
+  });
+
+  if (sensor.assetCity && sensor.assetCity !== 'N/A') parts.push(sensor.assetCity);
+  if (sensor.assetState && sensor.assetState !== 'N/A') parts.push(sensor.assetState);
+  if (sensor.assetCountry && sensor.assetCountry !== 'N/A') parts.push(sensor.assetCountry);
+
+  const result = parts.length > 0 ? parts.join(', ') : 'N/A';
+  console.log('Resulting combined location:', result);
+  return result;
+});
+
+
+onMounted(async () => {
+  try {
+    // Asegurar que los stores estén poblados antes de acceder a sus datos
+    await organizationStore.fetchOrganizations(); // Necesario para organizationName
+    await sensorStore.fetchSensors(); // Necesario para sensorStore.sensors y para el mapeo de alertas
+    
+    // Luego, busca el sensor específico y sus lecturas
+    await sensorStore.fetchSensor(route.params.id); // Esto pobla currentSensor (incluyendo assetCity, etc.)
+    await sensorStore.fetchAndSubscribeToDetailReadings(route.params.id);
+    
+    // Finalmente, las alertas
+    await alertStore.fetchAlerts();
+    await alertStore.subscribeToAlertUpdates();
+
+    // Depuración: Confirma que currentSensor tiene los datos esperados
+    console.log('[idSensorPage] sensorStore.currentSensor onMounted:', sensorStore.currentSensor);
+
+  } catch (error) {
+    console.error("Error al cargar sensor o configurar suscripción:", error);
+    sensorStore.error = error.message || "Error desconocido al cargar el sensor.";
+  }
+});
+
+onUnmounted(async () => {
+  await sensorStore.unsubscribeFromDetailReadings();
+  await alertStore.unsubscribeFromAlertUpdates();
+});
+
+watch(
+  () => route.params.id,
+  async (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      console.log(`ID del sensor cambió de ${oldId} a ${newId}. Recargando y re-suscribiéndose a lecturas y alertas.`);
+      try {
+        await sensorStore.unsubscribeFromDetailReadings();
+        await alertStore.unsubscribeFromAlertUpdates();
+
+        // No es necesario fetchSensors/Organizations aquí de nuevo si ya están en onMounted
+        // Se asume que el store ya los tiene precargados o los puede re-fetch si el watcher anterior lo dispara.
+        await sensorStore.fetchSensor(newId); // Vuelve a cargar el sensor con los nuevos datos del ID
+        await sensorStore.fetchAndSubscribeToDetailReadings(newId);
+        await alertStore.fetchAlerts();
+        await alertStore.subscribeToAlertUpdates();
+      } catch (error) {
+        console.error("Error al cambiar de sensor o configurar suscripción:", error);
+        sensorStore.error = error.message || "Error desconocido al cargar el sensor.";
+      }
+    }
+  }
+);
+</script>
 
 <style scoped>
 /* Agrega tus estilos específicos para esta página si los tienes */

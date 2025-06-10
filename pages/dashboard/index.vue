@@ -58,7 +58,8 @@
               </div>
               <div class="ml-4">
                 <h3 class="text-sm font-medium text-gray-900">{{ sensor.name }}</h3>
-                <p class="text-sm text-gray-500">{{ sensor.location }}</p>
+                <!-- MODIFICACIÓN CLAVE: Mostrar el nombre del activo aquí -->
+                <p class="text-sm text-gray-500">{{ sensor.assetName || sensor.location_description || 'N/A' }}</p>
               </div>
             </div>
             <div class="text-right">
@@ -104,6 +105,8 @@
                     :value="sensor.id"
                     class="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300" />
             <span class="ml-2 text-sm text-gray-700">{{ sensor.name }}</span>
+            <!-- Opcional: mostrar el nombre del activo en la selección del gráfico -->
+            <span v-if="sensor.assetName" class="ml-1 text-xs text-gray-500">({{ sensor.assetName }})</span>
           </label>
           <p v-if="availableSensorsForSelection.length === 0" class="text-sm text-gray-500">No hay sensores activos para monitorear en esta organización.</p>
         </div>
@@ -125,6 +128,9 @@ import { useAlertStore } from '~/stores/alerts';
 import { useOrganizationStore } from '~/stores/organizations';
 import { definePageMeta, useNuxtApp } from '#imports';
 
+// Importar el store de activos si el Dashboard lo usa para algo más que solo nombres mapeados
+// import { useAssetStore } from '~/stores/assets'; 
+
 definePageMeta({
   // middleware: ['auth'],
   permission: 'dashboard.ver',
@@ -135,6 +141,8 @@ const sensorStore = useSensorStore();
 const alertStore = useAlertStore();
 const organizationStore = useOrganizationStore();
 const { $supabase } = useNuxtApp();
+// const assetStore = useAssetStore(); // Solo si lo necesitas para algo más, de lo contrario no es necesario aquí.
+
 
 // State
 const loading = ref(false);
@@ -187,7 +195,8 @@ const activeSensorTrend = 'up'; // Ej: 'up', 'down', 'stable'
 
 // Propiedades computadas para la visualización de listas - AHORA USAN filteredSensors
 const displayedSensors = computed(() => {
-  // `sensorStore.recentSensors` ya devuelve los 5 más recientes de los filtrados
+  // `sensorStore.recentSensors` ya devuelve los 5 más recientes de los filtrados,
+  // y ahora esos objetos ya tendrán `assetName`.
   const sensors = sensorStore.recentSensors;
   return expandedSection.value === 'sensors' ? sensors : sensors.slice(0, 3);
 });
@@ -202,12 +211,10 @@ const availableSensorsForSelection = computed(() => {
   return sensorStore.filteredSensors
     .filter(s => s.status === 'active')
     .sort((a, b) => {
-      if (a.lastReading && b.lastReading) {
-        return new Date(b.lastReading) - new Date(a.lastReading);
-      }
-      if (a.lastReading) return -1;
-      if (b.lastReading) return 1;
-      return new Date(b.createdAt) - new Date(a.createdAt);
+      // Si lastReading no existe, intenta usar createdAt para ordenar
+      const dateA = a.lastReading ? new Date(a.lastReading) : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+      const dateB = b.lastReading ? new Date(b.lastReading) : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+      return dateB - dateA;
     });
 });
 
@@ -217,7 +224,8 @@ const realtimeSelectedSensorsForChart = computed(() => {
   return selectedSensorIds.value
     .filter(id => currentFilteredSensorIds.includes(id)) // Filtra los seleccionados para la gráfica si no están en la vista actual
     .map(id => {
-      const sensorDetails = sensorStore.sensors.find(s => s.id === id); // Busca en `sensorStore.sensors` (todos los sensores)
+      // Busca en `sensorStore.sensors` (todos los sensores cargados), que ya tienen assetName
+      const sensorDetails = sensorStore.sensors.find(s => s.id === id); 
       const readings = sensorStore.allSensorRecentReadings[id] || [];
       return sensorDetails ? {
         ...sensorDetails,
@@ -271,6 +279,9 @@ watch(() => organizationStore.selectedOrganizationId, async (newOrgId, oldOrgId)
 
     // Luego, re-selecciona los sensores activos de la *nueva* organización.
     // Esto disparará el primer `watch(selectedSensorIds, ...)` y reiniciará las suscripciones.
+    // Asegurarse de que availableSensorsForSelection se recalcule con la nueva organización antes de usarse
+    // No necesitamos un `await sensorStore.fetchSensors()` aquí porque `selectedOrganizationId`
+    // es un filtro sobre `sensorStore.sensors` que ya debería estar poblado.
     if (availableSensorsForSelection.value.length > 0) {
         selectedSensorIds.value = availableSensorsForSelection.value.map(s => s.id);
         console.log('Sensores re-seleccionados para la nueva organización:', selectedSensorIds.value);
@@ -292,22 +303,28 @@ onMounted(async () => {
             organizationStore.fetchOrganizations()
         ]);
 
-        // --- Lógica para inicializar la organización seleccionada ---
-        // (Your commented-out organization logic, uncomment if needed)
-        // if (process.client) { // Solo ejecutar en el lado del cliente (navegador)
-        //     const storedOrgId = localStorage.getItem('selected_org_id');
-        //     if (storedOrgId && organizationStore.allOrganizations.some(org => org.id === storedOrgId)) {
-        //         organizationStore.setSelectedOrganization(storedOrgId);
-        //         console.log(`Organización inicial cargada desde localStorage: ${storedOrgId}`);
-        //     } else if (organizationStore.allOrganizations.length > 0) {
-        //         organizationStore.setSelectedOrganization(organizationStore.allOrganizations[0].id);
-        //         console.log('No hay organización guardada o es inválida, seleccionando la primera disponible.');
-        //     } else {
-        //         organizationStore.setSelectedOrganization(null);
-        //         console.log('No hay organizaciones disponibles para seleccionar.');
-        //     }
-        // }
-        // --- FIN de la lógica de inicialización de organización ---
+        // REVISAR: Cargar datos históricos para los porcentajes (si es necesario desde Supabase)
+        // Esto es para calcular el cambio porcentual de los totales de sensores y organizaciones
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+        // Ajustar el nombre de la tabla a 'sensors' (minúscula) y 'organizations'
+        const { count: totalSensorsTwentyFourHoursAgo, error: errSensorsYesterday } = await $supabase
+            .from('sensors') // Cambiado de 'Sensors' a 'sensors'
+            .select('id', { count: 'exact' })
+            .lt('created_at', twentyFourHoursAgo.toISOString()); // Asumiendo 'created_at' para la fecha de creación
+
+        const { count: totalOrganizationsTwentyFourHoursAgo, error: errOrgsYesterday } = await $supabase
+            .from('organizations') // Cambiado de 'Organizations' a 'organizations'
+            .select('id', { count: 'exact' })
+            .lt('created_at', twentyFourHoursAgo.toISOString()); // Asumiendo 'created_at' para la fecha de creación
+
+
+        if (errSensorsYesterday) console.error("Error al obtener el total de sensores hace 24h:", errSensorsYesterday);
+        if (errOrgsYesterday) console.error("Error al obtener el total de organizaciones hace 24h:", errOrgsYesterday);
+
+        previousTotalSensors.value = totalSensorsTwentyFourHoursAgo || 0;
+        previousTotalOrganizations.value = totalOrganizationsTwentyFourHoursAgo || 0;
 
         // Lógica para la selección inicial de sensores en el gráfico (tal como la tienes)
         if (selectedSensorIds.value.length === 0 && availableSensorsForSelection.value.length > 0) {
@@ -316,27 +333,6 @@ onMounted(async () => {
         } else if (selectedSensorIds.value.length === 0) {
             console.log('No hay sensores activos disponibles para seleccionar en la carga inicial (onMounted).');
         }
-
-        // REVISAR: Cargar datos históricos para los porcentajes (si es necesario desde Supabase)
-        // Esto es para calcular el cambio porcentual de los totales de sensores y organizaciones
-        const now = new Date();
-        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-        const { count: totalSensorsTwentyFourHoursAgo, error: errSensorsYesterday } = await $supabase
-            .from('Sensors')
-            .select('id', { count: 'exact' })
-            .lt('createdAt', twentyFourHoursAgo.toISOString());
-
-        const { count: totalOrganizationsTwentyFourHoursAgo, error: errOrgsYesterday } = await $supabase
-            .from('Organizations')
-            .select('id', { count: 'exact' })
-            .lt('createdAt', twentyFourHoursAgo.toISOString());
-
-        if (errSensorsYesterday) console.error("Error al obtener el total de sensores hace 24h:", errSensorsYesterday);
-        if (errOrgsYesterday) console.error("Error al obtener el total de organizaciones hace 24h:", errOrgsYesterday);
-
-        previousTotalSensors.value = totalSensorsTwentyFourHoursAgo || 0;
-        previousTotalOrganizations.value = totalOrganizationsTwentyFourHoursAgo || 0;
 
         // --- SECCIÓN DE SUSCRIPCIONES REALTIME ---
         console.log('[Dashboard.vue - onMounted] Preparando para iniciar suscripciones de Realtime...');
@@ -349,12 +345,9 @@ onMounted(async () => {
         sensorStore.subscribeToSensorUpdates();
         console.log('--- sensorStore.subscribeToSensorUpdates() ha sido llamada ---');
 
-        // 3. NUEVO Y CRUCIAL: Suscripción para las lecturas recientes en las tarjetas de sensores
-        // Esta acción se encarga de mantener `allSensorRecentReadings[sensorId][0]`
-        // actualizado con la última lectura para la vista de "Sensores Recientes".
+        // 3. Suscripción para las lecturas recientes en las tarjetas de sensores
         sensorStore.subscribeToDashboardRecentReadings();
         console.log('--- sensorStore.subscribeToDashboardRecentReadings() ha sido llamada ---');
-
 
     } catch (error) {
         console.error("Error al cargar el dashboard:", error);
@@ -369,7 +362,7 @@ onUnmounted(async () => {
   console.log('[Dashboard.vue - onUnmounted] Desuscribiendo de los canales de Realtime...');
   await sensorStore.unsubscribeFromAllDashboardReadings(); // Desuscribe de las suscripciones individuales del gráfico
   await sensorStore.unsubscribeFromSensorUpdates();      // Desuscribe de los cambios generales de sensores
-  await sensorStore.unsubscribeFromDashboardRecentReadings(); // <-- NUEVO: Desuscribe de las lecturas recientes para StatCards
+  await sensorStore.unsubscribeFromDashboardRecentReadings(); // Desuscribe de las lecturas recientes para StatCards
   await alertStore.unsubscribeFromAlertUpdates();         // Desuscribe de las alertas
 });
 </script>

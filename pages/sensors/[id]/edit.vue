@@ -69,26 +69,11 @@
                 </option>
               </select>
             </div>
-          </div>
-
-         
-          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <div>
-              <label class="form-label">País</label>
-              <input v-model="form.country" type="text" class="form-input" />
-            </div>
-            <div>
-              <label class="form-label">Estado</label>
-              <input v-model="form.state" type="text" class="form-input" />
-            </div>
-            <div>
-              <label class="form-label">Ciudad</label>
-              <input v-model="form.city" type="text" class="form-input" />
-            </div>
-          </div>
+          </div>       
+     
           
            <div>
-            <label class="form-label">Dirección</label>
+            <label class="form-label">Descripción</label>
             <textarea v-model="form.location_description" class="form-input"></textarea>
           </div>
           <div>
@@ -105,6 +90,18 @@
                 :value="org.id"
               >
                 {{ org.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Campo Activo Relacionado -->
+          <div>
+            <label class="form-label">Activo Relacionado</label>
+            <select v-model="form.asset_id" class="form-input">
+              <!-- Aseguramos que la opción para null sea explícita -->
+              <option :value="null">Sin activo relacionado</option>
+              <option v-for="assetOption in assets" :key="assetOption.id" :value="assetOption.id">
+                {{ assetOption.name }} ({{ assetOption.asset_code }})
               </option>
             </select>
           </div>
@@ -182,14 +179,16 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useSensorStore } from '@/stores/sensors';
-import { useOrganizationStore } from '@/stores/organizations';
-import { useParameterStore } from '@/stores/parameters';
+import { useSensorStore } from '~/stores/sensors';
+import { useOrganizationStore } from '~/stores/organizations';
+import { useAssetStore } from '~/stores/assets';
+import { useParameterStore } from '~/stores/parameters';
 
 const route = useRoute();
 const router = useRouter();
 const sensorStore = useSensorStore();
 const organizationStore = useOrganizationStore();
+const assetStore = useAssetStore();
 const parameterStore = useParameterStore();
 
 const loading = ref(true);
@@ -200,12 +199,9 @@ const form = ref({
   name: '',
   serial_number: '',
   model: '',
-  location_description: '',
-  country: '', // Nuevo campo 
-  state: '', // Nuevo campo 
-  city: '', // Nuevo campo 
+  location_description: '', 
   organizationId: '',
-  organizationName: '',
+  asset_id: null,
   status: 'active',
   type: '',
   unit: '',
@@ -221,12 +217,21 @@ const form = ref({
 });
 
 const organizations = computed(() => organizationStore.organizations);
+const assets = computed(() => assetStore.assets);
 const availableUnits = computed(() => parameterStore.getUnitParameters);
 
 const loadSensorData = async () => {
   loading.value = true;
   error.value = null;
   try {
+    // Es CRUCIAL que estos datos se carguen PRIMERO
+    await Promise.all([
+      organizationStore.fetchOrganizations(),
+      assetStore.fetchAssets(), // Aseguramos que la lista de activos esté disponible
+      parameterStore.fetchParameters(),
+    ]);
+    console.log("Datos de referencia (organizaciones, activos, parámetros) cargados.");
+
     const fetchedSensor = await sensorStore.fetchSensor(route.params.id);
     if (!fetchedSensor) {
       error.value = 'Sensor no encontrado.';
@@ -240,19 +245,17 @@ const loadSensorData = async () => {
       serial_number: fetchedSensor.serial_number || '',
       model: fetchedSensor.model || '',
       location_description: fetchedSensor.location_description || '',
-      country: fetchedSensor.country || '', // Populating new field 
-      state: fetchedSensor.state || '', // Populating new field 
-      city: fetchedSensor.city || '', // Populating new field 
+      // No poblar city, state, country directamente del sensor, ya que vienen del activo
       organizationId: fetchedSensor.organizationId || '',
-      organizationName: fetchedSensor.organizationName || '',
+      asset_id: fetchedSensor.assetId || null, // Usamos 'assetId' que es como lo mapea el store
       status: fetchedSensor.status || 'active',
       type: fetchedSensor.type || '',
       unit: fetchedSensor.unit || '',
       thresholds: {
-        criticalMin: fetchedSensor.thresholds?.criticalMin || 0,
-        criticalMax: fetchedSensor.thresholds?.criticalMax || 100,
-        normalMin: fetchedSensor.thresholds?.normalMin || 0,
-        normalMax: fetchedSensor.thresholds?.normalMax || 100,
+        criticalMin: fetchedSensor.thresholds?.criticalMin ?? 0,
+        criticalMax: fetchedSensor.thresholds?.criticalMax ?? 100,
+        normalMin: fetchedSensor.thresholds?.normalMin ?? 0,
+        normalMax: fetchedSensor.thresholds?.normalMax ?? 100,
       },
       last_communication: fetchedSensor.last_communication || null,
       battery_level: fetchedSensor.battery_level || null,
@@ -262,6 +265,9 @@ const loadSensorData = async () => {
     console.log("--- DEBUG EDICIÓN SENSOR ---");
     console.log("1. Sensor cargado y mapeado al formulario (form.value):", form.value);
     console.log("2. ID de Organización en el formulario (form.value.organizationId):", form.value.organizationId);
+    console.log("3. ID de Activo en el formulario (form.value.asset_id):", form.value.asset_id);
+    console.log("4. Lista de activos disponibles (assets.value):", assets.value);
+
   } catch (err) {
     error.value = 'Error al cargar sensor: ' + err.message;
     console.error('Error al cargar sensor:', err);
@@ -277,6 +283,10 @@ const saveSensor = async () => {
     const payload = {
       ...form.value,
       organizationName: undefined,
+      assetName: undefined,
+      assetCity: undefined, // Asegurarse de que no se envíen
+      assetState: undefined, // Asegurarse de que no se envíen
+      assetCountry: undefined, // Asegurarse de que no se envíen
     };
     const updatedSensor = await sensorStore.updateSensor(route.params.id, payload);
 
@@ -290,30 +300,7 @@ const saveSensor = async () => {
 };
 
 onMounted(async () => {
-  try {
-    await Promise.all([
-      organizationStore.fetchOrganizations(),
-      parameterStore.fetchParameters(),
-    ]);
-    console.log("3. Organizaciones cargadas en el store (organizationStore.organizations):", organizationStore.organizations);
-
-    await loadSensorData();
-
-    if (form.value.organizationId && organizations.value.length > 0) {
-      const foundOrg = organizations.value.find(
-        org => org.id === form.value.organizationId
-      );
-      console.log(`4. Buscando organización con ID "${form.value.organizationId}" en la lista de opciones:`, foundOrg);
-      if (!foundOrg) {
-          console.warn("5. ¡Advertencia! El ID de organización del sensor NO se encontró en la lista de organizaciones disponibles para el SELECT.");
-      }
-    } else {
-         console.log("4. No hay organizationId en el sensor o la lista de organizaciones está vacía.");
-    }
-  } catch (e) {
-    console.error('Error en onMounted al cargar datos iniciales:', e);
-    error.value = 'Error inicial al cargar datos: ' + e.message;
-  }
+  await loadSensorData();
 });
 
 const sensor = computed(() => form.value);

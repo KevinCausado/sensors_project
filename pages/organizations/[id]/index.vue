@@ -45,7 +45,7 @@
             <p class="text-gray-900">{{ organization.contact_phone }}</p>
           </div>
           <div class="mb-4">
-            <p class="form-label">Ubicación Geográfica</p>
+            <p class="form-label">Ubicación Geográfica (Organización)</p>
             <p class="form-input-static">
               <template v-if="organization.city">{{ organization.city }}</template>
               <template v-if="organization.state">
@@ -101,7 +101,7 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="user in organization.users" :key="user.id">
-                <td class="px-6 py-4 whitespace-nowrap">{{ user.name }}</td>
+               <td class="px-6 py-4 whitespace-nowrap">{{ user.first_name }} {{ user.last_name }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ user.email }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="`badge ${getRoleBadgeClass(user.roleName)}`">{{ translateRole(user.roleName) }}</span>
@@ -129,16 +129,16 @@
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación Geográfica</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="asset in organization.assets_base" :key="asset.id">
                 <td class="px-6 py-4 whitespace-nowrap">{{ asset.name }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ asset.asset_type }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ asset.assetTypeName || "N/A" }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ asset.description || "N/A" }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ asset.location || "N/A" }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ getAssetLocation(asset) }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(asset.created_at) }}</td>
               </tr>
             </tbody>
@@ -154,7 +154,7 @@
             <thead>
               <tr>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción de Ubicación</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
               </tr>
@@ -162,7 +162,6 @@
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="sensor in organization.sensors" :key="sensor.id">
                 <td class="px-6 py-4 whitespace-nowrap">{{ sensor.name }}</td>
-
                 <td class="px-6 py-4 whitespace-nowrap">{{ sensor.location_description || "N/A" }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="`badge ${getSensorStatusBadgeClass(sensor.status)}`">
@@ -193,8 +192,11 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="alert in organization.alerts" :key="alert.id">
-                <td class="px-6 py-4 whitespace-nowrap">{{ alert.alert_type }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ alert.message }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ alert.type || 'N/A' }}</td>
+                <!-- Modificación aquí: Permitir salto de línea y texto más pequeño -->
+                <td class="px-6 py-4 text-xs text-gray-600 align-top max-w-xs break-words">
+                    {{ alert.description || 'N/A' }}
+                </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="`badge ${getAlertPriorityBadgeClass(alert.priority)}`">
                     {{ translatePriority(alert.priority) }}
@@ -205,8 +207,8 @@
                     {{ translateStatus(alert.status) }}
                   </span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(alert.generated_at) }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(alert.resolved_at) }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(alert.alert_time) }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(alert.resolved_time) }}</td>
               </tr>
             </tbody>
           </table>
@@ -323,6 +325,17 @@ const formatDate = (dateString) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("es-ES") + " " + date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 };
+
+// NUEVA FUNCIÓN: Para mostrar la ubicación geográfica de los activos
+const getAssetLocation = (asset) => {
+  const parts = [];
+  // Usa asset.city, asset.state, asset.country
+  if (asset.city) parts.push(asset.city);
+  if (asset.state) parts.push(asset.state);
+  if (asset.country) parts.push(asset.country);
+  return parts.length > 0 ? parts.join(', ') : "N/A";
+};
+
 
 onMounted(async () => {
   const orgId = route.params.id;

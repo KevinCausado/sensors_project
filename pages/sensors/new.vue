@@ -79,6 +79,17 @@
             </select>
           </div>
 
+          <!-- Campo Activo Relacionado -->
+          <div>
+            <label class="form-label">Activo Relacionado</label>
+            <select v-model="form.asset_id" class="form-input">
+              <option :value="null">Sin activo relacionado</option>
+              <option v-for="assetOption in assets" :key="assetOption.id" :value="assetOption.id">
+                {{ assetOption.name }} ({{ assetOption.asset_code }})
+              </option>
+            </select>
+          </div>
+
           <div>
             <label class="form-label">Estado</label>
             <select v-model="form.status" required class="form-input">
@@ -126,6 +137,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useSensorStore } from "~/stores/sensors";
 import { useOrganizationStore } from "~/stores/organizations";
+import { useAssetStore } from "~/stores/assets"; // NUEVO: Importar el store de activos
 import { useRouter } from "vue-router";
 import { useParameterStore } from "~/stores/parameters"; // Asegúrate de que este import exista
 
@@ -140,6 +152,7 @@ definePageMeta({
 // Stores
 const sensorStore = useSensorStore();
 const organizationStore = useOrganizationStore();
+const assetStore = useAssetStore(); // NUEVO: Inicializar el store de activos
 const parameterStore = useParameterStore(); // Inicializa el store de parámetros
 const router = useRouter();
 
@@ -149,14 +162,15 @@ const form = ref({
   name: "",
   type: "temperature",
   unit: "", // Mantén este campo para la unidad seleccionada
-  serial_number: "", // Añadido
-  model: "", // Añadido
-  location_description: "", // Añadido
-  country: "", // Nuevo campo
-  state: "", // Nuevo campo
-  city: "", // Nuevo campo
+  serial_number: "",
+  model: "",
+  location_description: "",
+  country: "",
+  state: "",
+  city: "",
   organizationId: "",
-  status: "",
+  asset_id: null, // NUEVO: Campo para el ID del activo relacionado
+  status: "active", // Establecer un valor por defecto sensato
   thresholds: {
     criticalMin: 0,
     criticalMax: 100,
@@ -164,20 +178,22 @@ const form = ref({
     normalMax: 100,
   },
 });
+
 // Computed
 const organizations = computed(() => organizationStore.organizations);
-// Este getter ya está bien, asumiendo que tu store de parámetros lo define correctamente
+const assets = computed(() => assetStore.assets); // NUEVO: Propiedad computada para activos
 const availableUnits = computed(() => parameterStore.getUnitParameters);
+
 // Métodos
 const saveSensor = async () => {
   try {
     saving.value = true;
     const sensor = await sensorStore.createSensor({
       ...form.value,
-      // La línea de abajo fue eliminada, ya que 'organizationName' no es una columna en tu tabla 'sensors'.
-      // organizationName: organizations.value.find(org => org.id === form.value.organizationId)?.name
       // Asegúrate de que 'thresholds' se envíe como un objeto completo si es un JSONB
       thresholds: { ...form.value.thresholds },
+      // assetId ya está en form.value, y tu stores/sensors.js ya fue adaptado
+      // para recibir organizationId y assetId y mapearlos a organization_id y asset_id.
     });
     router.push("/sensors");
   } catch (error) {
@@ -186,11 +202,13 @@ const saveSensor = async () => {
     saving.value = false;
   }
 };
+
 // Cargar datos
 onMounted(async () => {
   await Promise.all([
     organizationStore.fetchOrganizations(),
-    parameterStore.fetchParameters(), // Asegúrate de que este método carga los parámetros en el store
+    assetStore.fetchAssets(), // NUEVO: Cargar los activos disponibles
+    parameterStore.fetchParameters(),
   ]);
 
   // Establecer organización por defecto si hay una

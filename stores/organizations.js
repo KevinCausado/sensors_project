@@ -157,18 +157,20 @@ export const useOrganizationStore = defineStore('organizations', {
             logo_url,
             is_active,
             users (
-              *,
+              id, first_name,last_name, email, is_active, created_at,
               roles (
                 name
               )
             ),
-            assets_base (
+            assets_base!assets_base_organization_id_fkey (
               id,
               name,
               description,
               asset_code,
-              location,
-              assets_types(name),
+              city,
+              state,
+              country,
+              assets_types!fk_assets_base_assets_types_new(name), 
               is_active,
               created_at,
               updated_at

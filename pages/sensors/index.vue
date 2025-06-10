@@ -46,8 +46,9 @@
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial</th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo</th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organización</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción de Ubicación</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación Geográfica</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activo</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación Geográfica (Activo)</th> <!-- Columna ajustada -->
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción de la ubicación</th> 
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Com.</th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batería</th>
@@ -58,14 +59,14 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-if="sensorStore.isLoading || organizationStore.isLoading" class="text-center">
-              <td colspan="11" class="py-8 text-gray-500">Cargando sensores...</td>
+            <tr v-if="sensorStore.isLoading || organizationStore.isLoading || assetStore.isLoading" class="text-center">
+              <td colspan="11" class="py-8 text-gray-500">Cargando sensores...</td> <!-- Colspan ajustado -->
             </tr>
-            <tr v-else-if="sensorStore.error || organizationStore.error" class="text-center">
-              <td colspan="11" class="py-8 text-error-600">Error: {{ sensorStore.error || organizationStore.error }}</td>
+            <tr v-else-if="sensorStore.error || organizationStore.error || assetStore.error" class="text-center">
+              <td colspan="11" class="py-8 text-error-600">Error: {{ sensorStore.error || organizationStore.error || assetStore.error }}</td> <!-- Colspan ajustado -->
             </tr>
             <tr v-else-if="paginatedSensors.length === 0" class="text-center">
-              <td colspan="11" class="py-8 text-gray-500">No se encontraron sensores.</td>
+              <td colspan="11" class="py-8 text-gray-500">No se encontraron sensores.</td> <!-- Colspan ajustado -->
             </tr>
             <tr v-else v-for="sensor in paginatedSensors" :key="sensor.id">
               <td class="px-6 py-4 whitespace-nowrap">
@@ -83,10 +84,13 @@
                 {{ sensor.organizationName || "Desconocida" }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.location_description || "N/A" }}
+                {{ sensor.assetName || "N/A" }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ getGeographicLocation(sensor) }}
+                {{ getAssetGeographicLocation(sensor) }} <!-- Usa la nueva función del activo -->
+              </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {{ sensor.location_description || "Desconocida" }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" :class="getSensorStatusClass(sensor.status)">
@@ -132,10 +136,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue"; // Add watch if you want to react immediately to organizationStore.selectedOrganizationId changes
+import { ref, computed, onMounted, watch } from "vue";
 import { useSensorStore } from "~/stores/sensors";
 import { useOrganizationStore } from "~/stores/organizations";
-import { useAuthStore } from "~/stores/auth"; // Although not used directly for this feature, keep if needed elsewhere.
+import { useAssetStore } from "~/stores/assets";
 import { useRouter } from "vue-router";
 
 import { PlusIcon, MagnifyingGlassIcon, EyeIcon, PencilIcon, TrashIcon } from "@heroicons/vue/24/outline";
@@ -144,7 +148,7 @@ import { PlusIcon, MagnifyingGlassIcon, EyeIcon, PencilIcon, TrashIcon } from "@
 import PageHeader from "@/components/PageHeader.vue";
 import StatCard from "@/components/StatCard.vue";
 import Pagination from "@/components/Pagination.vue";
-
+import ConfirmModal from "@/components/ConfirmModal.vue";
 import PermissionGuard from "@/components/PermissionGuard.vue";
 
 definePageMeta({
@@ -153,7 +157,8 @@ definePageMeta({
 
 // Stores
 const sensorStore = useSensorStore();
-const organizationStore = useOrganizationStore(); // Make sure this is initialized
+const organizationStore = useOrganizationStore();
+const assetStore = useAssetStore();
 const router = useRouter();
 
 // Estado local para los filtros
@@ -164,38 +169,13 @@ const itemsPerPage = ref(10);
 const showDeleteModal = ref(false);
 const sensorToDelete = ref(null);
 
-// No longer needed, as we'll use organizationStore.selectedOrganizationId
-// const selectedOrganizationIdLocal = ref(null);
-
-// --- Computed Properties ---
-
-// Directamente desde el store de organizaciones
 const organizations = computed(() => organizationStore.organizations);
-// Directamente desde el store de sensores
 const sensors = computed(() => sensorStore.sensors);
-// Obtener el ID de la organización seleccionada globalmente desde el store
 const selectedOrganizationIdFromStore = computed(() => organizationStore.selectedOrganizationId);
 
-const sensorsWithOrgName = computed(() => {
-  return sensors.value.map((sensor) => {
-    let organizationName = "Desconocida";
-    if (sensor.organizationId) {
-      const org = organizations.value.find((o) => o.id === sensor.organizationId);
-      if (org) {
-        organizationName = org.name;
-      }
-    }
-    return {
-      ...sensor,
-      organizationName: organizationName,
-    };
-  });
-});
-
 const filteredSensors = computed(() => {
-  let result = [...sensorsWithOrgName.value];
+  let result = [...sensorStore.sensors]; 
 
-  // APLICA EL FILTRO DE ORGANIZACIÓN USANDO EL ID DEL STORE GLOBAL
   if (selectedOrganizationIdFromStore.value) {
     result = result.filter((sensor) => sensor.organizationId === selectedOrganizationIdFromStore.value);
   }
@@ -207,11 +187,12 @@ const filteredSensors = computed(() => {
         sensor.name.toLowerCase().includes(query) ||
         (sensor.serial_number && sensor.serial_number.toLowerCase().includes(query)) ||
         (sensor.model && sensor.model.toLowerCase().includes(query)) ||
-        (sensor.location_description && sensor.location_description.toLowerCase().includes(query)) ||
-        (sensor.country && sensor.country.toLowerCase().includes(query)) ||
-        (sensor.state && sensor.state.toLowerCase().includes(query)) ||
-        (sensor.city && sensor.city.toLowerCase().includes(query)) ||
-        (sensor.organizationName && sensor.organizationName.toLowerCase().includes(query))
+        // Buscar por la ubicación del activo enlazado
+        (sensor.assetCity && sensor.assetCity.toLowerCase().includes(query)) ||
+        (sensor.assetState && sensor.assetState.toLowerCase().includes(query)) ||
+        (sensor.assetCountry && sensor.assetCountry.toLowerCase().includes(query)) ||
+        (sensor.organizationName && sensor.organizationName.toLowerCase().includes(query)) ||
+        (sensor.assetName && sensor.assetName.toLowerCase().includes(query))
     );
   }
 
@@ -229,7 +210,7 @@ const paginatedSensors = computed(() => {
 });
 
 const totalFilteredSensors = computed(() => filteredSensors.value.length);
-const totalSensors = computed(() => sensorStore.sensors.length);
+const totalSensors = computed(() => sensorStore.sensors.length); 
 const activeSensors = computed(() => filteredSensors.value.filter((s) => s.status === "active").length);
 const maintenanceSensors = computed(() => filteredSensors.value.filter((s) => s.status === "maintenance").length);
 const inactiveSensors = computed(() => filteredSensors.value.filter((s) => s.status === "inactive").length);
@@ -257,10 +238,6 @@ const confirmDelete = async () => {
     await sensorStore.deleteSensor(sensorToDelete.value.id);
     showDeleteModal.value = false;
     sensorToDelete.value = null;
-    // After deletion, it's good practice to re-fetch if you don't have real-time updates
-    // or if the real-time update logic doesn't cover deletions from this specific action.
-    // However, given your store structure, Pinia reactivity should handle it if your deleteSensor action
-    // modifies the `sensorStore.sensors` array directly.
   } catch (error) {
     console.error("Error al eliminar sensor:", error);
   }
@@ -297,32 +274,31 @@ const translateSensorStatus = (status) => {
   }
 };
 
-const getGeographicLocation = (sensor) => {
+// Función para obtener la ubicación geográfica combinada del ACTIVO ENLAZADO
+const getAssetGeographicLocation = (sensor) => {
   const parts = [];
-  if (sensor.city) parts.push(sensor.city);
-  if (sensor.state) parts.push(sensor.state);
-  if (sensor.country) parts.push(sensor.country);
+  if (sensor.assetCity && sensor.assetCity !== 'N/A') parts.push(sensor.assetCity);
+  if (sensor.assetState && sensor.assetState !== 'N/A') parts.push(sensor.assetState);
+  if (sensor.assetCountry && sensor.assetCountry !== 'N/A') parts.push(sensor.assetCountry);
   return parts.length > 0 ? parts.join(", ") : "N/A";
 };
 
 // --- Lifecycle Hook ---
 onMounted(async () => {
-  await Promise.all([sensorStore.fetchSensors(), organizationStore.fetchOrganizations()]);
-  // No need to set selectedOrganizationIdLocal here as it's handled by the store and sidebar
+  console.log('[Sensors Page] onMounted: Iniciando carga de datos...');
+  await Promise.all([
+    organizationStore.fetchOrganizations(),
+    assetStore.fetchAssets(),
+    sensorStore.fetchSensors()
+  ]);
+  console.log('[Sensors Page] onMounted: Carga de datos iniciales completada.');
+  console.log(`[Sensors Page] onMounted: sensorStore.sensors despues de carga (con nombres y ubicación de activo):`, sensorStore.sensors);
 });
 
 // Watch for changes in the globally selected organization ID
-// This ensures that if the user changes the organization via the sidebar,
-// the sensor list will reactively update.
 watch(selectedOrganizationIdFromStore, (newOrgId, oldOrgId) => {
   if (newOrgId !== oldOrgId) {
-    // Reset current page when organization filter changes
     currentPage.value = 1;
-    // No need to re-fetch sensors here if your sensorStore.sensors already contains all sensors
-    // and the filtering is done client-side via computed properties.
-    // If sensorStore.fetchSensors() *itself* fetches based on selectedOrganizationId,
-    // then you might want to call it here:
-    // sensorStore.fetchSensors(newOrgId); // Assuming fetchSensors can take an organizationId parameter
   }
 });
 </script>
