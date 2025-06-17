@@ -50,6 +50,7 @@
                 <option value="humidity">Humedad</option>
                 <option value="vibration">Vibración</option>
                 <option value="pressure">Presión</option>
+                <option value="other">Otro</option>
               </select>
             </div>
 
@@ -71,6 +72,17 @@
             </div>
           </div>       
      
+          <div>
+            <label class="form-label">Número de Serie</label>
+            <input v-model="form.serial_number" type="text" class="form-input" />
+          </div>
+
+          <div>
+            <label class="form-label">Modelo</label>
+            <input v-model="form.model" type="text" class="form-input" />
+          </div>
+
+         
           
            <div>
             <label class="form-label">Descripción</label>
@@ -82,6 +94,7 @@
               v-model="form.organizationId"
               required
               class="form-input"
+              :disabled="organizationStore.isLoading"
             >
               <option value="">Seleccione una organización</option>
               <option
@@ -97,11 +110,10 @@
           <!-- Campo Activo Relacionado -->
           <div>
             <label class="form-label">Activo Relacionado</label>
-            <select v-model="form.asset_id" class="form-input">
-              <!-- Aseguramos que la opción para null sea explícita -->
+            <select v-model="form.asset_id" class="form-input" :disabled="assetStore.isLoading">
               <option :value="null">Sin activo relacionado</option>
               <option v-for="assetOption in assets" :key="assetOption.id" :value="assetOption.id">
-                {{ assetOption.name }} ({{ assetOption.asset_code }})
+                {{ assetOption.name }} ({{ assetOption.asset_code || 'N/A' }})
               </option>
             </select>
           </div>
@@ -116,42 +128,60 @@
               <option value="active">Activo</option>
               <option value="inactive">Inactivo</option>
               <option value="maintenance">Mantenimiento</option>
+              <option value="error">Error</option>
             </select>
           </div>
 
-          <h3 class="text-lg font-medium text-gray-900 mb-2">Umbrales de Alerta (Thresholds)</h3>
-          <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div>
-              <label class="form-label">Mínimo Normal</label>
-              <input
-                v-model.number="form.thresholds.normalMin"
-                type="number"
-                class="form-input"
-              />
-            </div>
-            <div>
-              <label class="form-label">Máximo Normal</label>
-              <input
-                v-model.number="form.thresholds.normalMax"
-                type="number"
-                class="form-input"
-              />
-            </div>
-            <div>
-              <label class="form-label">Mínimo Crítico</label>
-              <input
-                v-model.number="form.thresholds.criticalMin"
-                type="number"
-                class="form-input"
-              />
-            </div>
-            <div>
-              <label class="form-label">Máximo Crítico</label>
-              <input
-                v-model.number="form.thresholds.criticalMax"
-                type="number"
-                class="form-input"
-              />
+          <div class="card p-4 bg-gray-50 border border-gray-200">
+            <h3 class="text-md font-medium text-gray-900 mb-3">Umbrales de Alerta (Thresholds)</h3>
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label class="form-label">Normal Mínimo</label>
+                <input
+                  v-model.number="form.thresholds.normalMin"
+                  type="number"
+                  step="any"
+                  class="form-input"
+                />
+              </div>
+              <div>
+                <label class="form-label">Normal Máximo</label>
+                <input
+                  v-model.number="form.thresholds.normalMax"
+                  type="number"
+                  step="any"
+                  class="form-input"
+                />
+              </div>
+              <div>
+                <label class="form-label">Crítico Mínimo</label>
+                <input
+                  v-model.number="form.thresholds.criticalMin"
+                  type="number"
+                  step="any"
+                  class="form-input"
+                />
+              </div>
+              <div>
+                <label class="form-label">Crítico Máximo</label>
+                <input
+                  v-model.number="form.thresholds.criticalMax"
+                  type="number"
+                  step="any"
+                  class="form-input"
+                />
+              </div>
+              <!-- Campos específicos para umbrales de vibración -->
+              <template v-if="form.type === 'vibration'">
+                <div>
+                  <label class="form-label">Nivel de Alarma</label>
+                  <input v-model.number="form.thresholds.alarm_level" type="number" step="any" class="form-input" />
+                </div>
+                <div>
+                  <label class="form-label">Nivel Crítico</label>
+                  <input v-model.number="form.thresholds.critical_level" type="number" step="any" class="form-input" />
+                </div>
+              </template>
             </div>
           </div>
 
@@ -182,6 +212,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useSensorStore } from '~/stores/sensors';
 import { useOrganizationStore } from '~/stores/organizations';
 import { useAssetStore } from '~/stores/assets';
+import { useVibrationProfileStore } from '~/stores/vibrationProfiles'; // Importar el store de perfiles de vibración
 import { useParameterStore } from '~/stores/parameters';
 
 const route = useRoute();
@@ -189,6 +220,7 @@ const router = useRouter();
 const sensorStore = useSensorStore();
 const organizationStore = useOrganizationStore();
 const assetStore = useAssetStore();
+const vibrationProfileStore = useVibrationProfileStore(); // Inicializar el store de perfiles de vibración
 const parameterStore = useParameterStore();
 
 const loading = ref(true);
@@ -206,10 +238,12 @@ const form = ref({
   type: '',
   unit: '',
   thresholds: {
-    criticalMin: 0,
-    criticalMax: 100,
-    normalMin: 0,
-    normalMax: 100,
+    criticalMin: null,
+    criticalMax: null,
+    normalMin: null,
+    normalMax: null,
+    alarm_level: null, // Nuevo para vibración
+    critical_level: null, // Nuevo para vibración
   },
   last_communication: null,
   battery_level: null,
@@ -224,13 +258,11 @@ const loadSensorData = async () => {
   loading.value = true;
   error.value = null;
   try {
-    // Es CRUCIAL que estos datos se carguen PRIMERO
     await Promise.all([
       organizationStore.fetchOrganizations(),
-      assetStore.fetchAssets(), // Aseguramos que la lista de activos esté disponible
+      assetStore.fetchAssets(), 
       parameterStore.fetchParameters(),
     ]);
-    console.log("Datos de referencia (organizaciones, activos, parámetros) cargados.");
 
     const fetchedSensor = await sensorStore.fetchSensor(route.params.id);
     if (!fetchedSensor) {
@@ -245,17 +277,18 @@ const loadSensorData = async () => {
       serial_number: fetchedSensor.serial_number || '',
       model: fetchedSensor.model || '',
       location_description: fetchedSensor.location_description || '',
-      // No poblar city, state, country directamente del sensor, ya que vienen del activo
       organizationId: fetchedSensor.organizationId || '',
-      asset_id: fetchedSensor.assetId || null, // Usamos 'assetId' que es como lo mapea el store
+      asset_id: fetchedSensor.assetId || null, 
       status: fetchedSensor.status || 'active',
       type: fetchedSensor.type || '',
       unit: fetchedSensor.unit || '',
       thresholds: {
-        criticalMin: fetchedSensor.thresholds?.criticalMin ?? 0,
-        criticalMax: fetchedSensor.thresholds?.criticalMax ?? 100,
-        normalMin: fetchedSensor.thresholds?.normalMin ?? 0,
-        normalMax: fetchedSensor.thresholds?.normalMax ?? 100,
+        criticalMin: fetchedSensor.thresholds?.criticalMin ?? null, 
+        criticalMax: fetchedSensor.thresholds?.criticalMax ?? null,
+        normalMin: fetchedSensor.thresholds?.normalMin ?? null,
+        normalMax: fetchedSensor.thresholds?.normalMax ?? null,
+        alarm_level: fetchedSensor.thresholds?.alarm_level ?? null, // Cargar valor de alarma
+        critical_level: fetchedSensor.thresholds?.critical_level ?? null, // Cargar valor crítico
       },
       last_communication: fetchedSensor.last_communication || null,
       battery_level: fetchedSensor.battery_level || null,
@@ -280,16 +313,16 @@ const saveSensor = async () => {
   saving.value = true;
   error.value = null;
   try {
-    const payload = {
-      ...form.value,
-      organizationName: undefined,
-      assetName: undefined,
-      assetCity: undefined, // Asegurarse de que no se envíen
-      assetState: undefined, // Asegurarse de que no se envíen
-      assetCountry: undefined, // Asegurarse de que no se envíen
-    };
-    const updatedSensor = await sensorStore.updateSensor(route.params.id, payload);
+    const payload = { ...form.value };
 
+    // Limpiar campos numéricos de umbrales si están vacíos o son 0/null para enviar null a DB
+    for (const key of ['criticalMin', 'criticalMax', 'normalMin', 'normalMax', 'alarm_level', 'critical_level']) {
+      if (payload.thresholds[key] === '' || payload.thresholds[key] === 0) { 
+        payload.thresholds[key] = null;
+      }
+    }
+
+    await sensorStore.updateSensor(route.params.id, payload);
     router.push('/sensors');
   } catch (err) {
     error.value = 'Error al guardar sensor: ' + err.message;
@@ -298,6 +331,61 @@ const saveSensor = async () => {
     saving.value = false;
   }
 };
+
+// Observar cambios en el tipo de sensor y el asset_id para cargar umbrales
+watch([() => form.value.type, () => form.value.asset_id], async ([newType, newAssetId]) => {
+  // Solo aplicar lógica si no estamos en la carga inicial y el activo ha sido seleccionado
+  if (!loading.value && newType === 'vibration' && newAssetId) {
+    console.log(`[EditSensorPage] Sensor tipo vibración y asset_id seleccionado/cambiado: ${newAssetId}. Intentando cargar umbrales del perfil.`);
+    const selectedAsset = assets.value.find(asset => asset.id === newAssetId);
+    
+    if (selectedAsset && selectedAsset.vibration_profile_id) {
+      console.log(`[EditSensorPage] Activo tiene perfil de vibración ID: ${selectedAsset.vibration_profile_id}`);
+      await vibrationProfileStore.fetchVibrationProfile(selectedAsset.vibration_profile_id);
+      const profileThresholds = vibrationProfileStore.getCurrentVibrationProfile?.thresholds;
+
+      if (profileThresholds) {
+        console.log('[EditSensorPage] Umbrales del perfil cargados:', profileThresholds);
+        // Asignar los umbrales del perfil al formulario del sensor
+        form.value.thresholds.normalMin = profileThresholds.normal_min ?? null;
+        form.value.thresholds.normalMax = profileThresholds.normal_max ?? null;
+        form.value.thresholds.criticalMin = profileThresholds.min_value ?? null; 
+        form.value.thresholds.criticalMax = profileThresholds.max_value ?? null; 
+        form.value.thresholds.alarm_level = profileThresholds.alarm_level ?? null;
+        form.value.thresholds.critical_level = profileThresholds.critical_level ?? null;
+
+        // Asignar la unidad del perfil de vibración si está disponible
+        const profileUnit = vibrationProfileStore.getCurrentVibrationProfile?.vibration_range_unit;
+        if (profileUnit) {
+          form.value.unit = profileUnit;
+          console.log(`[EditSensorPage] Unidad del perfil de vibración asignada: ${profileUnit}`);
+        } else {
+          console.warn('[EditSensorPage] Perfil de vibración no tiene unidad definida.');
+        }
+
+      } else {
+        console.warn('[EditSensorPage] El perfil de vibración no tiene umbrales definidos.');
+        resetVibrationThresholds(); // Limpiar solo umbrales de vibración
+      }
+    } else {
+      console.log('[EditSensorPage] Activo seleccionado no tiene perfil de vibración o no se encontró. Limpiando umbrales de vibración.');
+      resetVibrationThresholds(); // Limpiar solo umbrales de vibración
+    }
+  } else if (!loading.value && newType !== 'vibration') {
+    // Si el tipo cambia a no-vibración, limpiar solo los umbrales específicos de vibración
+    console.log('[EditSensorPage] Tipo de sensor no es vibración. Reiniciando umbrales específicos de vibración.');
+    resetVibrationThresholds();
+  }
+}, { immediate: false }); // No ejecutar inmediatamente, espera interacción del usuario o carga inicial
+
+// Función para reiniciar solo los umbrales específicos de vibración
+const resetVibrationThresholds = () => {
+  form.value.thresholds.alarm_level = null;
+  form.value.thresholds.critical_level = null;
+  // Opcional: También podrías resetear normalMin/Max y criticalMin/Max a null si son exclusivos de vibración
+  // pero por ahora los mantendremos si se llenaron antes.
+};
+
 
 onMounted(async () => {
   await loadSensorData();

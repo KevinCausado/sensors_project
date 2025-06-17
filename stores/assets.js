@@ -1,21 +1,22 @@
 // stores/assets.js
 import { defineStore } from 'pinia';
 import { useNuxtApp } from '#app';
-import { useOrganizationStore } from '~/stores/organizations'; // Importar el store de organizaciones
+import { useOrganizationStore } from '~/stores/organizations'; 
+import { useSensorStore } from '~/stores/sensors'; 
 
 export const useAssetStore = defineStore('assets', {
   state: () => ({
     assets: [],
-    assetTypes: [], // List of asset types from assets_types table
-    isoGroups: [], // List of ISO groups from iso_groups table
+    assetTypes: [], 
+    isoGroups: [], 
     rigidityTypes: [],
     foundationTypes: [],
     couplingTypes: [],
-    vibrationProfiles: [], // NUEVO: Para almacenar perfiles de vibración genéricos para selección
-    loading: false, // General loading state for the store
-    error: null, // General error state for the store
-    currentAsset: null, // For when a single asset is edited/viewed
-    _dataInitialized: false, // Nueva bandera para controlar la inicialización de datos de formularios
+    vibrationProfiles: [], 
+    loading: false, 
+    error: null, 
+    currentAsset: null, 
+    _dataInitialized: false, 
   }),
 
   getters: {
@@ -25,33 +26,26 @@ export const useAssetStore = defineStore('assets', {
     getRigidityTypes: (state) => state.rigidityTypes,
     getFoundationTypes: (state) => state.foundationTypes,
     getCouplingTypes: (state) => state.couplingTypes,
-    getVibrationProfiles: (state) => state.vibrationProfiles, // NUEVO GETTER para perfiles de vibración
+    getVibrationProfiles: (state) => state.vibrationProfiles, 
     isLoading: (state) => state.loading,
     getError: (state) => state.error,
     getCurrentAsset: (state) => state.currentAsset,
   },
 
   actions: {
-    // --- CRUD Operations for Assets (Main List) ---
     async fetchAssets() {
       this.loading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const organizationStore = useOrganizationStore(); // Obtener instancia del store de organizaciones
-
-        // Asegurarse de que los datos de referencia (assetTypes, etc.) estén inicializados
-        // antes de intentar mapear. Esto es CRÍTICO para asegurar que assetTypes tenga datos.
+        const organizationStore = useOrganizationStore(); 
         if (!this._dataInitialized) {
             await this.initializeDataForForms();
         }
-        // También aseguramos que las organizaciones estén cargadas si vamos a mapear organization_name
         if (organizationStore.organizations.length === 0) {
             await organizationStore.fetchOrganizations();
         }
 
-        // Se modifica la cadena de select para incluir el JOIN para el perfil de vibración.
-        // Se mantiene el uso de '*' y se añade el ID y la relación anidada para el perfil de vibración.
         let query = $supabase
           .from('assets_base')
           .select(`*, vibration_profile_id, assets_vibration_config ( measurement_point, direction )`)
@@ -73,7 +67,6 @@ export const useAssetStore = defineStore('assets', {
           rigidity_type_name: this.rigidityTypes.find(type => type.id === asset.rigidity_type_id)?.name || 'N/A', 
           foundation_type_name: this.foundationTypes.find(type => type.id === asset.foundation_type_id)?.name || 'N/A', 
           coupling_type_name: this.couplingTypes.find(type => type.id === asset.coupling_type_id)?.name || 'N/A', 
-          // NUEVO: Mapear el nombre del perfil de vibración
           vibration_profile_name: asset.assets_vibration_config ? 
                                   `${asset.assets_vibration_config.measurement_point} (${asset.assets_vibration_config.direction})` : 'N/A',
         }));
@@ -92,9 +85,9 @@ export const useAssetStore = defineStore('assets', {
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const organizationStore = useOrganizationStore(); // Obtener instancia del store de organizaciones
+        const organizationStore = useOrganizationStore(); 
+        const sensorStore = useSensorStore();
 
-        // Asegurarse de que los datos de referencia (assetTypes, etc.) estén inicializados
         if (!this._dataInitialized) {
             await this.initializeDataForForms();
         }
@@ -102,10 +95,9 @@ export const useAssetStore = defineStore('assets', {
             await organizationStore.fetchOrganizations();
         }
 
-        // Se modifica la cadena de select para incluir el JOIN para el perfil de vibración.
         const { data, error } = await $supabase
           .from('assets_base')
-          .select(`*, assets_vibration_config ( id, measurement_point, direction, vibration_range_id )`) // Se añade el JOIN al perfil de vibración
+          .select(`*, assets_vibration_config ( id, measurement_point, direction, vibration_range_id )`)
           .eq('id', id)
           .single();
 
@@ -120,11 +112,10 @@ export const useAssetStore = defineStore('assets', {
             rigidity_type_name: this.rigidityTypes.find(type => type.id === data.rigidity_type_id)?.name || 'N/A',
             foundation_type_name: this.foundationTypes.find(type => type.id === data.foundation_type_id)?.name || 'N/A',
             coupling_type_name: this.couplingTypes.find(type => type.id === data.coupling_type_id)?.name || 'N/A',
-            // NUEVO: Mapear el nombre del perfil de vibración para display
             vibration_profile_display_name: data.assets_vibration_config ? 
                                             `${data.assets_vibration_config.measurement_point} (${data.assets_vibration_config.direction})` : 'N/A',
           };
-          console.log('[Assets Store] Activo individual cargado (con assetTypeName y vibration_profile_display_name):', this.currentAsset);
+          console.log('[Assets Store] Activo individual cargado (con nombres mapeados):', this.currentAsset);
           return this.currentAsset;
         }
         return null;
@@ -150,7 +141,7 @@ export const useAssetStore = defineStore('assets', {
           .single();
 
         if (error) throw error;
-        await this.fetchAssets(); // Refresh the main list to include the new asset with mapped names
+        await this.fetchAssets(); 
         return data;
       } catch (e) {
         console.error('Error creating asset:', e);
@@ -174,9 +165,8 @@ export const useAssetStore = defineStore('assets', {
           .single();
 
         if (error) throw error;
-        await this.fetchAssets(); // Refresh the main list to reflect changes with mapped names
+        await this.fetchAssets(); 
         if (this.currentAsset && this.currentAsset.id === id) {
-          // Re-fetch para el currentAsset para asegurar que todos los campos mapeados se actualicen
           await this.fetchAssetById(id); 
         }
         return data;
@@ -210,9 +200,7 @@ export const useAssetStore = defineStore('assets', {
       }
     },
 
-    // Cargar datos de referencia para formularios (tipos de activo, grupos ISO, etc.)
     async initializeDataForForms() {
-      // Si ya se ha inicializado, salir. Esto previene llamadas redundantes.
       if (this._dataInitialized) {
         console.log('[Assets Store] initializeDataForForms: Datos ya inicializados. Saliendo.');
         return;
@@ -229,14 +217,14 @@ export const useAssetStore = defineStore('assets', {
           { data: rigidityTypesData, error: rigidityTypesError },
           { data: foundationTypesData, error: foundationTypesError },
           { data: couplingTypesData, error: couplingTypesError },
-          { data: vibrationProfilesData, error: vibrationProfilesError }, // NUEVO: Cargar perfiles de vibración
+          { data: vibrationProfilesData, error: vibrationProfilesError },
         ] = await Promise.all([
           $supabase.from('assets_types').select('id, name'),
           $supabase.from('iso_groups').select('id, name'),
           $supabase.from('rigidity_types').select('id, name'),
           $supabase.from('foundation_types').select('id, name'),
           $supabase.from('coupling_types').select('id, name'),
-          $supabase.from('assets_vibration_config').select('id, measurement_point, direction'), // Seleccionar campos relevantes
+          $supabase.from('assets_vibration_config').select('id, measurement_point, direction'), 
         ]);
 
         if (assetsTypesError) throw assetsTypesError;
@@ -244,16 +232,16 @@ export const useAssetStore = defineStore('assets', {
         if (rigidityTypesError) throw rigidityTypesError;
         if (foundationTypesError) throw foundationTypesError;
         if (couplingTypesError) throw couplingTypesError;
-        if (vibrationProfilesError) throw vibrationProfilesError; // Manejar error si falla la carga de perfiles
+        if (vibrationProfilesError) throw vibrationProfilesError; 
 
         this.assetTypes = assetsTypesData;
         this.isoGroups = isoGroupsData;
         this.rigidityTypes = rigidityTypesData;
         this.foundationTypes = foundationTypesData;
         this.couplingTypes = couplingTypesData;
-        this.vibrationProfiles = vibrationProfilesData; // Asignar perfiles cargados
+        this.vibrationProfiles = vibrationProfilesData; 
 
-        this._dataInitialized = true; // Establecer la bandera a true
+        this._dataInitialized = true; 
         console.log('[Assets Store] initializeDataForForms: Datos de formularios inicializados con éxito. Perfiles de vibración cargados:', this.vibrationProfiles.length);
 
       } catch (error) {

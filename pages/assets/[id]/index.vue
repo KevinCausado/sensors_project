@@ -6,27 +6,24 @@
     >
       <template #actions>
         <div class="flex gap-2">
-        
           <NuxtLink
             to="/assets"
             class="btn btn-secondary"
           >
             Volver
           </NuxtLink>
-          <!-- Botón de edición del activo -->
-         
+          
         </div>
       </template>
     </PageHeader>
 
-    <!-- Sección de Tarjetas de Estadísticas (max-w-7xl mx-auto) -->
+    <!-- Sección de Tarjetas de Estadísticas -->
     <div class="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-4 max-w-7xl mx-auto" v-if="!loading && asset">
       <StatCard title="Sensores del Activo" :value="totalSensorsForAsset" icon="sensor" color="primary" />
       <StatCard title="Sensores Activos" :value="activeSensorsForAsset" icon="sensor" color="success" />
       <StatCard title="En Mantenimiento" :value="maintenanceSensorsForAsset" icon="sensor" color="warning" />
       <StatCard title="Alertas Activas" :value="activeAlertsForCurrentAsset" icon="alert" color="error" />
     </div>
-
 
     <div v-if="loading" class="flex items-center justify-center py-8">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -37,8 +34,8 @@
       Activo no encontrado. Verifique el ID o si existen datos.
     </div>
 
-    <!-- Contenedor principal para todas las tarjetas de detalle (AHORA TAMBIÉN max-w-7xl mx-auto) -->
-    <div v-else class="max-w-7xl mx-auto space-y-6"> <!-- CAMBIO CLAVE AQUÍ: max-w-7xl -->
+    <!-- Contenedor principal para todas las tarjetas de detalle -->
+    <div v-else class="max-w-7xl mx-auto space-y-6">
 
       <!-- Información General del Activo -->
       <div class="card p-6">
@@ -166,6 +163,39 @@
         </div>
       </div>
 
+      <!-- TARJETA DE MONITOREO EN TIEMPO REAL -->
+      <div class="card p-6">
+        <h3 class="text-lg font-semibold mb-4">Monitoreo en Tiempo Real</h3>
+        
+        <div class="mb-4 flex flex-wrap gap-2">
+          <label v-for="sensor in availableSensorsForCharts"
+                  :key="sensor.id"
+                  class="inline-flex items-center cursor-pointer p-2 rounded-md transition-colors hover:bg-gray-100"
+                  :class="{'bg-primary-50 text-primary-700': selectedSensorIds.includes(sensor.id)}">
+            <input type="checkbox"
+                    v-model="selectedSensorIds"
+                    :value="sensor.id"
+                    class="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500" />
+            <span class="ml-2 text-sm font-medium">{{ sensor.name }} ({{ translateSensorType(sensor.type) }})</span>
+            <span v-if="sensor.unit" class="ml-1 text-xs text-gray-500">({{ sensor.unit }})</span>
+          </label>
+          <p v-if="availableSensorsForCharts.length === 0 && !sensorStore.isLoading" class="text-sm text-gray-500">No hay sensores asociados o activos para monitorear en este activo.</p>
+          <p v-if="sensorStore.isLoading" class="text-sm text-gray-500">Cargando sensores...</p>
+        </div>
+
+        <SensorChart
+          v-if="realtimeSelectedSensorsForChart.length > 0"
+          :sensors="realtimeSelectedSensorsForChart"
+          :height="400"
+          :show-time-range-controls="true"
+          initial-empty-message="Seleccione uno o más sensores para ver su historial de lecturas."
+          empty-data-message="No hay lecturas disponibles para los sensores seleccionados en el rango de tiempo actual."
+        />
+        <div v-else class="text-center py-8 text-gray-500">
+          Seleccione los sensores que desea monitorear en la gráfica.
+        </div>
+      </div>
+
       <!-- TARJETA DE SENSORES ASOCIADOS -->
       <div class="card p-6">
         <h3 class="text-lg font-semibold mb-4">Sensores Asociados ({{ sensorsForCurrentAsset?.length || 0 }})</h3>
@@ -174,19 +204,26 @@
             <thead>
               <tr>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción de Ubicación</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Lectura</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="sensor in sensorsForCurrentAsset" :key="sensor.id">
                 <td class="px-6 py-4 whitespace-nowrap">{{ sensor.name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ translateSensorType(sensor.type) }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ sensor.location_description || 'N/A' }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="`badge ${getSensorStatusBadgeClass(sensor.status)}`">
                     {{ translateStatus(sensor.status) }}
                   </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  {{ sensor.last_value !== null ? sensor.last_value : "N/A" }}
+                  <span v-if="sensor.last_unit">{{ sensor.last_unit }}</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(sensor.created_at) }}</td>
               </tr>
@@ -241,7 +278,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAssetStore } from '~/stores/assets';
 import { useOrganizationStore } from '~/stores/organizations';
@@ -249,9 +286,10 @@ import { useSensorStore } from '~/stores/sensors';
 import { useAlertStore } from '~/stores/alerts';
 import PageHeader from '~/components/PageHeader.vue';
 import StatCard from '~/components/StatCard.vue';
+import SensorChart from '~/components/SensorChart.vue'; // Importar SensorChart
 
 definePageMeta({
-  // middleware: ['auth']
+  // middleware: ['auth'] // Puedes agregar un middleware de autenticación si lo usas.
 });
 
 const route = useRoute();
@@ -263,6 +301,7 @@ const alertStore = useAlertStore();
 
 const loading = ref(true);
 const asset = ref(null);
+const selectedSensorIds = ref([]); // Almacena los IDs de los sensores seleccionados para la gráfica
 
 // Propiedad computada para la ubicación combinada del activo
 const combinedLocation = computed(() => {
@@ -276,22 +315,36 @@ const combinedLocation = computed(() => {
 
 // Propiedad computada para filtrar sensores por el ID del activo actual
 const sensorsForCurrentAsset = computed(() => {
-  console.log('--- Debugging Sensores ---');
-  console.log('ID del Activo Actual (asset.value?.id):', asset.value?.id);
-  console.log('Sensores en sensorStore.sensors:', sensorStore.sensors);
-  
-  const filtered = !asset.value || !sensorStore.sensors
-    ? []
-    : sensorStore.sensors.filter(sensor => {
-        // CORRECCIÓN CLAVE: Usar sensor.assetId (camelCase)
-        const match = sensor.assetId === asset.value.id; 
-        console.log(`Comparando sensor.assetId (${sensor.assetId}) con asset.value.id (${asset.value.id}). Resultado: ${match}`); 
-        return match;
-      });
-  console.log('Sensores filtrados para este activo:', filtered); 
-  console.log('-------------------------');
+  if (!asset.value || !sensorStore.sensors) {
+    return [];
+  }
+  // Filtra los sensores que tienen el assetId del activo actual
+  const filtered = sensorStore.sensors.filter(sensor => {
+    return sensor.assetId === asset.value.id;
+  });
   return filtered;
 });
+
+// Propiedad computada para obtener solo los sensores disponibles para la selección de la gráfica
+const availableSensorsForCharts = computed(() => {
+  // Filtra sensores asociados al activo y que estén activos y tengan alguna comunicación reciente
+  return sensorsForCurrentAsset.value.filter(s => s.status === 'active' && s.last_communication);
+});
+
+
+// Propiedad computada para los datos que se pasan al SensorChart
+const realtimeSelectedSensorsForChart = computed(() => {
+  // Filtra los sensores del activo que están seleccionados por el usuario
+  const selectedSensors = sensorsForCurrentAsset.value.filter(sensor => selectedSensorIds.value.includes(sensor.id));
+  
+  // Para cada sensor seleccionado, adjunta sus lecturas en tiempo real
+  // sensorStore.getReadingsBySensorId es el nuevo getter que proporciona las lecturas en tiempo real
+  return selectedSensors.map(sensor => ({
+    ...sensor,
+    readings: sensorStore.getReadingsBySensorId(sensor.id), 
+  }));
+});
+
 
 // Propiedades computadas para las estadísticas de sensores
 const totalSensorsForAsset = computed(() => sensorsForCurrentAsset.value.length);
@@ -301,21 +354,33 @@ const maintenanceSensorsForAsset = computed(() => sensorsForCurrentAsset.value.f
 
 // Propiedades computadas para las alertas del activo actual
 const alertsForCurrentAsset = computed(() => {
-  console.log('--- Debugging Alertas ---');
-  console.log('ID del Activo Actual (asset.value?.id):', asset.value?.id);
-  console.log('Alertas en alertStore.alerts:', alertStore.alerts);
-  
-  const filtered = !asset.value || !alertStore.alerts
-    ? []
-    : alertStore.alerts.filter(alert => {
-        // CONFIRMADO: usar alert.asset_id (snake_case)
-        const match = alert.asset_id === asset.value.id;
-        console.log(`Comparando alert.asset_id (${alert.asset_id}) con asset.value.id (${asset.value.id}). Resultado: ${match}`); 
-        return match;
-      });
-  console.log('Alertas filtradas para este activo:', filtered); 
-  console.log('-------------------------');
-  return filtered;
+  if (!asset.value || !alertStore.alerts) {
+    return [];
+  }
+  // Filtra las alertas que tienen el asset_id del activo actual
+  const filtered = alertStore.alerts.filter(alert => {
+    return alert.asset_id === asset.value.id;
+  });
+
+  return filtered.map((alert) => {
+    // Busca el sensor asociado a esta alerta para obtener su nombre, si existe
+    const sensor = sensorStore.sensors.find((s) => s.id === alert.sensor_id);
+    const sensorName = sensor ? sensor.name : "Desconocido";
+
+    // Busca la organización para la alerta
+    const organization = organizationStore.organizations.find((org) => org.id === alert.organization_id);
+    const organizationName = organization ? organization.name : "Desconocida";
+
+    // Asignar el nombre del activo, que ya lo tenemos en el store principal del activo
+    const assetName = asset.value.name || 'N/A';
+
+    return {
+      ...alert,
+      sensorName: sensorName,
+      organizationName: organizationName,
+      assetName: assetName, 
+    };
+  });
 });
 
 const activeAlertsForCurrentAsset = computed(() => alertsForCurrentAsset.value.filter(alert => alert.status !== 'resolved').length);
@@ -331,24 +396,41 @@ const loadAsset = async () => {
 
   loading.value = true;
   try {
+    // Cargar datos de base antes de cargar el activo para que los mapeos funcionen
     await Promise.all([
-      assetStore.initializeDataForForms(),
-      organizationStore.fetchOrganizations(),
-      sensorStore.fetchSensors(), // ESTO ES CLAVE: Carga todos los sensores en su store
-      alertStore.fetchAlerts()    // ESTO ES CLAVE: Carga todas las alertas en su store
+      assetStore.initializeDataForForms(), // Asegura que los tipos de activo, etc., estén cargados
+      organizationStore.fetchOrganizations(), // Asegura que las organizaciones estén cargadas
     ]);
 
+    // Cargar el activo específico
     const fetchedAsset = await assetStore.fetchAssetById(assetId);
     if (fetchedAsset) {
       asset.value = fetchedAsset;
       console.log('Datos del Activo (con nombres mapeados) cargados:', asset.value);
+
+      // Una vez que el activo está cargado, cargar los sensores asociados a él
+      await sensorStore.fetchSensors(); // Esto carga todos los sensores y los filtros en `sensorsForCurrentAsset`
+
+      // Después de cargar los sensores, seleccionamos todos por defecto para la gráfica
+      // Solo selecciona los sensores que estén activos y hayan tenido comunicación
+      selectedSensorIds.value = availableSensorsForCharts.value.map(s => s.id);
+
+      // Suscribirse a las lecturas en tiempo real para los sensores seleccionados
+      if (selectedSensorIds.value.length > 0) {
+        sensorStore.subscribeToGraphReadings(selectedSensorIds.value);
+      }
+      
+      // Finalmente, cargar alertas
+      await alertStore.fetchAlerts(); // Esto carga todas las alertas y los filtros en `alertsForCurrentAsset`
+
     } else {
       console.warn('Activo no encontrado para el ID:', assetId);
-      router.push('/assets');
+      router.push('/assets'); // Redirigir si el activo no existe
     }
   } catch (e) {
     console.error('Error al cargar el activo:', e);
-    router.push('/assets');
+    // Podrías mostrar un mensaje de error al usuario aquí
+    router.push('/assets'); // Redirigir en caso de error grave
   } finally {
     loading.value = false;
   }
@@ -397,6 +479,19 @@ const translateStatus = (status) => {
   return statuses[status] || status;
 };
 
+// Helper para traducir el tipo de sensor (repetido de pages/sensors/[id].vue, pero útil aquí también)
+const translateSensorType = (type) => {
+  switch (type) {
+    case "temperature": return "Temperatura";
+    case "humidity": return "Humedad";
+    case "vibration": return "Vibración";
+    case "pressure": return "Presión";
+    case "other": return "Otro";
+    default: return type;
+  }
+};
+
+
 // Funciones de ayuda para el estado y prioridad de alertas
 const getAlertPriorityBadgeClass = (priority) => {
   switch (priority) {
@@ -433,8 +528,28 @@ const getAlertStatusBadgeClass = (status) => {
   }
 };
 
+// Watcher para la selección de sensores de la gráfica
+watch(selectedSensorIds, (newIds) => {
+  // Cuando la selección cambia, desuscribirse de lo anterior y suscribirse a lo nuevo
+  // Se usa la función renombrada
+  sensorStore.unsubscribeFromAllGraphReadings(); 
+  if (newIds.length > 0) {
+    // Se usa la función renombrada
+    sensorStore.subscribeToGraphReadings(newIds);
+  }
+}, { deep: true }); // Observa cambios profundos en el array (elementos añadidos/eliminados)
+
+
+// Ciclo de vida
 onMounted(async () => {
   await loadAsset();
+});
+
+onUnmounted(async () => {
+  // Al salir de la página del activo, desuscribirse de todas las lecturas de gráficas para evitar fugas de memoria
+  sensorStore.unsubscribeFromAllGraphReadings(); // Se usa la función renombrada
+  // También desuscribirse de las actualizaciones de alertas si no se necesitan globalmente
+  alertStore.unsubscribeFromAlertUpdates();
 });
 </script>
 

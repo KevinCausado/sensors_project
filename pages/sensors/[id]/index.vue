@@ -3,8 +3,7 @@
     <PageHeader title="Detalles del Sensor" :subtitle="sensorStore.currentSensor?.name">
       <template #actions>
         <div class="flex gap-2">
-          <NuxtLink to="/sensors" class="btn btn-secondary">Volver</NuxtLink>
-          <!-- Botón de edición del sensor -->         
+          <NuxtLink to="/sensors" class="btn btn-secondary">Volver</NuxtLink>      
         </div>
       </template>
     </PageHeader>
@@ -30,7 +29,6 @@
           </div>
            <div>
             <p class="text-sm font-medium text-gray-500">Activo</p>
-            <!-- Asegúrate de que assetName está llegando -->
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.assetName || "N/A" }}</p>
           </div>
           <div>
@@ -43,7 +41,7 @@
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Tipo</p>
-            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.type || "N/A" }}</p>
+            <p class="mt-1 text-gray-900">{{ translateSensorType(sensorStore.currentSensor.type) || "N/A" }}</p>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Unidad</p>
@@ -53,12 +51,10 @@
             <p class="text-sm font-medium text-gray-500">Organización</p>
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.organizationName || "N/A" }}</p>
           </div>
-          <!-- NUEVO: Ubicación Geográfica del Activo -->
           <div>
             <p class="text-sm font-medium text-gray-500">Ubicación Geográfica (Activo)</p>
             <p class="mt-1 text-gray-900">{{ combinedAssetLocation || "N/A" }}</p>
           </div>
-          <!-- DESCRIPCION DE UBICACIÓN DEL SENSOR (SE MANTIENE SEPARADA) -->
           <div>
             <p class="text-sm font-medium text-gray-500">Descripción de la ubicación (Sensor)</p>
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.location_description || "No especificada" }}</p>
@@ -101,51 +97,92 @@
 
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Umbrales Definidos</h2>
-        <div v-if="sensorStore.currentSensor?.thresholds">
+        <div v-if="sensorStore.currentSensor?.thresholds && hasThresholds">
           <p class="text-sm text-gray-600 mb-4">
-            Estos umbrales definen los rangos de operación de tu sensor:
-            <br />
-            •
-            <strong class="text-green-700">Normal:</strong>
-            Valores entre
-            <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.normalMin }}</span>
-            y
-            <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.normalMax }}</span>
-            .
-            <br />
-            •
-            <strong class="text-yellow-700">Advertencia:</strong>
-            Valores fuera del rango Normal pero dentro de los límites Críticos.
-            <br />
-            •
-            <strong class="text-red-700">Crítico:</strong>
-            Valores fuera de los límites
-            <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.criticalMin }}</span>
-            o
-            <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.criticalMax }}</span>
-            .
+            Estos umbrales definen los rangos de operación de tu sensor.
+            <template v-if="sensorStore.currentSensor.type === 'vibration'">
+              <br />
+              • <strong class="text-green-700">Normal:</strong> Valores entre
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.normalMin ?? 'N/A' }}</span>
+              y
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.normalMax ?? 'N/A' }}</span>
+              .
+              <br />
+              • <strong class="text-yellow-700">Alarma:</strong> Valores entre
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.normalMax ?? 'N/A' }}</span>
+              y
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.alarm_level ?? 'N/A' }}</span>
+              .
+              <br />
+              • <strong class="text-red-700">Crítico:</strong> Valores superiores a
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.critical_level ?? 'N/A' }}</span>
+              .
+            </template>
+            <template v-else>
+              <br />
+              • <strong class="text-green-700">Normal:</strong> Valores entre
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.normalMin ?? 'N/A' }}</span>
+              y
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.normalMax ?? 'N/A' }}</span>
+              .
+              <br />
+              • <strong class="text-yellow-700">Advertencia:</strong> Valores fuera del rango Normal pero dentro de los límites Críticos.
+              <br />
+              • <strong class="text-red-700">Crítico:</strong> Valores fuera de los límites
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.criticalMin ?? 'N/A' }}</span>
+              o
+              <span class="font-semibold">{{ sensorStore.currentSensor.thresholds.criticalMax ?? 'N/A' }}</span>
+              .
+            </template>
           </p>
 
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div v-if="sensorStore.currentSensor.thresholds.criticalMin !== undefined && sensorStore.currentSensor.thresholds.criticalMin !== null">
+          <!-- GRID CONDICIONAL BASADO EN EL TIPO DE SENSOR -->
+          <div :class="{'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4': sensorStore.currentSensor.type === 'vibration', 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4': sensorStore.currentSensor.type !== 'vibration'}">
+            
+            <!-- Umbrales Generales (siempre presentes, solo se ajusta el layout) -->
+            <div>
               <p class="text-sm font-medium text-red-500">Mínimo Crítico</p>
-              <p class="mt-1 text-lg font-semibold text-red-800">{{ sensorStore.currentSensor.thresholds.criticalMin }} {{ sensorStore.currentSensor.unit }}</p>
+              <p class="mt-1 text-lg font-semibold text-red-800">
+                {{ isDefined(sensorStore.currentSensor.thresholds.criticalMin) ? sensorStore.currentSensor.thresholds.criticalMin : 'N/A' }} {{ sensorStore.currentSensor.unit || '' }}
+              </p>
             </div>
 
-            <div v-if="sensorStore.currentSensor.thresholds.criticalMax !== undefined && sensorStore.currentSensor.thresholds.criticalMax !== null">
+            <div>
               <p class="text-sm font-medium text-red-500">Máximo Crítico</p>
-              <p class="mt-1 text-lg font-semibold text-red-800">{{ sensorStore.currentSensor.thresholds.criticalMax }} {{ sensorStore.currentSensor.unit }}</p>
+              <p class="mt-1 text-lg font-semibold text-red-800">
+                {{ isDefined(sensorStore.currentSensor.thresholds.criticalMax) ? sensorStore.currentSensor.thresholds.criticalMax : 'N/A' }} {{ sensorStore.currentSensor.unit || '' }}
+              </p>
             </div>
 
-            <div v-if="sensorStore.currentSensor.thresholds.normalMin !== undefined && sensorStore.currentSensor.thresholds.normalMin !== null">
+            <div>
               <p class="text-sm font-medium text-green-500">Mínimo Normal</p>
-              <p class="mt-1 text-lg font-semibold text-green-800">{{ sensorStore.currentSensor.thresholds.normalMin }} {{ sensorStore.currentSensor.unit }}</p>
+              <p class="mt-1 text-lg font-semibold text-green-800">
+                {{ isDefined(sensorStore.currentSensor.thresholds.normalMin) ? sensorStore.currentSensor.thresholds.normalMin : 'N/A' }} {{ sensorStore.currentSensor.unit || '' }}
+              </p>
             </div>
 
-            <div v-if="sensorStore.currentSensor.thresholds.normalMax !== undefined && sensorStore.currentSensor.thresholds.normalMax !== null">
+            <div>
               <p class="text-sm font-medium text-green-500">Máximo Normal</p>
-              <p class="mt-1 text-lg font-semibold text-green-800">{{ sensorStore.currentSensor.thresholds.normalMax }} {{ sensorStore.currentSensor.unit }}</p>
+              <p class="mt-1 text-lg font-semibold text-green-800">
+                {{ isDefined(sensorStore.currentSensor.thresholds.normalMax) ? sensorStore.currentSensor.thresholds.normalMax : 'N/A' }} {{ sensorStore.currentSensor.unit || '' }}
+              </p>
             </div>
+
+            <!-- Umbrales Específicos de Vibración (solo si el tipo es 'vibration') -->
+            <template v-if="sensorStore.currentSensor.type === 'vibration'">
+              <div>
+                <p class="text-sm font-medium text-yellow-500">Nivel de Alarma</p>
+                <p class="mt-1 text-lg font-semibold text-yellow-800">
+                  {{ isDefined(sensorStore.currentSensor.thresholds.alarm_level) ? sensorStore.currentSensor.thresholds.alarm_level : 'N/A' }} {{ sensorStore.currentSensor.unit || '' }}
+                </p>
+              </div>
+              <div>
+                <p class="text-sm font-medium text-red-500">Nivel Crítico</p>
+                <p class="mt-1 text-lg font-semibold text-red-800">
+                  {{ isDefined(sensorStore.currentSensor.thresholds.critical_level) ? sensorStore.currentSensor.thresholds.critical_level : 'N/A' }} {{ sensorStore.currentSensor.unit || '' }}
+                </p>
+              </div>
+            </template>
           </div>
         </div>
         <div v-else class="text-center py-4 text-gray-500">No hay umbrales definidos para este sensor.</div>
@@ -202,17 +239,18 @@ import { useRoute, useRouter } from "vue-router";
 import { useSensorStore } from "@/stores/sensors";
 import { useAlertStore } from "@/stores/alerts";
 import { useOrganizationStore } from "@/stores/organizations";
-import { useAssetStore } from "@/stores/assets"; // Asegúrate de importar el AssetStore aquí
+import { useAssetStore } from "@/stores/assets"; 
 import AlertList from "@/components/AlertList.vue";
 import SensorChart from "@/components/SensorChart.vue"; 
 import PageHeader from "@/components/PageHeader.vue";
+import PermissionGuard from '~/components/PermissionGuard.vue'; 
 
 const route = useRoute();
 const router = useRouter();
 const sensorStore = useSensorStore();
 const alertStore = useAlertStore();
 const organizationStore = useOrganizationStore();
-const assetStore = useAssetStore(); // Instancia el AssetStore aquí
+const assetStore = useAssetStore(); 
 
 
 const itemsPerPage = ref(10);
@@ -254,11 +292,25 @@ watch(
   { deep: true }
 );
 
+// Helper para traducir el tipo de sensor
+const translateSensorType = (type) => {
+  switch (type) {
+    case "temperature": return "Temperatura";
+    case "humidity": return "Humedad";
+    case "vibration": return "Vibración";
+    case "pressure": return "Presión";
+    case "other": return "Otro";
+    default: return type;
+  }
+};
+
+
 const getSensorStatusClass = (status) => {
   switch (status) {
     case "active": return "bg-green-100 text-green-800";
     case "maintenance": return "bg-yellow-100 text-yellow-800";
     case "inactive": return "bg-red-100 text-red-800";
+    case "error": return "bg-red-100 text-red-800"; 
     default: return "bg-gray-100 text-gray-800";
   }
 };
@@ -268,6 +320,7 @@ const translateSensorStatus = (status) => {
     case "active": return "Activo";
     case "maintenance": return "Mantenimiento";
     case "inactive": return "Inactivo";
+    case "error": return "Error";
     default: return status;
   }
 };
@@ -289,7 +342,6 @@ const alertsForCurrentSensor = computed(() => {
 
   const filtered = alertStore.alerts.filter((alert) => alert.sensor_id === currentSensorId);
 
-  // --- CRÍTICO: Aquí enriquecimos las alertas para AlertList ---
   return filtered.map((alert) => {
     const sensor = sensorStore.sensors.find((s) => s.id === alert.sensor_id);
     const sensorName = sensor ? sensor.name : "Desconocido";
@@ -298,9 +350,7 @@ const alertsForCurrentSensor = computed(() => {
     const organization = organizationStore.organizations.find((org) => org.id === organizationId);
     const organizationName = organization ? organization.name : "Desconocida";
 
-    // --- NUEVO: Traer el nombre del activo para la alerta aquí ---
     let assetName = 'N/A';
-    // Prioriza alert.asset_id, luego sensor.assetId
     const effectiveAssetId = alert.asset_id || sensor?.assetId; 
     if (effectiveAssetId && assetStore.assets.length > 0) {
         const asset = assetStore.assets.find(a => a.id === effectiveAssetId);
@@ -309,12 +359,11 @@ const alertsForCurrentSensor = computed(() => {
         console.log(`[idSensorPage] alertsForCurrentSensor: assetStore.assets está vacío, no se puede mapear assetName para alerta ${alert.id}.`);
     }
 
-
     return {
       ...alert,
       sensorName: sensorName,
       organizationName: organizationName,
-      assetName: assetName, // ¡Añadir assetName aquí!
+      assetName: assetName, 
     };
   });
 });
@@ -332,43 +381,46 @@ const combinedAssetLocation = computed(() => {
   if (!sensor) return 'N/A';
 
   const parts = [];
-  // Usa assetCity, assetState, assetCountry que vienen del join con assets_base
-  console.log('[idSensorPage] Debugging combinedAssetLocation:', {
-    assetCity: sensor.assetCity,
-    assetState: sensor.assetState,
-    assetCountry: sensor.assetCountry
-  });
-
   if (sensor.assetCity && sensor.assetCity !== 'N/A') parts.push(sensor.assetCity);
   if (sensor.assetState && sensor.assetState !== 'N/A') parts.push(sensor.assetState);
   if (sensor.assetCountry && sensor.assetCountry !== 'N/A') parts.push(sensor.assetCountry);
 
   const result = parts.length > 0 ? parts.join(', ') : 'N/A';
-  console.log('[idSensorPage] Resulting combined location:', result);
   return result;
 });
+
+// Nuevo computed para verificar si hay algún umbral definido
+const hasThresholds = computed(() => {
+  const thresholds = sensorStore.currentSensor?.thresholds;
+  if (!thresholds) return false;
+  // Verifica si al menos uno de los campos de umbral no es null o undefined
+  return (
+    (thresholds.criticalMin !== null && thresholds.criticalMin !== undefined) ||
+    (thresholds.criticalMax !== null && thresholds.criticalMax !== undefined) ||
+    (thresholds.normalMin !== null && thresholds.normalMin !== undefined) ||
+    (thresholds.normalMax !== null && thresholds.normalMax !== undefined) ||
+    (thresholds.alarm_level !== null && thresholds.alarm_level !== undefined) ||
+    (thresholds.critical_level !== null && thresholds.critical_level !== undefined)
+  );
+});
+
+// Función de ayuda para verificar si un valor está definido y no es null
+const isDefined = (value) => value !== undefined && value !== null;
 
 
 onMounted(async () => {
   try {
-    // Asegurar que los stores estén poblados antes de acceder a sus datos
-    // Cargar assets PRIMERO, ya que alerts y sensors pueden depender de ellos
-    await assetStore.fetchAssets(); // ¡CRÍTICO! Necesario para el mapeo de nombres de activos
-    await organizationStore.fetchOrganizations(); // Necesario para organizationName
-    await sensorStore.fetchSensors(); // Necesario para sensorStore.sensors y para el mapeo de alertas
+    await Promise.all([
+      assetStore.fetchAssets(), 
+      organizationStore.fetchOrganizations(), 
+      sensorStore.fetchSensors(), 
+    ]);
     
-    // Luego, busca el sensor específico y sus lecturas
-    await sensorStore.fetchSensor(route.params.id); // Esto pobla currentSensor (incluyendo assetCity, etc.)
+    await sensorStore.fetchSensor(route.params.id); 
     await sensorStore.fetchAndSubscribeToDetailReadings(route.params.id);
     
-    // Finalmente, las alertas
     await alertStore.fetchAlerts();
     await alertStore.subscribeToAlertUpdates();
-
-    // Depuración: Confirma que currentSensor tiene los datos esperados
-    console.log('[idSensorPage] onMounted: sensorStore.currentSensor FINAL:', JSON.parse(JSON.stringify(sensorStore.currentSensor)));
-    console.log('[idSensorPage] onMounted: assetStore.assets FINAL:', assetStore.assets.slice(0,5)); // Muestra primeros 5 assets para verificar
-    console.log('[idSensorPage] onMounted: alertStore.alerts FINAL:', alertStore.alerts.slice(0,5)); // Muestra primeros 5 alerts para verificar
 
   } catch (error) {
     console.error("[idSensorPage] Error al cargar sensor o configurar suscripción:", error);
@@ -390,11 +442,9 @@ watch(
         await sensorStore.unsubscribeFromDetailReadings();
         await alertStore.unsubscribeFromAlertUpdates();
 
-        // Recargar assets y organizations es buena práctica en un watcher si la organización cambia
-        // pero para un cambio de SENSOR ID, solo recargar el sensor y las alertas relativas
         await sensorStore.fetchSensor(newId); 
         await sensorStore.fetchAndSubscribeToDetailReadings(newId);
-        await alertStore.fetchAlerts(); // Esto recargará todas las alertas, que luego serán filtradas
+        await alertStore.fetchAlerts(); 
         await alertStore.subscribeToAlertUpdates();
 
         console.log('[idSensorPage] Watcher: sensorStore.currentSensor (después de cambio de ID):', JSON.parse(JSON.stringify(sensorStore.currentSensor)));

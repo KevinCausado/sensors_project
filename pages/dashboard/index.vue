@@ -375,7 +375,8 @@ const realtimeSelectedSensorsForChart = computed(() => {
     .filter(id => currentFilteredSensorIds.includes(id)) 
     .map(id => {
       const sensorDetails = sensorStore.sensors.find(s => s.id === id); 
-      const readings = sensorStore.allSensorRecentReadings[id] || [];
+      // Usar el getter del store para obtener las lecturas acumuladas para la gráfica
+      const readings = sensorStore.getReadingsBySensorId(id) || []; 
       return sensorDetails ? {
         ...sensorDetails,
         readings: readings,
@@ -493,11 +494,13 @@ const getBadgeDescriptionClass = () => 'badge bg-rose-100 text-rose-700';
 watch(selectedSensorIds, (newIds, oldIds) => {
   console.log('[Dashboard Watcher] selectedSensorIds ha cambiado. Nuevos IDs:', newIds, 'Antiguos IDs:', oldIds);
   if (oldIds && oldIds.length > 0 && newIds.length === 0) { 
-     sensorStore.unsubscribeFromAllDashboardReadings();
+     // Usar el método correcto para desuscribirse de todos los gráficos
+     sensorStore.unsubscribeFromAllGraphReadings();
      console.log('[Dashboard Watcher] selectedSensorIds vacíos, desuscrito de todos los gráficos explícitamente.');
   } else if (newIds && newIds.length > 0) { 
-    sensorStore.subscribeToDashboardReadings(newIds);
-    console.log(`[Dashboard Watcher] Llamando a subscribeToDashboardReadings con: ${newIds.length} IDs.`);
+    // Usar el método correcto para suscribirse a los gráficos
+    sensorStore.subscribeToGraphReadings(newIds);
+    console.log(`[Dashboard Watcher] Llamando a subscribeToGraphReadings con: ${newIds.length} IDs.`);
   } else {
     console.log('[Dashboard Watcher] selectedSensorIds sin cambios significativos para suscripción/desuscripción.');
   }
@@ -507,8 +510,10 @@ watch(selectedSensorIds, (newIds, oldIds) => {
 watch(() => organizationStore.selectedOrganizationId, async (newOrgId, oldOrgId) => {
   console.groupCollapsed(`[Dashboard Watcher] organizationStore.selectedOrganizationId ha cambiado de ${oldOrgId} a ${newOrgId}.`);
   console.log('  - Paso 1: Desuscribiendo y limpiando selección previa de sensores para gráfica.');
-  await sensorStore.unsubscribeFromAllDashboardReadings(); 
+  // Usar el método correcto para desuscribirse de todos los gráficos
+  await sensorStore.unsubscribeFromAllGraphReadings(); 
   selectedSensorIds.value = []; 
+  // Limpiar explícitamente las lecturas en tiempo real
   sensorStore.allSensorRecentReadings = {}; 
 
   // ESENCIAL: Asegurar que los datos de referencia y organizaciones se carguen primero
@@ -583,7 +588,7 @@ onMounted(async () => {
             .from('assets_base') 
             .select('id', { count: 'exact' })
             .lt('created_at', twentyFourHoursAgo.toISOString()); 
-        if (errAssetsYesterday) console.error("Error al obtener el total de activos hace 24h:", errAssetsYesterday);
+        if (errAssetsYesterday) console.error("Error al obtener el total de activos hace 24h:", errAssetsTwentyFourHoursAgo);
         previousTotalAssets.value = totalAssetsTwentyFourHoursAgo || 0;
         
         console.log('[Dashboard.vue - onMounted] Preparando para iniciar suscripciones Realtime GENERALES...');
@@ -594,8 +599,8 @@ onMounted(async () => {
         sensorStore.subscribeToSensorUpdates();
         console.log('--- sensorStore.subscribeToSensorUpdates() ha sido llamada ---');
         
-        sensorStore.subscribeToDashboardRecentReadings();
-        console.log('--- sensorStore.subscribeToDashboardRecentReadings() ha sido llamada ---');
+        // ELIMINADO: sensorStore.subscribeToDashboardRecentReadings(); // Esta línea es la que causa el problema para el gráfico
+        // console.log('--- sensorStore.subscribeToDashboardRecentReadings() ha sido llamada ---'); // También eliminar este log
 
     } catch (error) {
         console.error("[Dashboard] Error al cargar el dashboard:", error);
@@ -607,9 +612,10 @@ onMounted(async () => {
 
 onUnmounted(async () => {
   console.log('[Dashboard.vue - onUnmounted] Desuscribiendo de los canales de Realtime...');
-  await sensorStore.unsubscribeFromAllDashboardReadings(); 
+  // Usar el método correcto para desuscribirse de todos los gráficos
+  await sensorStore.unsubscribeFromAllGraphReadings(); 
   await sensorStore.unsubscribeFromSensorUpdates();      
-  await sensorStore.unsubscribeFromDashboardRecentReadings(); 
+  // ELIMINADO: await sensorStore.unsubscribeFromDashboardRecentReadings(); // Esta línea también debe eliminarse
   await alertStore.unsubscribeFromAlertUpdates();         
 });
 </script>

@@ -24,6 +24,7 @@
                 <option value="humidity">Humedad</option>
                 <option value="vibration">Vibración</option>
                 <option value="pressure">Presión</option>
+                <option value="other">Otro</option>
               </select>
             </div>
 
@@ -48,21 +49,7 @@
             <input v-model="form.model" type="text" class="form-input" />
           </div>
          
-
-          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <div>
-              <label class="form-label">País</label>
-              <input v-model="form.country" type="text" class="form-input" />
-            </div>
-            <div>
-              <label class="form-label">Estado</label>
-              <input v-model="form.state" type="text" class="form-input" />
-            </div>
-            <div>
-              <label class="form-label">Ciudad</label>
-              <input v-model="form.city" type="text" class="form-input" />
-            </div>
-          </div>
+      
 
            <div>
             <label class="form-label">Dirección</label>
@@ -71,7 +58,7 @@
 
           <div>
             <label class="form-label">Organización</label>
-            <select v-model="form.organizationId" required class="form-input">
+            <select v-model="form.organizationId" required class="form-input" :disabled="organizationStore.isLoading">
               <option value="">Seleccione una organización</option>
               <option v-for="org in organizations" :key="org.id" :value="org.id">
                 {{ org.name }}
@@ -79,13 +66,13 @@
             </select>
           </div>
 
-          <!-- Campo Activo Relacionado -->
+          <!-- Campo Activo Relacionado - Importante que asset_id sea null para "Sin activo" -->
           <div>
             <label class="form-label">Activo Relacionado</label>
-            <select v-model="form.asset_id" class="form-input">
+            <select v-model="form.asset_id" class="form-input" :disabled="assetStore.isLoading">
               <option :value="null">Sin activo relacionado</option>
               <option v-for="assetOption in assets" :key="assetOption.id" :value="assetOption.id">
-                {{ assetOption.name }} ({{ assetOption.asset_code }})
+                {{ assetOption.name }} ({{ assetOption.asset_code || 'N/A' }})
               </option>
             </select>
           </div>
@@ -96,6 +83,7 @@
               <option value="active">Activo</option>
               <option value="maintenance">Mantenimiento</option>
               <option value="inactive">Inactivo</option>
+              <option value="error">Error</option>
             </select>
           </div>
 
@@ -118,6 +106,17 @@
                 <label class="form-label">Crítico Máximo</label>
                 <input v-model.number="form.thresholds.criticalMax" type="number" step="any" class="form-input" />
               </div>
+              <!-- Campos específicos para umbrales de vibración -->
+              <template v-if="form.type === 'vibration'">
+                <div>
+                  <label class="form-label">Nivel de Alarma</label>
+                  <input v-model.number="form.thresholds.alarm_level" type="number" step="any" class="form-input" />
+                </div>
+                <div>
+                  <label class="form-label">Nivel Crítico</label>
+                  <input v-model.number="form.thresholds.critical_level" type="number" step="any" class="form-input" />
+                </div>
+              </template>
             </div>
           </div>
 
@@ -134,15 +133,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useSensorStore } from "~/stores/sensors";
 import { useOrganizationStore } from "~/stores/organizations";
-import { useAssetStore } from "~/stores/assets"; // NUEVO: Importar el store de activos
+import { useAssetStore } from "~/stores/assets"; 
+import { useVibrationProfileStore } from "~/stores/vibrationProfiles"; // Importar el store de perfiles de vibración
 import { useRouter } from "vue-router";
-import { useParameterStore } from "~/stores/parameters"; // Asegúrate de que este import exista
+import { useParameterStore } from "~/stores/parameters"; 
 
-import { PlusIcon, CheckIcon } from "@heroicons/vue/24/outline";
-// Componentes
 import PageHeader from "@/components/PageHeader.vue";
 
 definePageMeta({
@@ -152,66 +150,130 @@ definePageMeta({
 // Stores
 const sensorStore = useSensorStore();
 const organizationStore = useOrganizationStore();
-const assetStore = useAssetStore(); // NUEVO: Inicializar el store de activos
-const parameterStore = useParameterStore(); // Inicializa el store de parámetros
+const assetStore = useAssetStore(); 
+const vibrationProfileStore = useVibrationProfileStore(); // Inicializar el store de perfiles de vibración
+const parameterStore = useParameterStore(); 
 const router = useRouter();
 
 // Estado
 const saving = ref(false);
 const form = ref({
   name: "",
-  type: "temperature",
-  unit: "", // Mantén este campo para la unidad seleccionada
+  type: "temperature", 
+  unit: "", 
   serial_number: "",
   model: "",
   location_description: "",
   country: "",
   state: "",
   city: "",
-  organizationId: "",
-  asset_id: null, // NUEVO: Campo para el ID del activo relacionado
-  status: "active", // Establecer un valor por defecto sensato
-  thresholds: {
-    criticalMin: 0,
-    criticalMax: 100,
-    normalMin: 0,
-    normalMax: 100,
+  organizationId: "", 
+  asset_id: null, 
+  status: "active", 
+  thresholds: { 
+    criticalMin: null, 
+    criticalMax: null,
+    normalMin: null,
+    normalMax: null,
+    alarm_level: null, // Nuevo para vibración
+    critical_level: null, // Nuevo para vibración
   },
 });
 
 // Computed
 const organizations = computed(() => organizationStore.organizations);
-const assets = computed(() => assetStore.assets); // NUEVO: Propiedad computada para activos
+const assets = computed(() => assetStore.assets); 
 const availableUnits = computed(() => parameterStore.getUnitParameters);
 
 // Métodos
 const saveSensor = async () => {
   try {
     saving.value = true;
-    const sensor = await sensorStore.createSensor({
-      ...form.value,
-      // Asegúrate de que 'thresholds' se envíe como un objeto completo si es un JSONB
-      thresholds: { ...form.value.thresholds },
-      // assetId ya está en form.value, y tu stores/sensors.js ya fue adaptado
-      // para recibir organizationId y assetId y mapearlos a organization_id y asset_id.
-    });
+    const payload = { ...form.value };
+
+    // Limpiar campos numéricos de umbrales si están vacíos o son 0 para enviar null a DB
+    for (const key of ['criticalMin', 'criticalMax', 'normalMin', 'normalMax', 'alarm_level', 'critical_level']) {
+      if (payload.thresholds[key] === '' || payload.thresholds[key] === 0) { 
+        payload.thresholds[key] = null;
+      }
+    }
+
+    await sensorStore.createSensor(payload);
     router.push("/sensors");
   } catch (error) {
     console.error("Error al guardar sensor:", error);
+    // TODO: Mostrar un mensaje de error al usuario
   } finally {
     saving.value = false;
   }
 };
 
-// Cargar datos
+// Observar cambios en el tipo de sensor y el asset_id para cargar umbrales
+watch([() => form.value.type, () => form.value.asset_id], async ([newType, newAssetId]) => {
+  if (newType === 'vibration' && newAssetId) {
+    console.log(`[NewSensorPage] Sensor tipo vibración y asset_id seleccionado: ${newAssetId}. Intentando cargar umbrales del perfil.`);
+    const selectedAsset = assets.value.find(asset => asset.id === newAssetId);
+    
+    if (selectedAsset && selectedAsset.vibration_profile_id) {
+      console.log(`[NewSensorPage] Activo tiene perfil de vibración ID: ${selectedAsset.vibration_profile_id}`);
+      await vibrationProfileStore.fetchVibrationProfile(selectedAsset.vibration_profile_id);
+      const profileThresholds = vibrationProfileStore.getCurrentVibrationProfile?.thresholds;
+
+      if (profileThresholds) {
+        console.log('[NewSensorPage] Umbrales del perfil cargados:', profileThresholds);
+        // Asignar los umbrales del perfil al formulario del sensor
+        form.value.thresholds.normalMin = profileThresholds.normal_min ?? null;
+        form.value.thresholds.normalMax = profileThresholds.normal_max ?? null;
+        form.value.thresholds.criticalMin = profileThresholds.min_value ?? null; // Asumiendo min_value es criticalMin
+        form.value.thresholds.criticalMax = profileThresholds.max_value ?? null; // Asumiendo max_value es criticalMax
+        form.value.thresholds.alarm_level = profileThresholds.alarm_level ?? null;
+        form.value.thresholds.critical_level = profileThresholds.critical_level ?? null;
+        
+        // Asignar la unidad del perfil de vibración si está disponible
+        const profileUnit = vibrationProfileStore.getCurrentVibrationProfile?.vibration_range_unit;
+        if (profileUnit) {
+          form.value.unit = profileUnit;
+          console.log(`[NewSensorPage] Unidad del perfil de vibración asignada: ${profileUnit}`);
+        } else {
+          console.warn('[NewSensorPage] Perfil de vibración no tiene unidad definida.');
+        }
+
+      } else {
+        console.warn('[NewSensorPage] El perfil de vibración no tiene umbrales definidos.');
+        // Opcional: Limpiar umbrales si no se encontraron
+        resetThresholds();
+      }
+    } else {
+      console.log('[NewSensorPage] Activo seleccionado no tiene perfil de vibración o no se encontró.');
+      resetThresholds();
+    }
+  } else if (newType !== 'vibration' || !newAssetId) {
+    // Si el tipo cambia a no-vibración o se deselecciona el activo, limpiar umbrales específicos
+    console.log('[NewSensorPage] Tipo de sensor no es vibración o asset_id deseleccionado. Reiniciando umbrales de vibración.');
+    resetThresholds();
+  }
+}, { immediate: false }); // No ejecutar inmediatamente, espera interacción del usuario
+
+// Función para reiniciar los umbrales específicos de vibración
+const resetThresholds = () => {
+  form.value.thresholds.normalMin = null;
+  form.value.thresholds.normalMax = null;
+  form.value.thresholds.criticalMin = null;
+  form.value.thresholds.criticalMax = null;
+  form.value.thresholds.alarm_level = null;
+  form.value.thresholds.critical_level = null;
+  form.value.unit = ''; // También limpia la unidad si no es de vibración o no hay perfil
+};
+
+
+// Cargar datos iniciales
 onMounted(async () => {
   await Promise.all([
     organizationStore.fetchOrganizations(),
-    assetStore.fetchAssets(), // NUEVO: Cargar los activos disponibles
+    assetStore.fetchAssets(), 
     parameterStore.fetchParameters(),
   ]);
 
-  // Establecer organización por defecto si hay una
   if (organizationStore.organizations.length > 0 && !form.value.organizationId) {
     form.value.organizationId = organizationStore.organizations[0].id;
   }
@@ -220,4 +282,19 @@ onMounted(async () => {
 
 <style scoped>
 /* Tus estilos aquí */
+.form-label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+.form-input, .form-select {
+  @apply mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+}
+.btn {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors;
+}
+.btn-primary {
+  @apply bg-primary-600 text-white hover:bg-primary-700;
+}
+.btn-secondary {
+  @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+}
 </style>

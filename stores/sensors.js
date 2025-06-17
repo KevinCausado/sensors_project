@@ -12,11 +12,16 @@ export const useSensorStore = defineStore('sensors', {
     currentSensor: null, 
     currentSensorReadings: [], 
 
+    // Almacena las lecturas recientes para todos los sensores del dashboard/gráficas, por ID de sensor
+    // { sensorId1: [{value, timestamp, unit}, ...], sensorId2: [...] }
     allSensorRecentReadings: {}, 
+
+    // Suscripciones en tiempo real para las gráficas del dashboard/activo (por sensorId)
     dashboardRealtimeSubscriptions: {}, 
-    detailRealtimeSubscription: null,
+    
+    // Canales generales que no son específicos de un sensor para el gráfico
     dashboardSensorUpdatesChannel: null, 
-    dashboardChartReadingsChannel: null,
+    dashboardChartReadingsChannel: null, // Este parece no usarse activamente para el chart, se usa por sensorId
   }),
 
   getters: {
@@ -31,7 +36,6 @@ export const useSensorStore = defineStore('sensors', {
 
       if (organizationStore.selectedOrganizationId) {
         filtered = filtered.filter(sensor =>
-          // ¡CORRECCIÓN CRÍTICA AQUÍ! Cambiado de sensor.organization_id a sensor.organizationId
           sensor.organizationId === organizationStore.selectedOrganizationId 
         );
       }
@@ -78,6 +82,11 @@ export const useSensorStore = defineStore('sensors', {
         lastReading: sensor.last_reading_timestamp || null, 
       }));
     },
+
+    // Nuevo getter para obtener lecturas en tiempo real por ID de sensor para la gráfica
+    getReadingsBySensorId: (state) => (sensorId) => {
+      return state.allSensorRecentReadings[sensorId] || [];
+    },
   },
 
   actions: {
@@ -106,7 +115,7 @@ export const useSensorStore = defineStore('sensors', {
           model: sensor.model,
           location_description: sensor.location_description,
           status: sensor.status,
-          organizationId: sensor.organization_id, // Esto es correcto: mapea el snake_case de DB a camelCase en el store
+          organizationId: sensor.organization_id, 
           organizationName: sensor.organizations ? sensor.organizations.name : 'N/A',
           assetId: sensor.asset_id, 
           assetName: sensor.assets_base ? sensor.assets_base.name : 'N/A', 
@@ -143,7 +152,6 @@ export const useSensorStore = defineStore('sensors', {
 
         try {
             const { $supabase } = useNuxtApp();
-            // --- DEPURACIÓN: Log para ver la llamada a Supabase ---
             console.log(`[Sensor Store] fetchSensor: Intentando cargar sensor con ID: ${id}`);
             const { data, error } = await $supabase
                 .from('sensors')
@@ -161,9 +169,7 @@ export const useSensorStore = defineStore('sensors', {
                 return null;
             }
 
-            // --- DEPURACIÓN: Log para ver los datos brutos de Supabase ---
             console.log('[Sensor Store] fetchSensor: Datos brutos de Supabase para el sensor:', data);
-
 
             const mappedSensor = {
                 id: data.id,
@@ -177,7 +183,6 @@ export const useSensorStore = defineStore('sensors', {
                 organizationId: data.organization_id,
                 organizationName: data.organizations ? data.organizations.name : 'N/A',
                 assetId: data.asset_id,
-                // --- CRÍTICO: Asegurarse de que data.assets_base existe antes de acceder a .name ---
                 assetName: data.assets_base ? data.assets_base.name : 'N/A',
                 assetCity: data.assets_base ? data.assets_base.city : 'N/A',
                 assetState: data.assets_base ? data.assets_base.state : 'N/A',
@@ -195,7 +200,6 @@ export const useSensorStore = defineStore('sensors', {
                 created_at: data.created_at
             };
             this.currentSensor = mappedSensor;
-            // --- DEPURACIÓN: Log para ver el objeto mapeado final ---
             console.log('[Sensor Store] fetchSensor: Objeto currentSensor mapeado:', this.currentSensor);
             return mappedSensor;
         } catch (e) {
@@ -328,41 +332,49 @@ export const useSensorStore = defineStore('sensors', {
       }
     },
 
-    async subscribeToDashboardReadings(sensorIds) {
+    // Renombrado para mayor claridad, se usa para cualquier gráfico que necesite varias lecturas de sensores
+    async subscribeToGraphReadings(sensorIds) {
       const { $supabase } = useNuxtApp();
-      console.log('[Sensors Store] subscribeToDashboardReadings llamado con IDs:', sensorIds);
+      console.log('[Sensors Store] subscribeToGraphReadings llamado con IDs:', sensorIds);
 
+      // Desuscribirse de sensores que ya no están seleccionados
       for (const id in this.dashboardRealtimeSubscriptions) {
         if (!sensorIds.includes(id)) {
           await this.dashboardRealtimeSubscriptions[id].unsubscribe();
           delete this.dashboardRealtimeSubscriptions[id];
+          // Limpiar también las lecturas de ese sensor
+          delete this.allSensorRecentReadings[id];
           console.log(`[Sensors Store] Desuscrito de lecturas de sensor para sensor ${id} (ya no seleccionado).`);
         }
       }
 
       for (const sensorId of sensorIds) {
+        // Solo suscribirse si aún no estamos suscritos a este sensor
         if (!this.dashboardRealtimeSubscriptions[sensorId]) {
           try {
+            // Cargar lecturas históricas iniciales
             const { data, error } = await $supabase
                 .from('sensor_readings')
                 .select('value, timestamp, unit')
                 .eq('sensor_id', sensorId)
                 .order('timestamp', { ascending: false })
-                .limit(50); 
+                .limit(50); // Limita el número de lecturas históricas
 
             if (error) {
                 console.error(`[Sensors Store] Error al cargar lecturas históricas para sensor ${sensorId}:`, error);
                 throw error;
             }
 
+            // Almacenar las lecturas históricas (invertir para que las más antiguas estén primero para la gráfica)
             this.allSensorRecentReadings[sensorId] = data.reverse(); 
 
-            const channel = $supabase.channel(`dashboard_chart_readings_${sensorId}`);
+            // Suscribirse a nuevas inserciones en tiempo real para este sensor específico
+            const channel = $supabase.channel(`graph_chart_readings_${sensorId}`);
             channel.on('postgres_changes', {
-              event: 'INSERT', 
+              event: 'INSERT', // Solo nos interesan las nuevas lecturas
               schema: 'public',
               table: 'sensor_readings',
-              filter: `sensor_id=eq.${sensorId}`
+              filter: `sensor_id=eq.${sensorId}` // Filtrar por el ID del sensor actual
             }, payload => {
               console.log(`[Sensors Store] Nueva lectura en tiempo real para sensor ${sensorId}:`, payload.new);
               const newReading = {
@@ -370,12 +382,19 @@ export const useSensorStore = defineStore('sensors', {
                 timestamp: payload.new.timestamp,
                 unit: payload.new.unit,
               };
+              // Asegurarse de que el array exista antes de empujar
               if (!this.allSensorRecentReadings[sensorId]) {
                 this.allSensorRecentReadings[sensorId] = [];
               }
+              // Añadir la nueva lectura al final del array para la gráfica
               this.allSensorRecentReadings[sensorId].push(newReading); 
+              // Opcional: limitar el tamaño del array para evitar que crezca indefinidamente
+              if (this.allSensorRecentReadings[sensorId].length > 100) { // Mantener, por ejemplo, 100 lecturas
+                this.allSensorRecentReadings[sensorId].shift(); // Eliminar la más antigua
+              }
             }).subscribe();
 
+            // Guardar la suscripción para poder desuscribirnos luego
             this.dashboardRealtimeSubscriptions[sensorId] = channel;
             console.log(`[Sensors Store] Suscrito a lecturas en tiempo real para gráfico del sensor ${sensorId}.`);
           } catch (e) {
@@ -385,20 +404,24 @@ export const useSensorStore = defineStore('sensors', {
       }
     },
 
-    async unsubscribeFromAllDashboardReadings() {
+    // Renombrado para mayor claridad
+    async unsubscribeFromAllGraphReadings() {
       for (const id in this.dashboardRealtimeSubscriptions) {
         await this.dashboardRealtimeSubscriptions[id].unsubscribe();
         delete this.dashboardRealtimeSubscriptions[id];
+        delete this.allSensorRecentReadings[id]; // Limpiar las lecturas al desuscribir
       }
-      console.log('[Sensors Store] Desuscrito de todas las lecturas de gráfico del dashboard.');
+      console.log('[Sensors Store] Desuscrito de todas las lecturas de gráfico.');
 
+      // Si existe un canal general para lecturas de gráfico (aunque el enfoque es por sensorId)
       if (this.dashboardChartReadingsChannel) {
         await this.dashboardChartReadingsChannel.unsubscribe();
         this.dashboardChartReadingsChannel = null;
-        console.log('[Sensors Store] Desuscrito del canal de lecturas de gráfico del dashboard.');
+        console.log('[Sensors Store] Desuscrito del canal general de lecturas de gráfico.');
       }
     },
 
+    // Estas funciones parecen ser para los StatCards o la sección de "sensores recientes" en el dashboard
     async subscribeToDashboardRecentReadings() {
       if (this.dashboardSensorUpdatesChannel) { 
         console.log('[Sensors Store] Ya suscrito a dashboardSensorUpdatesChannel.');
@@ -417,8 +440,10 @@ export const useSensorStore = defineStore('sensors', {
             unit: payload.new.unit
           };
 
+          // Actualiza la última lectura reciente para el sensor, útil para StatCards
           this.allSensorRecentReadings[sensorId] = [newReading]; 
 
+          // Vuelve a cargar todos los sensores para actualizar los StatCards y la lista de "recientes"
           this.fetchSensors(); 
 
         }).subscribe();
@@ -437,7 +462,9 @@ export const useSensorStore = defineStore('sensors', {
       }
     },
 
+    // Funciones para la vista de detalle de un solo sensor
     async fetchAndSubscribeToDetailReadings(sensorId) {
+      // Si ya hay una suscripción activa de detalle, desuscribirse primero
       if (this.detailRealtimeSubscription) {
         await this.detailRealtimeSubscription.unsubscribe();
         this.detailRealtimeSubscription = null;
@@ -445,33 +472,35 @@ export const useSensorStore = defineStore('sensors', {
 
       this.isLoading = true;
       this.error = null;
-      this.currentSensorReadings = [];
+      this.currentSensorReadings = []; // Limpiar lecturas anteriores
       const { $supabase } = useNuxtApp();
       try {
+        // Cargar lecturas históricas iniciales para el detalle
         const { data, error } = await $supabase
           .from('sensor_readings')
           .select('id, sensor_id, value, timestamp, unit')
           .eq('sensor_id', sensorId)
           .order('timestamp', { ascending: false })
-          .limit(50);
+          .limit(50); // Limitar para el historial
 
         if (error) {
             console.error(`[Sensors Store] Supabase error fetching detail readings for sensor ${sensorId}:`, error);
             throw error;
         }
         this.currentSensorReadings = data;
-        console.log(`[Sensors Store] Lecturas iniciales para sensor ${sensorId}:`, this.currentSensorReadings);
+        console.log(`[Sensors Store] Lecturas iniciales para sensor ${sensorId} (detalle):`, this.currentSensorReadings);
 
+        // Suscribirse a cambios en tiempo real para este sensor específico
         const channel = $supabase.channel(`sensor_readings_${sensorId}`);
         channel.on('postgres_changes', {
-          event: '*',
+          event: '*', // Escuchar todos los eventos (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'sensor_readings',
-          filter: `sensor_id=eq.${sensorId}`
+          filter: `sensor_id=eq.${sensorId}` // Filtrar por el ID del sensor actual
         }, payload => {
-          console.log(`[Sensors Store] Cambio en lecturas de sensor ${sensorId} (Realtime):`, payload);
+          console.log(`[Sensors Store] Cambio en lecturas de sensor ${sensorId} (Realtime - Detalle):`, payload);
           if (payload.eventType === 'INSERT') {
-            this.currentSensorReadings.unshift(payload.new);
+            this.currentSensorReadings.unshift(payload.new); // Añadir al principio para mostrar las más nuevas
           } else if (payload.eventType === 'UPDATE') {
             const index = this.currentSensorReadings.findIndex(r => r.id === payload.old.id);
             if (index !== -1) {
@@ -482,7 +511,7 @@ export const useSensorStore = defineStore('sensors', {
           }
         }).subscribe();
         this.detailRealtimeSubscription = channel;
-        console.log(`[Sensors Store] Suscrito a lecturas en tiempo real para sensor ${sensorId}.`);
+        console.log(`[Sensors Store] Suscrito a lecturas en tiempo real para sensor ${sensorId} (detalle).`);
       } catch (e) {
         this.error = 'Failed to fetch or subscribe to detail readings: ' + e.message;
         console.error('[Sensors Store] Error fetching/subscribing to detail readings:', e);
@@ -499,6 +528,7 @@ export const useSensorStore = defineStore('sensors', {
       }
     },
 
+    // Función para obtener lecturas históricas (usada por ejemplo en un selector de rango de tiempo)
     async fetchReadings(sensorId, limit = 50) {
         this.isLoading = true;
         this.error = null;

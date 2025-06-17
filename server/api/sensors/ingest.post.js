@@ -167,9 +167,28 @@ export default defineEventHandler(async (event) => {
           alertPriority = 'medium';
         }
 
+        // Si deseas añadir lógica específica para `alarm_level` o `critical_level`
+        // Esto depende de cómo quieras que se comporten estos umbrales en tu sistema.
+        // Si son puntos específicos que disparan ALARMAS o NIVELES CRÍTICOS distinctos,
+        // puedes añadir condiciones aquí. Por ejemplo:
+        /*
+        else if (thresholds.critical_level !== null && value >= thresholds.critical_level) {
+            severity = 'critical_level_breach'; // Nuevo tipo de severidad si aplica
+            alertTitle = `${sensorTypeSpanish} Nivel Crítico (Nivel)`;
+            alertMessage = `El sensor ${sensorData.name} (${sensorData.type}) ha alcanzado el nivel crítico de ${thresholds.critical_level}. Valor actual: ${value} ${sensorData.unit}.`;
+            alertPriority = 'high';
+        }
+        else if (thresholds.alarm_level !== null && value >= thresholds.alarm_level) {
+            severity = 'alarm_level_breach'; // Nuevo tipo de severidad si aplica
+            alertTitle = `${sensorTypeSpanish} Nivel de Alarma (Nivel)`;
+            alertMessage = `El sensor ${sensorData.name} (${sensorData.type}) ha superado el nivel de alarma de ${thresholds.alarm_level}. Valor actual: ${value} ${sensorData.unit}.`;
+            alertPriority = 'medium';
+        }
+        */
+
         if (severity) {
           alertDetected = true;
-          alertTypeForDb = 'threshold';
+          alertTypeForDb = 'threshold'; // Puedes cambiar esto a 'alarm_level_breach', 'critical_level_breach' si usas los nuevos else if
           console.log(`[DEBUG] Condición: Umbral ${severity}. Valor: ${value}`);
         } else {
           console.log(`[DEBUG] Valor ${value} está DENTRO del rango normal para ${sensorData.name}. No se requiere alerta de umbral.`);
@@ -222,6 +241,9 @@ export default defineEventHandler(async (event) => {
               threshold_normal_max: sensorData.thresholds?.normalMax || null,
               threshold_critical_min: sensorData.thresholds?.criticalMin || null,
               threshold_critical_max: sensorData.thresholds?.criticalMax || null,
+              // Si añades critical_level y alarm_level a la alerta, añádelos aquí:
+              // threshold_alarm_level: sensorData.thresholds?.alarm_level || null,
+              // threshold_critical_level: sensorData.thresholds?.critical_level || null,
               status: 'active', // Nueva alerta, siempre activa
               alert_time: new Date().toISOString() // Usar alert_time
             });

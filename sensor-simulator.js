@@ -10,25 +10,24 @@ const SENSOR_CONFIGS = [
     // Asegúrate de que este ID existe en tu tabla 'public.sensors'
     id: '10000000-0000-0000-0000-000000000001', 
     type: 'temperature', 
-    unit: '°C',     
+    unit: 'C',     
     // Tus umbrales específicos (los que tienes en el JSONB de la DB)
     normalMin: 30,
     normalMax: 80,
     criticalMin: 20,
     criticalMax: 90,
     variation: 1.5 // Cuánto puede variar el valor en cada lectura
-  },
-  // {
-  //   id: '3a69bd34-7e05-4e7b-9674-920ed835f924', // Otro ID de sensor de ejemplo
-  //   type: 'humidity',
-  //   unit: '%',
-  //   normalMin: 40,
-  //   normalMax: 60,
-  //   criticalMin: 0,
-  //   criticalMax: 100,
-  //   variation: 3
-  // },
-  // Puedes añadir más sensores aquí si los tienes en tu DB
+  },  
+  {
+    id: '7761b176-a062-4c01-ad32-1aef55674bef', // ¡REEMPLAZA ESTO CON EL ID REAL DE TU SENSOR DE VIBRACIÓN!
+    type: 'vibration',
+    unit: 'mm/s', // O la unidad que uses para tu sensor de vibración (ej. G, mm/s)
+    normalMin: 1,
+    normalMax: 5,
+    criticalMin: 0.5,
+    criticalMax: 10,
+    variation: 0.5 
+  }
 ];
 
 // URL de tu Nuxt Server Route para la ingesta de datos
@@ -146,4 +145,3 @@ async function sendReadings() {
 console.log(`Simulador de Sensores Iniciado. Enviando data a ${INGEST_URL} cada ${SEND_INTERVAL_MS / 1000} segundos.`);
 setInterval(sendReadings, SEND_INTERVAL_MS);
 sendReadings(); // Enviar una lectura al inicio
-
