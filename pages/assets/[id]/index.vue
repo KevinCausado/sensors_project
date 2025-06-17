@@ -12,7 +12,6 @@
           >
             Volver
           </NuxtLink>
-          
         </div>
       </template>
     </PageHeader>
@@ -196,7 +195,7 @@
         </div>
       </div>
 
-      <!-- TARJETA DE SENSORES ASOCIADOS -->
+      <!-- TARJETA DE SENSORES ASOCIADOS (Realtime) -->
       <div class="card p-6">
         <h3 class="text-lg font-semibold mb-4">Sensores Asociados ({{ sensorsForCurrentAsset?.length || 0 }})</h3>
         <div v-if="sensorsForCurrentAsset && sensorsForCurrentAsset.length > 0" class="overflow-x-auto">
@@ -233,10 +232,10 @@
         <div v-else class="text-center text-gray-500 py-4">No hay sensores asociados a este activo.</div>
       </div>
 
-      <!-- TARJETA DE ALERTAS ASOCIADAS -->
+      <!-- TARJETA DE ALERTAS ASOCIADAS (Paginación y Realtime) -->
       <div class="card p-6">
-        <h3 class="text-lg font-semibold mb-4">Alertas Asociadas ({{ alertsForCurrentAsset?.length || 0 }})</h3>
-        <div v-if="alertsForCurrentAsset && alertsForCurrentAsset.length > 0" class="overflow-x-auto">
+        <h3 class="text-lg font-semibold mb-4">Alertas Asociadas ({{ totalFilteredAlertsForAsset }})</h3>
+        <div v-if="paginatedAlertsForCurrentAsset && paginatedAlertsForCurrentAsset.length > 0" class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
@@ -249,7 +248,7 @@
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-              <tr v-for="alert in alertsForCurrentAsset" :key="alert.id">
+              <tr v-for="alert in paginatedAlertsForCurrentAsset" :key="alert.id">
                 <td class="px-6 py-4 whitespace-nowrap">{{ alert.type || 'N/A' }}</td>
                 <td class="px-6 py-4 text-xs text-gray-600 align-top max-w-xs break-words">
                     {{ alert.description || 'N/A' }}
@@ -271,6 +270,15 @@
           </table>
         </div>
         <div v-else class="text-center text-gray-500 py-4">No hay alertas asociadas a este activo.</div>
+        
+        <div class="mt-4" v-if="totalFilteredAlertsForAsset > alertsPerPage">
+          <Pagination
+            :total-items="totalFilteredAlertsForAsset"
+            :current-page="currentAlertPage"
+            :items-per-page="alertsPerPage"
+            @page-change="handleAlertPageChange"
+          />
+        </div>
       </div>
 
     </div>
@@ -286,7 +294,16 @@ import { useSensorStore } from '~/stores/sensors';
 import { useAlertStore } from '~/stores/alerts';
 import PageHeader from '~/components/PageHeader.vue';
 import StatCard from '~/components/StatCard.vue';
-import SensorChart from '~/components/SensorChart.vue'; // Importar SensorChart
+import SensorChart from '~/components/SensorChart.vue'; 
+import Pagination from '~/components/Pagination.vue'; // Asegúrate de importar el componente de paginación
+
+// Para los iconos (si los usas, deben estar definidos o importados correctamente)
+import {
+  ExclamationTriangleIcon,
+  ExclamationCircleIcon,
+  InformationCircleIcon,
+  ArrowPathIcon
+} from '@heroicons/vue/24/outline'; // Ajusta la ruta si es necesario
 
 definePageMeta({
   // middleware: ['auth'] // Puedes agregar un middleware de autenticación si lo usas.
@@ -302,6 +319,11 @@ const alertStore = useAlertStore();
 const loading = ref(true);
 const asset = ref(null);
 const selectedSensorIds = ref([]); // Almacena los IDs de los sensores seleccionados para la gráfica
+
+// Paginación para alertas
+const currentAlertPage = ref(1);
+const alertsPerPage = ref(5); // Número de alertas por página
+
 
 // Propiedad computada para la ubicación combinada del activo
 const combinedLocation = computed(() => {
@@ -352,7 +374,7 @@ const activeSensorsForAsset = computed(() => sensorsForCurrentAsset.value.filter
 const maintenanceSensorsForAsset = computed(() => sensorsForCurrentAsset.value.filter(s => s.status === 'maintenance').length);
 
 
-// Propiedades computadas para las alertas del activo actual
+// Propiedades computadas para las alertas del activo actual (ahora filtradas y ordenadas)
 const alertsForCurrentAsset = computed(() => {
   if (!asset.value || !alertStore.alerts) {
     return [];
@@ -361,6 +383,9 @@ const alertsForCurrentAsset = computed(() => {
   const filtered = alertStore.alerts.filter(alert => {
     return alert.asset_id === asset.value.id;
   });
+
+  // Ordenar las alertas por fecha, las más recientes primero
+  filtered.sort((a, b) => new Date(b.alert_time) - new Date(a.alert_time));
 
   return filtered.map((alert) => {
     // Busca el sensor asociado a esta alerta para obtener su nombre, si existe
@@ -382,6 +407,16 @@ const alertsForCurrentAsset = computed(() => {
     };
   });
 });
+
+// Propiedades computadas para la paginación de alertas
+const paginatedAlertsForCurrentAsset = computed(() => {
+  const start = (currentAlertPage.value - 1) * alertsPerPage.value;
+  const end = start + alertsPerPage.value;
+  return alertsForCurrentAsset.value.slice(start, end);
+});
+
+const totalFilteredAlertsForAsset = computed(() => alertsForCurrentAsset.value.length);
+
 
 const activeAlertsForCurrentAsset = computed(() => alertsForCurrentAsset.value.filter(alert => alert.status !== 'resolved').length);
 
@@ -422,6 +457,11 @@ const loadAsset = async () => {
       
       // Finalmente, cargar alertas
       await alertStore.fetchAlerts(); // Esto carga todas las alertas y los filtros en `alertsForCurrentAsset`
+      // Suscribirse a las actualizaciones de alertas en tiempo real
+      alertStore.subscribeToAlertUpdates();
+      // Suscribirse a las actualizaciones de sensores generales (para la tabla de sensores)
+      sensorStore.subscribeToSensorUpdates();
+
 
     } else {
       console.warn('Activo no encontrado para el ID:', assetId);
@@ -539,6 +579,10 @@ watch(selectedSensorIds, (newIds) => {
   }
 }, { deep: true }); // Observa cambios profundos en el array (elementos añadidos/eliminados)
 
+// Manejador para el cambio de página de alertas
+const handleAlertPageChange = (page) => {
+  currentAlertPage.value = page;
+};
 
 // Ciclo de vida
 onMounted(async () => {
@@ -547,9 +591,11 @@ onMounted(async () => {
 
 onUnmounted(async () => {
   // Al salir de la página del activo, desuscribirse de todas las lecturas de gráficas para evitar fugas de memoria
-  sensorStore.unsubscribeFromAllGraphReadings(); // Se usa la función renombrada
-  // También desuscribirse de las actualizaciones de alertas si no se necesitan globalmente
+  sensorStore.unsubscribeFromAllGraphReadings(); 
+  // Desuscribirse de las actualizaciones de alertas si no se necesitan globalmente
   alertStore.unsubscribeFromAlertUpdates();
+  // Desuscribirse de las actualizaciones generales de sensores
+  sensorStore.unsubscribeFromSensorUpdates(); 
 });
 </script>
 

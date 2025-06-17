@@ -20,6 +20,7 @@ export const useSensorStore = defineStore('sensors', {
     dashboardRealtimeSubscriptions: {}, 
     
     // Canales generales que no son específicos de un sensor para el gráfico
+    // Se usa dashboardSensorUpdatesChannel para la suscripción general a la tabla 'sensors'
     dashboardSensorUpdatesChannel: null, 
     dashboardChartReadingsChannel: null, // Este parece no usarse activamente para el chart, se usa por sensorId
   }),
@@ -73,13 +74,13 @@ export const useSensorStore = defineStore('sensors', {
         return new Date(b.last_communication).getTime() - new Date(a.last_communication).getTime();
       });
 
-      const latestFive = sorted.slice(0, 5);
+      const latestFive = sorted.slice(0, 5); // O el número que desees mostrar
 
       return latestFive.map(sensor => ({
         ...sensor,
-        value: sensor.last_value || null, 
-        unit: sensor.last_unit || null,   
-        lastReading: sensor.last_reading_timestamp || null, 
+        value: sensor.last_value || null, // Asegúrate de que mapea 'last_value'
+        unit: sensor.last_unit || null,   // Asegúrate de que mapea 'last_unit'
+        lastReading: sensor.last_reading_timestamp || null, // Asegúrate de que mapea 'last_reading_timestamp'
       }));
     },
 
@@ -303,28 +304,111 @@ export const useSensorStore = defineStore('sensors', {
       }
     },
 
-     async subscribeToSensorUpdates() {
+   // Esta es la función que necesita la modificación para el dashboard
+   async subscribeToSensorUpdates() {
+      // El nombre del canal es 'dashboardSensorUpdatesChannel' en tu estado
       if (this.dashboardSensorUpdatesChannel) {
-        console.log('[Sensors Store] Ya suscrito a cambios generales de sensores.');
+        console.log('[Sensors Store] Ya suscrito a cambios generales de la tabla de sensores.');
         return;
       }
+
       try {
         const { $supabase } = useNuxtApp();
+        // Usar el nombre de canal que ya tenías para esta suscripción
         const channel = $supabase
-          .channel('public:sensors_general_updates')
+          .channel('public:sensors_table_updates_dashboard') 
           .on('postgres_changes', { event: '*', schema: 'public', table: 'sensors' }, (payload) => {
-            console.log('[Sensors Store] Cambio general en tabla de sensores (Realtime):', payload);
-            this.fetchSensors(); 
+            console.log('[Sensors Store] Cambio detectado en la tabla "sensors" para Dashboard (Realtime):', payload);
+
+            const updatedSensorRaw = payload.new;
+
+            // Encontrar el índice del sensor en el array 'this.sensors'
+            const index = this.sensors.findIndex(s => s.id === updatedSensorRaw.id);
+
+            // Crear un objeto con las propiedades actualizadas.
+            // Es CRÍTICO preservar las propiedades ya enriquecidas (como assetName, organizationName)
+            // si no vienen directamente en payload.new, o se volverán 'N/A'.
+            let updatedSensorForStore;
+
+            if (index !== -1) {
+              // Si el sensor existe, crea un nuevo objeto fusionando el existente con los datos nuevos
+              updatedSensorForStore = {
+                ...this.sensors[index], // Preserva propiedades enriquecidas existentes
+                last_value: updatedSensorRaw.last_value,
+                last_unit: updatedSensorRaw.last_unit,
+                last_reading_timestamp: updatedSensorRaw.last_reading_timestamp,
+                status: updatedSensorRaw.status,
+                last_communication: updatedSensorRaw.last_communication,
+                battery_level: updatedSensorRaw.battery_level,
+                signal_strength: updatedSensorRaw.signal_strength,
+                // Puedes añadir más propiedades aquí si se actualizan en la tabla `sensors`
+              };
+              // Reemplazar el objeto en el array para asegurar que Vue detecte el cambio de forma reactiva
+              this.sensors.splice(index, 1, updatedSensorForStore);
+              console.log(`[Sensors Store] Sensor (ID: ${updatedSensorRaw.id}) actualizado en el array 'sensors' con splice para Dashboard.`);
+            } else {
+              // Si el sensor es nuevo o no está en el array actual (ej. un sensor recién creado),
+              // se añade. Sus propiedades enriquecidas (assetName, organizationName)
+              // serán 'N/A' a menos que fetchSensors() se llame después,
+              // o que se hagan lookups aquí mismo (lo cual añade complejidad).
+              console.warn(`[Sensors Store] Nuevo sensor (ID: ${updatedSensorRaw.id}) no encontrado en el array 'sensors'. Añadiéndolo, pero sin datos enriquecidos inmediatos.`);
+              updatedSensorForStore = {
+                id: updatedSensorRaw.id,
+                name: updatedSensorRaw.name,
+                serial_number: updatedSensorRaw.serial_number,
+                model: updatedSensorRaw.model,
+                location_description: updatedSensorRaw.location_description,
+                status: updatedSensorRaw.status,
+                organizationId: updatedSensorRaw.organization_id,
+                assetId: updatedSensorRaw.asset_id,
+                last_communication: updatedSensorRaw.last_communication,
+                battery_level: updatedSensorRaw.battery_level,
+                signal_strength: updatedSensorRaw.signal_strength,
+                thresholds: updatedSensorRaw.thresholds,
+                type: updatedSensorRaw.type,
+                unit: updatedSensorRaw.unit,
+                city: updatedSensorRaw.city,
+                state: updatedSensorRaw.state,
+                country: updatedSensorRaw.country,
+                last_value : updatedSensorRaw.last_value,
+                last_unit: updatedSensorRaw.last_unit,
+                last_reading_timestamp : updatedSensorRaw.last_reading_timestamp,
+                created_at : updatedSensorRaw.created_at,
+                organizationName: 'N/A', // Se establecerán como N/A hasta que fetchSensors se ejecute
+                assetName: 'N/A',        // Se establecerán como N/A hasta que fetchSensors se ejecute
+              };
+              this.sensors.push(updatedSensorForStore);
+            }
+
+            // También actualiza 'currentSensor' si es el sensor que se está viendo en detalle (para pages/sensors/[id].vue)
+            if (this.currentSensor && this.currentSensor.id === updatedSensorRaw.id) {
+                // Fusionar los datos nuevos con los existentes de currentSensor, preservando lo que no cambie
+                this.currentSensor = {
+                    ...this.currentSensor,
+                    last_value: updatedSensorRaw.last_value,
+                    last_unit: updatedSensorRaw.last_unit,
+                    last_reading_timestamp: updatedSensorRaw.last_reading_timestamp,
+                    status: updatedSensorRaw.status,
+                    last_communication: updatedSensorRaw.last_communication,
+                    battery_level: updatedSensorRaw.battery_level,
+                    signal_strength: updatedSensorRaw.signal_strength,
+                    // Si hay otras propiedades de 'currentSensor' que deberían venir del payload.new,
+                    // asegúrate de incluirlas aquí.
+                };
+                console.log(`[Sensors Store] currentSensor (ID: ${updatedSensorRaw.id}) actualizado directamente para página de detalle.`);
+            }
           })
           .subscribe();
-        this.dashboardSensorUpdatesChannel = channel;
-        console.log('[Sensors Store] Suscrito a cambios generales en la tabla de sensores.');
+
+        this.dashboardSensorUpdatesChannel = channel; // Guarda la referencia al canal
+        console.log('[Sensors Store] Suscrito exitosamente a cambios generales en la tabla de sensores para el Dashboard.');
       } catch (e) {
         console.error('[Sensors Store] Error al suscribirse a cambios generales de sensores:', e);
       }
     },
 
     async unsubscribeFromSensorUpdates() {
+      // Asegúrate de desuscribirte del canal correcto
       if (this.dashboardSensorUpdatesChannel) {
         await this.dashboardSensorUpdatesChannel.unsubscribe();
         this.dashboardSensorUpdatesChannel = null;
@@ -422,44 +506,19 @@ export const useSensorStore = defineStore('sensors', {
     },
 
     // Estas funciones parecen ser para los StatCards o la sección de "sensores recientes" en el dashboard
+    // No la usaremos para la reactividad en el dashboard de forma directa con postgres_changes,
+    // ya que subscribeToSensorUpdates es la que maneja los cambios de la tabla 'sensors'
+    // que alimentan a recentSensors.
     async subscribeToDashboardRecentReadings() {
-      if (this.dashboardSensorUpdatesChannel) { 
-        console.log('[Sensors Store] Ya suscrito a dashboardSensorUpdatesChannel.');
-        return; 
-      }
-
-      const { $supabase } = useNuxtApp();
-      try {
-        const channel = $supabase.channel('dashboard_sensor_readings_changes');
-        channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sensor_readings' }, payload => {
-          console.log('[Sensors Store] Cambio en lecturas de sensor para dashboard (recent):', payload);
-          const sensorId = payload.new.sensor_id;
-          const newReading = {
-            value: payload.new.value,
-            timestamp: payload.new.timestamp,
-            unit: payload.new.unit
-          };
-
-          // Actualiza la última lectura reciente para el sensor, útil para StatCards
-          this.allSensorRecentReadings[sensorId] = [newReading]; 
-
-          // Vuelve a cargar todos los sensores para actualizar los StatCards y la lista de "recientes"
-          this.fetchSensors(); 
-
-        }).subscribe();
-        this.dashboardSensorUpdatesChannel = channel; 
-        console.log('[Sensors Store] Suscrito a actualizaciones de lecturas recientes para el dashboard (StatCard).');
-      } catch (e) {
-        console.error('[Sensors Store] Error al suscribirse a actualizaciones de lecturas recientes para el dashboard:', e);
-      }
+      // Esta función no necesita escuchar postgres_changes si subscribeToSensorUpdates
+      // ya está actualizando this.sensors directamente.
+      // Su propósito original (si solo era para StatCards/última lectura)
+      // ahora es cubierto por subscribeToSensorUpdates.
+      console.log('[Sensors Store] subscribeToDashboardRecentReadings no realiza suscripción de Realtime directa a lecturas recientes, se basa en subscribeToSensorUpdates.');
     },
 
     async unsubscribeFromDashboardRecentReadings() {
-      if (this.dashboardSensorUpdatesChannel) {
-        await this.dashboardSensorUpdatesChannel.unsubscribe();
-        this.dashboardSensorUpdatesChannel = null;
-        console.log('[Sensors Store] Desuscrito de actualizaciones de lecturas recientes para el dashboard (StatCard).');
-      }
+      console.log('[Sensors Store] unsubscribeFromDashboardRecentReadings no realiza desuscripción, se basa en unsubscribeFromSensorUpdates.');
     },
 
     // Funciones para la vista de detalle de un solo sensor
