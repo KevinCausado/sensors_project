@@ -13,9 +13,9 @@
       <p class="ml-3 text-gray-500">Cargando información del sensor...</p>
     </div>
 
-    <div v-else-if="sensorStore.error" class="text-center py-8 text-error-600">
+    <!-- <div v-else-if="sensorStore.error" class="text-center py-8 text-error-600">
       <p>Error al cargar el sensor: {{ sensorStore.error }}</p>
-    </div>
+    </div> -->
 
     <div v-else-if="!sensorStore.currentSensor" class="text-center py-8 text-gray-500">Sensor no encontrado.</div>
 
@@ -191,7 +191,7 @@
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Historial de Lecturas Recientes</h2>
         <p v-if="sensorStore.isLoading" class="text-gray-500">Cargando lecturas...</p>
-        <p v-else-if="sensorStore.error" class="text-error-600">Error al cargar lecturas: {{ sensorStore.error }}</p>
+        <!-- <p v-else-if="sensorStore.error" class="text-error-600">Error al cargar lecturas: {{ sensorStore.error }}</p> -->
         <div v-else-if="paginatedReadings.length === 0" class="text-gray-500">No hay lecturas disponibles para este sensor.</div>
         <ul v-else class="space-y-2">
           <li v-for="reading in paginatedReadings" :key="reading.timestamp" class="flex justify-between items-center p-2 bg-gray-50 rounded-md">
@@ -227,7 +227,6 @@
         <AlertList :alerts="alertsForCurrentSensor" />
         <p v-if="alertsForCurrentSensor.length === 0 && !alertStore.isLoading" class="text-center text-gray-500 py-4">No hay alertas recientes para este sensor.</p>
         <p v-if="alertStore.isLoading" class="text-center text-gray-500 py-4">Cargando alertas...</p>
-        <p v-if="alertStore.error" class="text-center text-error-600 py-4">Error al cargar alertas: {{ alertStore.error }}</p>
       </div>
     </div>
   </div>
@@ -243,7 +242,6 @@ import { useAssetStore } from "@/stores/assets";
 import AlertList from "@/components/AlertList.vue";
 import SensorChart from "@/components/SensorChart.vue"; 
 import PageHeader from "@/components/PageHeader.vue";
-import PermissionGuard from '~/components/PermissionGuard.vue'; 
 
 const route = useRoute();
 const router = useRouter();
@@ -258,6 +256,7 @@ const currentPage = ref(1);
 
 const sortedAllReadings = computed(() => {
   if (!sensorStore.currentSensorReadings) return [];
+  // Ordena las lecturas por marca de tiempo en orden descendente (más recientes primero)
   return [...sensorStore.currentSensorReadings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 });
 
@@ -287,12 +286,12 @@ const prevPage = () => {
 watch(
   () => sensorStore.currentSensorReadings,
   () => {
-    currentPage.value = 1;
+    currentPage.value = 1; // Reinicia a la primera página cuando cambian las lecturas
   },
   { deep: true }
 );
 
-// Helper para traducir el tipo de sensor
+// Función de ayuda para traducir el tipo de sensor
 const translateSensorType = (type) => {
   switch (type) {
     case "temperature": return "Temperatura";
@@ -322,15 +321,6 @@ const translateSensorStatus = (status) => {
     case "inactive": return "Inactivo";
     case "error": return "Error";
     default: return status;
-  }
-};
-
-const getAlertClass = (severity) => {
-  switch (severity) {
-    case "critical": return "bg-red-100 text-red-800 border-red-200";
-    case "warning": return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "info": return "bg-blue-100 text-blue-800 border-blue-200";
-    default: return "bg-gray-100 text-gray-800 border-gray-200";
   }
 };
 
@@ -370,9 +360,11 @@ const alertsForCurrentSensor = computed(() => {
 
 const sensorForChart = computed(() => {
   if (!sensorStore.currentSensor) return null;
+  // El componente del gráfico espera un array de sensores, cada uno con un array de 'lecturas'.
+  // El array 'lecturas' debe actualizarse en tiempo real mediante la lógica de suscripción del store.
   return {
     ...sensorStore.currentSensor,
-    readings: sensorStore.currentSensorReadings,
+    readings: sensorStore.currentSensorReadings, // Este array se actualiza con fetchAndSubscribeToDetailReadings
   };
 });
 
@@ -389,7 +381,7 @@ const combinedAssetLocation = computed(() => {
   return result;
 });
 
-// Nuevo computed para verificar si hay algún umbral definido
+// Propiedad computada para verificar si hay algún umbral definido
 const hasThresholds = computed(() => {
   const thresholds = sensorStore.currentSensor?.thresholds;
   if (!thresholds) return false;
@@ -416,9 +408,14 @@ onMounted(async () => {
       sensorStore.fetchSensors(), 
     ]);
     
+    // Obtiene y se suscribe a las actualizaciones generales del sensor (para last_value, battery_level, etc.)
+    await sensorStore.subscribeToSensorUpdates(); 
+
+    // Obtiene y se suscribe a las lecturas detalladas para el gráfico y la lista histórica
     await sensorStore.fetchSensor(route.params.id); 
     await sensorStore.fetchAndSubscribeToDetailReadings(route.params.id);
     
+    // Obtiene y se suscribe a las alertas del sensor actual
     await alertStore.fetchAlerts();
     await alertStore.subscribeToAlertUpdates();
 
@@ -429,8 +426,10 @@ onMounted(async () => {
 });
 
 onUnmounted(async () => {
+  // Cancela todas las suscripciones en tiempo real cuando el componente se desmonta
   await sensorStore.unsubscribeFromDetailReadings();
   await alertStore.unsubscribeFromAlertUpdates();
+  await sensorStore.unsubscribeFromSensorUpdates(); // Cancela la suscripción a las actualizaciones generales del sensor
 });
 
 watch(
@@ -439,13 +438,17 @@ watch(
     if (newId && newId !== oldId) {
       console.log(`[idSensorPage] ID del sensor cambió de ${oldId} a ${newId}. Recargando y re-suscribiéndose a lecturas y alertas.`);
       try {
+        // Cancela las suscripciones antiguas
         await sensorStore.unsubscribeFromDetailReadings();
         await alertStore.unsubscribeFromAlertUpdates();
+        await sensorStore.unsubscribeFromSensorUpdates(); // Cancela la suscripción a las actualizaciones generales del sensor
 
+        // Vuelve a obtener y a suscribirse para el nuevo sensor
         await sensorStore.fetchSensor(newId); 
         await sensorStore.fetchAndSubscribeToDetailReadings(newId);
         await alertStore.fetchAlerts(); 
         await alertStore.subscribeToAlertUpdates();
+        await sensorStore.subscribeToSensorUpdates(); // Vuelve a suscribirse a las actualizaciones generales del sensor para el nuevo sensor
 
         console.log('[idSensorPage] Watcher: sensorStore.currentSensor (después de cambio de ID):', JSON.parse(JSON.stringify(sensorStore.currentSensor)));
 

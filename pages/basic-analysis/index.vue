@@ -9,57 +9,61 @@
     <!-- Sección de filtros y mensaje de paginación -->
     <div class="card p-6 mb-6">
       <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
-        <!-- Filtro por Estado Final -->
-        <div class="w-full sm:w-48">
-          <label for="statusFilter" class="sr-only">Filtrar por Estado</label>
-          <select
-            id="statusFilter"
-            v-model="analysisStore.filterByStatus"
-            class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-          >
-            <option :value="null">Todos los estados</option>
-            <option value="Normal">Normal</option>
-            <option value="Alerta">Alerta</option>
-            <option value="Precaucion">Precaución</option>
-            <option value="Peligro">Peligro</option>
-            <option value="No Definido">No Definido</option>
-          </select>
+        <!-- Campo de búsqueda -->
+        <div class="relative w-full sm:w-64">
+          <input v-model="analysisStore.searchQuery" type="text" class="form-input pl-9" placeholder="Buscar análisis..." />
+          <MagnifyingGlassIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
 
-        <!-- Filtro por Activo (Dropdown de Activos Existentes) -->
-        <div class="w-full sm:w-48">
-          <label for="assetFilter" class="sr-only">Filtrar por Activo</label>
-          <select
-            id="assetFilter"
-            v-model="analysisStore.filterByAssetId"
-            class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-          >
-            <option :value="null">Todos los activos</option>
-            <option v-for="asset in assetStore.assets" :key="asset.id" :value="asset.id">
-              {{ asset.name }}
-            </option>
-          </select>
-        </div>
+        <!-- Contenedor para los filtros, alineados a la derecha -->
+        <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <!-- Filtro por Estado Final -->
+          <div class="w-full sm:w-48">
+            <label for="statusFilter" class="sr-only">Filtrar por Estado</label>
+            <select
+              id="statusFilter"
+              v-model="analysisStore.filterByStatus"
+              class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+            >
+              <option :value="null">Todos los estados</option>
+              <option value="Normal">Normal</option>
+              <option value="Alerta">Alerta</option>
+              <option value="Precaucion">Precaución</option>
+              <option value="Peligro">Peligro</option>
+              <option value="No Definido">No Definido</option>
+            </select>
+          </div>
 
-        <!-- Filtro por Sensor (Dropdown de Sensores Existentes) -->
-        <div class="w-full sm:w-48">
-          <label for="sensorFilter" class="sr-only">Filtrar por Sensor</label>
-          <select
-            id="sensorFilter"
-            v-model="analysisStore.filterBySensorId"
-            class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-          >
-            <option :value="null">Todos los sensores</option>
-            <option v-for="sensor in sensorStore.sensors" :key="sensor.id" :value="sensor.id">
-              {{ sensor.name }} ({{ translateSensorType(sensor.data_type) }})
-            </option>
-          </select>
-        </div>
-      </div>
+          <!-- Filtro por Activo (Dropdown de Activos Existentes) -->
+          <div class="w-full sm:w-48">
+            <label for="assetFilter" class="sr-only">Filtrar por Activo</label>
+            <select
+              id="assetFilter"
+              v-model="analysisStore.filterByAssetId"
+              class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+            >
+              <option :value="null">Todos los activos</option>
+              <option v-for="asset in assetStore.assets" :key="asset.id" :value="asset.id">
+                {{ asset.name }}
+              </option>
+            </select>
+          </div>
 
-      <!-- Mensaje que indica el rango de elementos mostrados y el total. -->
-      <div class="mb-4 text-sm text-gray-700">
-        Mostrando {{ startIndex }} a {{ endIndex }} de {{ analysisStore.getTotalFilteredResults }} resultados.
+          <!-- Filtro por Sensor (Dropdown de Sensores Existentes) -->
+          <div class="w-full sm:w-48">
+            <label for="sensorFilter" class="sr-only">Filtrar por Sensor</label>
+            <select
+              id="sensorFilter"
+              v-model="analysisStore.filterBySensorId"
+              class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+            >
+              <option :value="null">Todos los sensores</option>
+              <option v-for="sensor in sensorStore.sensors" :key="sensor.id" :value="sensor.id">
+                {{ sensor.name }} ({{ translateSensorType(sensor.data_type) }})
+              </option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <!-- Tabla de Resultados del Análisis -->
@@ -116,7 +120,7 @@
       </div>
 
       <!-- Componente de Paginación -->
-      <div class="mt-4" v-if="analysisStore.getTotalFilteredResults > analysisStore.itemsPerPage">
+      <div class="mt-4">
         <Pagination
           :total-items="analysisStore.getTotalFilteredResults"
           :current-page="analysisStore.currentPage"
@@ -134,7 +138,8 @@ import { useAnalysisStore } from '~/stores/analysis';
 import { useSensorStore } from '~/stores/sensors';
 import { useAssetStore } from '~/stores/assets';
 import PageHeader from '~/components/PageHeader.vue';
-import Pagination from '~/components/Pagination.vue'; // Asume que esta es la ruta correcta a tu componente Pagination.vue
+import Pagination from '~/components/Pagination.vue';
+import { MagnifyingGlassIcon } from "@heroicons/vue/24/outline"; // Importa el ícono
 
 definePageMeta({
   // middleware: ['auth'] // Descomenta esta línea si estás usando un middleware de autenticación global en Nuxt.
@@ -142,19 +147,8 @@ definePageMeta({
 
 // Inicializar las stores Pinia necesarias.
 const analysisStore = useAnalysisStore();
-const sensorStore = useSensorStore(); // Necesaria para obtener los nombres y tipos de los sensores para los filtros y la tabla.
-const assetStore = useAssetStore();   // Necesaria para obtener los nombres de los activos para los filtros y la tabla.
-
-// Propiedades computadas para calcular los índices de inicio y fin para el mensaje de paginación.
-const startIndex = computed(() => {
-  if (analysisStore.getTotalFilteredResults === 0) return 0;
-  return (analysisStore.currentPage - 1) * analysisStore.itemsPerPage + 1;
-});
-
-const endIndex = computed(() => {
-  const end = analysisStore.currentPage * analysisStore.itemsPerPage;
-  return Math.min(end, analysisStore.getTotalFilteredResults);
-});
+const sensorStore = useSensorStore();
+const assetStore = useAssetStore();
 
 /**
  * handlePageChange: Método llamado por el componente Pagination cuando cambia la página.
@@ -227,7 +221,8 @@ onUnmounted(() => {
 watch([
   () => analysisStore.filterByStatus,
   () => analysisStore.filterByAssetId,
-  () => analysisStore.filterBySensorId
+  () => analysisStore.filterBySensorId,
+  () => analysisStore.searchQuery // Agregado para observar cambios en la búsqueda
 ], () => {
   analysisStore.setCurrentPage(1);
 });

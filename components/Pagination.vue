@@ -6,26 +6,26 @@
         :disabled="currentPage === 1"
         class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         :class="{ 'opacity-50 cursor-not-allowed': currentPage === 1 }">
-        Previous
+        Anterior
       </button>
       <button
         @click="nextPage"
         :disabled="currentPage >= totalPages"
         class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         :class="{ 'opacity-50 cursor-not-allowed': currentPage >= totalPages }">
-        Next
+        Siguiente
       </button>
     </div>
     <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
       <div>
         <p class="text-sm text-gray-700">
-          Showing
+          Mostrando de
           <span class="font-medium">{{ startItem }}</span>
-          to
+          a
           <span class="font-medium">{{ endItem }}</span>
-          of
+          de
           <span class="font-medium">{{ totalItems }}</span>
-          results
+          resultados
         </p>
       </div>
       <div>

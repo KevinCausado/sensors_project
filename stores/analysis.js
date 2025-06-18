@@ -19,12 +19,14 @@ export const useAnalysisStore = defineStore('analysis', {
         filterByStatus: null,     // Filter by the final analysis status (e.g., 'Normal', 'Alerta', 'Peligro').
         filterByAssetId: null,    // Filter by a specific asset ID.
         filterBySensorId: null,   // Filter by a specific sensor ID.
+        searchQuery: '',          // New: Search query for general text search.
     }),
 
     getters: {
         /**
          * getFilteredAndSortedAnalysisResults: Applies filters and sorts results
          * before pagination. This is used internally to calculate 'totalFilteredResults'.
+         * Now includes a search filter based on searchQuery.
          * @returns {Array} Array of filtered and sorted analysis results.
          */
         getFilteredAndSortedAnalysisResults: (state) => {
@@ -42,6 +44,29 @@ export const useAnalysisStore = defineStore('analysis', {
             if (state.filterBySensorId) {
                 filteredResults = filteredResults.filter(result => result.sensor_id === state.filterBySensorId);
             }
+
+            // Apply search query filter if present.
+            if (state.searchQuery) {
+                const query = state.searchQuery.toLowerCase();
+                const sensorStore = useSensorStore(); // Get instance inside getter
+                const assetStore = useAssetStore();   // Get instance inside getter
+
+                filteredResults = filteredResults.filter(result => {
+                    const sensor = sensorStore.sensors.find(s => s.id === result.sensor_id);
+                    const asset = assetStore.assets.find(a => a.id === result.asset_id);
+
+                    // Check various fields for the search query
+                    return (
+                        (result.measured_value && result.measured_value.toString().toLowerCase().includes(query)) ||
+                        (result.iso_status && result.iso_status.toLowerCase().includes(query)) ||
+                        (result.profile_status && result.profile_status.toLowerCase().includes(query)) ||
+                        (result.final_status && result.final_status.toLowerCase().includes(query)) ||
+                        (sensor && sensor.name.toLowerCase().includes(query)) ||
+                        (asset && asset.name.toLowerCase().includes(query))
+                    );
+                });
+            }
+
 
             // Sort results by analysis timestamp in descending order (most recent first).
             filteredResults.sort((a, b) => new Date(b.analysis_timestamp) - new Date(a.analysis_timestamp));
@@ -61,6 +86,7 @@ export const useAnalysisStore = defineStore('analysis', {
             const paginated = filteredAndSorted.slice(startIndex, endIndex);
 
             // To display sensor and asset names instead of just their IDs.
+            // These stores should ideally be already loaded by onMounted in the component.
             const sensorStore = useSensorStore();
             const assetStore = useAssetStore();
 
@@ -78,7 +104,7 @@ export const useAnalysisStore = defineStore('analysis', {
         },
 
         /**
-         * getTotalFilteredResults: Calculates the total number of results after applying filters.
+         * getTotalFilteredResults: Calculates the total number of results after applying filters (including search).
          * Used for pagination.
          * @returns {number} Total number of filtered results.
          */
@@ -104,7 +130,7 @@ export const useAnalysisStore = defineStore('analysis', {
             this.isLoading = true;
             this.error = null;
             // ¡CORRECCIÓN AQUÍ! Obtén la instancia de Supabase de `useNuxtApp()`
-            const { $supabase } = useNuxtApp(); 
+            const { $supabase } = useNuxtApp();
 
             try {
                 // Ensure supporting stores are loaded for name mapping getters to work.
@@ -120,13 +146,13 @@ export const useAnalysisStore = defineStore('analysis', {
                 // Query the 'analysis_results' table.
                 const { data, error } = await $supabase // Use $supabase aquí
                     .from('analysis_results')
-                    .select('*') 
-                    .order('analysis_timestamp', { ascending: false }); 
+                    .select('*')
+                    .order('analysis_timestamp', { ascending: false });
 
                 if (error) {
                     throw error;
                 }
-                this.analysisResults = data || []; 
+                this.analysisResults = data || [];
             } catch (e) {
                 this.error = e.message;
                 console.error("Error fetching analysis results:", e.message);
@@ -136,13 +162,23 @@ export const useAnalysisStore = defineStore('analysis', {
         },
 
         /**
+         * setSearchQuery: Sets the search query for filtering results.
+         * Resets pagination to the first page.
+         * @param {string} query - The search string.
+         */
+        setSearchQuery(query) {
+            this.searchQuery = query;
+            this.currentPage = 1;
+        },
+
+        /**
          * setFilterByStatus: Sets the filter by final analysis status.
          * Resets pagination to the first page.
          * @param {string | null} status - The status to filter by (e.g., 'Normal', 'Alerta', 'Peligro') or null to clear the filter.
          */
         setFilterByStatus(status) {
             this.filterByStatus = status;
-            this.currentPage = 1; 
+            this.currentPage = 1;
         },
 
         /**
@@ -193,12 +229,12 @@ export const useAnalysisStore = defineStore('analysis', {
             this.unsubscribeFromAnalysisResults();
 
             this.analysisSubscription = $supabase // Use $supabase aquí
-                .channel('analysis_results_channel') 
+                .channel('analysis_results_channel')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'analysis_results' }, payload => {
                     console.log('Cambio detectado en analysis_results (tiempo real):', payload);
                     this.fetchAnalysisResults();
                 })
-                .subscribe(); 
+                .subscribe();
             console.log('Suscrito a cambios en tiempo real en analysis_results.');
         },
 
@@ -235,7 +271,7 @@ export const useAnalysisStore = defineStore('analysis', {
             switch (status) {
                 case 'Normal': return 'bg-green-100 text-green-800';
                 case 'Alerta': return 'bg-yellow-100 text-yellow-800';
-                case 'Precaucion': return 'bg-orange-100 text-orange-800'; 
+                case 'Precaucion': return 'bg-orange-100 text-orange-800';
                 case 'Peligro': return 'bg-red-100 text-red-800';
                 case 'No Definido': return 'bg-gray-100 text-gray-800';
                 default: return 'bg-gray-100 text-gray-800';
