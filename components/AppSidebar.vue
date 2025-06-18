@@ -1,26 +1,47 @@
 <template>
-  <aside class="bg-white border-r border-gray-200 w-64 fixed inset-y-0 left-0 transform md:translate-x-0 transition duration-200 ease-in-out z-30" :class="{ '-translate-x-full': !isOpen }">
-    <div class="h-full flex flex-col">
-      <div class="h-16 border-b border-gray-200 flex items-center px-6">
-        <h2 class="text-xl font-bold text-primary-800">Menu Principal</h2>
-        <button @click="toggleSidebar" class="p-1 ml-auto text-gray-400 md:hidden focus:outline-none">
-          <!-- Directamente usa el componente Icon de @nuxt/icon -->
-          <Icon name="heroicons:x-mark" class="h-6 w-6" />
-        </button>
-      </div>
+  <!--
+    Main sidebar container.
+    - `w-64`: Defines the sidebar width.
+    - `bg-white shadow-lg z-30`: Visual styles.
+    - `transition-transform duration-200 ease-in-out`: For the slide animation.
 
+    Conditional classes:
+    - **Mobile behavior (md and below):** Sidebar is `fixed`, slides in/out.
+      - `fixed inset-y-0 left-0`: Fixes it to the viewport.
+      - `-translate-x-full`: Hides it off-screen when `isOpen` is false (and not desktop).
+      - `translate-x-0`: Shows it on-screen when `isOpen` is true (and not desktop).
+      - `z-40`: Ensures it's above main content when open.
+    - **Desktop behavior (md and above):** Sidebar is `relative`, always visible, and *pushes* content.
+      - `md:relative md:translate-x-0 md:block`: Makes it part of the normal flex flow,
+                                                ensures it's visible, and is always a block element.
+                                                `md:flex-shrink-0` ensures it keeps its `w-64`.
+  -->
+  <aside
+    :class="{
+      // Mobile-specific classes (when not desktop)
+      'fixed inset-y-0 left-0 z-40': !isDesktop, // Apply fixed positioning only on mobile
+      'transform -translate-x-full': !isOpen && !isDesktop, // Hide on mobile if closed
+      'transform translate-x-0': isOpen && !isDesktop, // Show on mobile if open
+
+      // Desktop-specific classes (when it is desktop)
+      'md:relative md:translate-x-0 md:block md:flex-shrink-0': isDesktop // Push content on desktop
+    }"
+    class="w-64 bg-white border-r border-gray-200
+           transition duration-200 ease-in-out"
+  >
+    <div class="h-full flex flex-col">
+      
       <nav class="flex-1 overflow-y-auto py-4 px-3">
         <div class="space-y-1">
           <template v-for="item in processedNavigationItems" :key="item.name">
             <PermissionGuard :moduleId="item.moduleId" :permission="item.permissionAction">
-              <!-- SidebarLink ahora recibe el nombre del icono ya formateado por processedNavigationItems -->
-              <SidebarLink 
-                :to="item.to" 
-                :icon="item.icon" 
-                :label="item.name" 
-                :has-children="!!item.children" 
-                :is-active="isActiveRoute(item)" 
-              />
+              <SidebarLink
+                :to="item.to"
+                :icon="item.icon"
+                :label="item.name"
+                :has-children="!!item.children"
+                :is-active="isActiveRoute(item)"
+                @click="!isDesktop && toggleSidebar()" /> <!-- Close sidebar on navigation in mobile -->
             </PermissionGuard>
           </template>
         </div>
@@ -45,6 +66,7 @@
         </div>
       </nav>
 
+      <!-- User info and logout button, visible only on mobile (when sidebar is open) -->
       <div class="border-t border-gray-200 p-4 md:hidden">
         <div class="flex items-center">
           <div class="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center text-white font-medium text-sm">
@@ -59,38 +81,39 @@
     </div>
   </aside>
 
-  <div v-if="isOpen" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-20 md:hidden" @click="toggleSidebar"></div>
+  <!-- This overlay is no longer needed in AppSidebar as it's now handled in default.vue -->
+  <!-- <div v-if="isOpen" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-20 md:hidden" @click="toggleSidebar"></div> -->
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue"; // Ya no necesitamos defineComponent, h
+import { ref, computed, onMounted } from "vue";
 import { useAuthStore } from "~/stores/auth";
 import { useOrganizationStore } from "~/stores/organizations";
 import { useRoute, useRouter } from "vue-router";
 import { navigationItems } from "~/utils/navigation";
-
-// IMPORTA TU COMPONENTE PermissionGuard
 import PermissionGuard from "~/components/PermissionGuard.vue";
 
 // Mapea las cadenas de iconos de navigationItems al formato esperado por <Icon>
-// Ejemplo: "i-heroicons-home" se convierte en "heroicons:home"
 const processedNavigationItems = computed(() => {
   return navigationItems.map((item) => ({
     ...item,
-    // La propiedad 'icon' ahora se transforma al formato que @nuxt/icon espera
-    icon: item.icon.replace('i-heroicons-', 'heroicons:'), 
+    icon: item.icon.replace('i-heroicons-', 'heroicons:'),
   }));
 });
 
-// Props
+// Props from parent (layout)
 const props = defineProps({
   isOpen: {
     type: Boolean,
     default: true,
   },
+  isDesktop: { // NEW PROP: indicates if current screen size is desktop
+    type: Boolean,
+    default: true
+  }
 });
 
-// Emits
+// Emits to parent
 const emit = defineEmits(["toggle"]);
 
 // Stores
@@ -124,17 +147,12 @@ const userInitials = computed(() => {
 const organizations = computed(() => organizationStore.organizations);
 
 const shouldShowOrganizationFilter = computed(() => {
-  // Condición 1: Debe haber al menos una organización cargada en el store.
   const hasOrganizations = organizations.value.length > 0;
-
-  // Condición 2: El usuario debe estar en una de las páginas donde el filtro es relevante.
   const currentPath = route.path;
-  const isOnRelevantPage = 
-    currentPath === "/dashboard" || 
-    currentPath.startsWith("/sensors") || 
+  const isOnRelevantPage =
+    currentPath === "/dashboard" ||
+    currentPath.startsWith("/sensors") ||
     currentPath.startsWith("/alerts");
-
-  // El filtro se mostrará si AMBAS condiciones son verdaderas.
   return hasOrganizations && isOnRelevantPage;
 });
 
@@ -162,12 +180,12 @@ const isActiveRoute = (item) => {
 
 // Initialize organization selector
 onMounted(async () => {
-  await organizationStore.fetchOrganizations(); 
-  organizationStore.setSelectedOrganization(null); // Establecer la selección inicial a "Todas las Organizaciones"
+  await organizationStore.fetchOrganizations();
+  organizationStore.setSelectedOrganization(null); // Set initial selection to "All Organizations"
   console.log('[AppSidebar] Estableciendo la selección inicial a "Todas las Organizaciones".');
 });
 </script>
 
 <style scoped>
-/* Tus estilos aquí */
+/* No specific scoped styles here. Use Tailwind classes directly. */
 </style>
