@@ -83,7 +83,7 @@ export const navigationItems = [
     name: "Análisis Basico",
     to: "/basic-analysis",
     icon: "i-heroicons-document-text",
-    moduleId: "basic-analysis",
+    moduleId: "basic_analysis",
     permissionAction: "view"
   },
    {
