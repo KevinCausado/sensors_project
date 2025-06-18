@@ -5,14 +5,17 @@
       subtitle="Administra, crea y elimina tus activos industriales."
     >
       <template #actions>
-        <NuxtLink
-          to="/assets/new"
-          class="btn btn-primary flex items-center"
-        >
-          <!-- Icono de Plus -->
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a.75.75 0 0 1 .75.75v6.5h6.5a.75.75 0 0 1 0 1.5h-6.5v6.5a.75.75 0 0 1-1.5 0v-6.5h-6.5a.75.75 0 0 1 0-1.5h6.5v-6.5A.75.75 0 0 1 12 4z"/></svg>
-          Nuevo Activo
-        </NuxtLink>
+        <!-- Botón "Nuevo Activo": Solo visible si el usuario tiene permiso 'assets.create' -->
+        <PermissionGuard moduleId="assets" permission="create">
+          <NuxtLink
+            to="/assets/new"
+            class="btn btn-primary flex items-center"
+          >
+            <!-- Icono de Plus -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a.75.75 0 0 1 .75.75v6.5h6.5a.75.75 0 0 1 0 1.5h-6.5v6.5a.75.75 0 0 1-1.5 0v-6.5h-6.5a.75.75 0 0 1 0-1.5h6.5v-6.5A.75.75 0 0 1 12 4z"/></svg>
+            Nuevo Activo
+          </NuxtLink>
+        </PermissionGuard>
       </template>
     </PageHeader>
 
@@ -87,7 +90,7 @@
                 Grupo ISO
               </th>
               <th scope="col" class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Perfil de Vibración <!-- NUEVA COLUMNA -->
+                Perfil de Vibración
               </th>
               <th scope="col" class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ubicación
@@ -102,13 +105,13 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-if="assetStore.isLoading">
-                <td colspan="8" class="px-6 py-4 text-center text-gray-500">Cargando activos...</td> <!-- COLSPAN AJUSTADO -->
+                <td colspan="8" class="px-6 py-4 text-center text-gray-500">Cargando activos...</td>
             </tr>
             <tr v-else-if="assetStore.getError">
-                <td colspan="8" class="px-6 py-4 text-center text-red-600">Error: {{ assetStore.getError }}</td> <!-- COLSPAN AJUSTADO -->
+                <td colspan="8" class="px-6 py-4 text-center text-red-600">Error: {{ assetStore.getError }}</td>
             </tr>
             <tr v-else-if="paginatedAssets.length === 0">
-                <td colspan="8" class="px-6 py-4 text-center text-gray-500">No se encontraron activos.</td> <!-- COLSPAN AJUSTADO -->
+                <td colspan="8" class="px-6 py-4 text-center text-gray-500">No se encontraron activos.</td>
             </tr>
 
             <tr v-else v-for="asset in paginatedAssets" :key="asset.id" class="hover:bg-gray-50">
@@ -126,12 +129,12 @@
                 <div class="text-sm text-gray-900">{{ asset.asset_code }}</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ asset.assetTypeName }} <!-- Usar la propiedad enriquecida -->
+                {{ asset.assetTypeName }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ asset.iso_group_name }} <!-- Usar la propiedad enriquecida -->
+                {{ asset.iso_group_name }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"> <!-- NUEVA CELDA -->
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ asset.vibration_profile_name || 'N/A' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -146,24 +149,33 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div class="flex justify-end space-x-1">
-                  <ActionButton
-                    icon="eye"
-                    tooltip="Ver detalles"
-                    color="primary"
-                    @click="router.push(`/assets/${asset.id}`)"
-                  />
-                  <ActionButton
-                    icon="pencil"
-                    tooltip="Editar activo"
-                    color="warning"
-                    @click="router.push(`/assets/${asset.id}/edit`)"
-                  />
-                  <ActionButton
-                    icon="trash"
-                    tooltip="Eliminar activo"
-                    color="error"
-                    @click="showDeleteConfirm(asset.id, asset.name)"
-                  />
+                  <!-- Permiso 'assets.view' para el botón de Ver -->
+                  <PermissionGuard moduleId="assets" permission="view">
+                    <ActionButton
+                      icon="eye"
+                      tooltip="Ver detalles"
+                      color="primary"
+                      @click="router.push(`/assets/${asset.id}`)"
+                    />
+                  </PermissionGuard>
+                  <!-- Permiso 'assets.manage' para el botón de Editar -->
+                  <PermissionGuard moduleId="assets" permission="manage">
+                    <ActionButton
+                      icon="pencil"
+                      tooltip="Editar activo"
+                      color="warning"
+                      @click="router.push(`/assets/${asset.id}/edit`)"
+                    />
+                  </PermissionGuard>
+                  <!-- Permiso 'assets.delete' para el botón de Eliminar -->
+                  <PermissionGuard moduleId="assets" permission="delete">
+                    <ActionButton
+                      icon="trash"
+                      tooltip="Eliminar activo"
+                      color="error"
+                      @click="showDeleteConfirm(asset.id, asset.name)"
+                    />
+                  </PermissionGuard>
                 </div>
               </td>
             </tr>
@@ -181,7 +193,6 @@
       </div>
 
       <!-- Modal de confirmación de eliminación (Implementación básica si no tienes ConfirmModal) -->
-      <!-- Se mantiene la implementación básica del modal asumiendo que no tienes el componente ConfirmModal centralizado -->
       <div v-if="showDeleteModal" class="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
           <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
@@ -235,6 +246,7 @@ import { useAssetStore } from '~/stores/assets';
 import PageHeader from '~/components/PageHeader.vue';
 import ActionButton from '~/components/ActionButton.vue';
 import Pagination from '~/components/Pagination.vue'; 
+import PermissionGuard from '~/components/PermissionGuard.vue'; // <-- ¡IMPORTACIÓN NECESARIA!
 
 // Iconos (placeholders o importaciones reales si usas una librería como Heroicons)
 const PlusIcon = defineComponent({
@@ -323,9 +335,9 @@ const filteredAndSortedAssets = computed(() => {
       (asset.city && asset.city.toLowerCase().includes(query)) ||
       (asset.state && asset.state.toLowerCase().includes(query)) ||
       (asset.country && asset.country.toLowerCase().includes(query)) ||
-      (asset.assetTypeName && asset.assetTypeName.toLowerCase().includes(query)) || // Ahora usa assetTypeName
+      (asset.assetTypeName && asset.assetTypeName.toLowerCase().includes(query)) || 
       (asset.iso_group_name && asset.iso_group_name.toLowerCase().includes(query)) ||
-      (asset.vibration_profile_name && asset.vibration_profile_name.toLowerCase().includes(query)) // NUEVO: Buscar por nombre de perfil de vibración
+      (asset.vibration_profile_name && asset.vibration_profile_name.toLowerCase().includes(query))
     );
   }
 

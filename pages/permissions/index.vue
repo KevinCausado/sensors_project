@@ -134,19 +134,20 @@ const getRoleBadgeClass = (roleName) => {
 const translateModule = (moduleName) => {
   const translations = {
     dashboard: "Dashboard", // Or 'Panel de Control'
-    locations: "Ubicaciones",
+    // locations: "Ubicaciones",
     sensors: "Sensores",
     assets: "Activos",
-    reports: "Reportes",
+    // reports: "Reportes",
     organization: "Organizaciones",
     alerts: "Alertas",
     users: "Usuarios",
     permissions: "Permisos",
-    realtime_monitor: "Monitor en Tiempo Real",
+    messaging: "Mensajeria",
     vibration_profiles: "Perfiles de Vibración",
-    asset_status: "Estado de Activos",
+    // asset_status: "Estado de Activos",
     settings: "Configuración General",
     parameters: "Parametros",
+    basic_analysis:"Analisis Básico"
   };
   return translations[moduleName] || moduleName;
 };

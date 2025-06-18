@@ -81,16 +81,16 @@ export const navigationItems = [
   },  
   {
     name: "Análisis Basico",
-    to: "/reports",
+    to: "/basic-analysis",
     icon: "i-heroicons-document-text",
-    moduleId: "reports",
+    moduleId: "basic-analysis",
     permissionAction: "view"
   },
    {
     name: "Mensajeria",
-    to: "/realtime-monitor",
+    to: "/messaging",
     icon: "i-heroicons-chart-bar",
-    moduleId: "realtime_monitor",
+    moduleId: "messaging",
     permissionAction: "view"
   }, 
   {

@@ -62,12 +62,12 @@
           </select>
 
           <!-- Filtro por Organización -->
-          <select v-model="selectedOrganizationIdLocal" class="form-input py-2 text-sm w-full sm:w-auto">
+          <!-- <select v-model="selectedOrganizationIdLocal" class="form-input py-2 text-sm w-full sm:w-auto">
             <option :value="null">Todas las Organizaciones</option>
             <option v-for="org in organizations" :key="org.id" :value="org.id">
               {{ org.name }}
             </option>
-          </select>
+          </select> -->
         </div>
       </div>
 
