@@ -22,6 +22,7 @@
         <h2 class="text-lg font-medium text-gray-900 mb-4">Permisos para: {{ selectedRoleObject ? translateRole(selectedRoleObject.name) : "Seleccione un rol" }}</h2>
         <div v-if="selectedRole">
           <div v-if="selectedRoleObject.name === 'super-admin'" class="text-center py-8 text-gray-600">El rol "Super Admin" tiene acceso total y sus permisos no pueden ser modificados.</div>
+          <!-- El v-for ahora usa la lista de módulos ordenada -->
           <div v-else class="space-y-6">
             <div v-for="module in modules" :key="module.id" class="p-4 border border-gray-200 rounded-lg">
               <div class="flex items-center justify-between mb-3">
@@ -57,13 +58,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue"; // Added onMounted and watch
+import { ref, computed, onMounted, watch } from "vue";
 import { usePermissionStore } from "~/stores/permissions";
-import PageHeader from "~/components/PageHeader.vue"; // Make sure this path is correct
-import { navigationItems } from "~/utils/navigation"; // <-- Esta importación ES NECESARIA para el orden y los nombres del sidebar
+import PageHeader from "~/components/PageHeader.vue";
 
 definePageMeta({
-  // middleware: ['auth'], // Ensure auth middleware is correctly configured for your app
+  // middleware: ['auth'],
   meta: {
     requiredRole: "super-admin",
   },
@@ -72,134 +72,100 @@ definePageMeta({
 const permissionStore = usePermissionStore();
 const saving = ref(false);
 const selectedRole = ref(null);
+const permissions = ref({}); 
 
-// Data
-const modules = computed(() => permissionStore.appModules); // Corrected to appModules
+// --- INICIO DE LA CORRECCIÓN ---
+
+// 1. Definimos el orden deseado para los módulos, basado en tu imagen de navegación.
+const desiredModuleOrder = [
+  'dashboard',
+  'organization',
+  'assets',
+  'asset_status',
+  'vibration_profiles',
+  'sensors',
+  'alerts',
+  'users',
+  'permissions',
+  'parameters',
+  'basic_analysis',
+  'messaging',
+  'reports',
+  'settings' // Asumiendo que 'settings' es el nombre en DB para "Configuración General"
+];
+
+// 2. Modificamos la propiedad `modules` para que devuelva la lista ordenada.
+const modules = computed(() => {
+  const originalModules = [...permissionStore.appModules];
+  
+  return originalModules.sort((a, b) => {
+    const indexA = desiredModuleOrder.indexOf(a.name);
+    const indexB = desiredModuleOrder.indexOf(b.name);
+
+    // Si un módulo no está en la lista de orden, se envía al final.
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+
+    return indexA - indexB;
+  });
+});
+
+// --- FIN DE LA CORRECCIÓN ---
+
+
 const roles = computed(() => permissionStore.roles);
-const permissions = ref({}); // This ref is for local changes before saving
 
-// Computed for selected role object (added for easier super-admin check)
 const selectedRoleObject = computed(() => {
   return roles.value.find((r) => r.id === selectedRole.value);
 });
 
-// Helpers
+// Helpers (sin cambios)
 const translateRole = (roleName) => {
-  // Renamed param to roleName for clarity
-  const translations = {
-    // Changed to translations for consistency
-    "super-admin": "Super Administrador",
-    admin: "Administrador",
-    technician: "Técnico",
-    viewer: "Visualizador",
-    // Add other roles if they exist in your DB and you want to translate them
-    editor: "Editor",
-  };
+  const translations = { "super-admin": "Super Administrador", admin: "Administrador", technician: "Técnico", viewer: "Visualizador", editor: "Editor" };
   return translations[roleName] || roleName;
 };
 
 const translatePermission = (permission) => {
-  const translations = {
-    view: "Ver", // Adjusted to match 'view' from moduleActionDefinitions
-    create: "Crear",
-    manage: "Gestionar", // Adjusted from 'editar' to 'manage' if you use that in moduleActionDefinitions
-    delete: "Eliminar",
-    generate: "Generar",
-    manage_schedules: "Programar",
-    resolve: "Resolver", // Example if you have 'resolve'
-    assign: "Asignar", // Example if you have 'assign'
-    // Add any other specific permissions you define in moduleActionDefinitions
-  };
+  const translations = { view: "Ver", create: "Crear", manage: "Gestionar", delete: "Eliminar", generate: "Generar", manage_schedules: "Programar", resolve: "Resolver", assign: "Asignar" };
   return translations[permission] || permission;
 };
 
 const getRoleBadgeClass = (roleName) => {
-  // Changed param to roleName
-  switch (roleName) {
-    case "super-admin":
-      return "bg-purple-100 text-purple-800"; // Changed colors slightly for variety
-    case "admin":
-      return "bg-blue-100 text-blue-800";
-    case "Administrador Global":
-      return "bg-yellow-100 text-yellow-800";
-    case "Visor":
-      return "bg-gray-100 text-gray-800";
-    case "Editor":
-      return "bg-green-100 text-green-800"; // Example if you have editor
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
+  const classes = { "super-admin": "bg-purple-100 text-purple-800", admin: "bg-blue-100 text-blue-800", "Administrador Global": "bg-yellow-100 text-yellow-800", Visor: "bg-gray-100 text-gray-800", Editor: "bg-green-100 text-green-800" };
+  return classes[roleName] || "bg-gray-100 text-gray-800";
 };
 
 const translateModule = (moduleName) => {
-  const translations = {
-    dashboard: "Dashboard", // Or 'Panel de Control'
-    // locations: "Ubicaciones",
-    sensors: "Sensores",
-    assets: "Activos",
-    // reports: "Reportes",
-    organization: "Organizaciones",
-    alerts: "Alertas",
-    users: "Usuarios",
-    permissions: "Permisos",
-    messaging: "Mensajeria",
-    vibration_profiles: "Perfiles de Vibración",
-    // asset_status: "Estado de Activos",
-    settings: "Configuración General",
-    parameters: "Parametros",
-    basic_analysis:"Analisis Básico"
-  };
+  const translations = { dashboard: "Dashboard", sensors: "Sensores", assets: "Activos", reports: "Reportes", organization: "Organizaciones", alerts: "Alertas", users: "Usuarios", permissions: "Permisos", messaging: "Mensajeria", vibration_profiles: "Perfiles de Vibración", asset_status: "Estado de Activos", settings: "Configuración General", parameters: "Parametros", basic_analysis: "Analisis Básico" };
   return translations[moduleName] || moduleName;
 };
 
 const hasPermission = (roleId, moduleId, permission) => {
-  // Check for super-admin based on selectedRoleObject's name
   if (selectedRoleObject.value?.name === "super-admin") return true;
-
-  // Check local changes first for the currently selected role
   if (permissions.value[selectedRole.value] && permissions.value[selectedRole.value][moduleId]) {
-    // For JSONB object, check if the specific permission key is true
     return permissions.value[selectedRole.value][moduleId][permission] === true;
   }
-
-  // Then check from the store's rolePermissions state (database state)
   const rolePerms = permissionStore.rolePermissions[selectedRole.value];
-  // For JSONB object, check if the specific permission key is true
   return rolePerms?.[moduleId]?.[permission] === true || false;
 };
 
 const togglePermission = (roleId, moduleId, permission) => {
-  // Prevent changes for super-admin
   if (selectedRoleObject.value?.name === "super-admin") return;
-
-  // Ensure the local 'permissions' object structure exists for the current role and module
   if (!permissions.value[roleId]) {
     permissions.value[roleId] = {};
   }
   if (!permissions.value[roleId][moduleId]) {
-    // Initialize with existing permissions for this module from the store, or an empty object
-    // Important: JSON.parse(JSON.stringify()) to deep copy and prevent direct mutation of store state
     permissions.value[roleId][moduleId] = JSON.parse(JSON.stringify(permissionStore.rolePermissions[roleId]?.[moduleId] || {}));
   }
-
-  // Toggle the boolean value for the specific permission action
-  // If undefined or false, set to true. If true, set to false.
   permissions.value[roleId][moduleId][permission] = !permissions.value[roleId][moduleId][permission];
 };
 
 const savePermissions = async () => {
-  if (!selectedRole.value) return;
-  // Prevent saving for super-admin
-  if (selectedRoleObject.value?.name === "super-admin") {
-    console.warn("Attempted to save permissions for super-admin. Action blocked.");
-    return;
-  }
+  if (!selectedRole.value || selectedRoleObject.value?.name === "super-admin") return;
 
   try {
     saving.value = true;
     const changesToSave = permissions.value[selectedRole.value] || {};
-    // Filter out permissions that are explicitly false, to avoid saving unnecessary data
-    // Or save everything as is if your backend handles it gracefully
     const filteredChanges = {};
     for (const moduleId in changesToSave) {
       if (Object.prototype.hasOwnProperty.call(changesToSave, moduleId)) {
@@ -215,27 +181,19 @@ const savePermissions = async () => {
         }
       }
     }
-
     await permissionStore.saveRolePermissions(selectedRole.value, filteredChanges);
-    // After saving, re-initialize local permissions from the store's updated state
-    // This will cause the watch on selectedRole to trigger and load the saved state
     permissions.value = {};
   } catch (error) {
     console.error("Error al guardar permisos:", error);
-    // Add user-facing error notification here
   } finally {
     saving.value = false;
   }
 };
 
-// Cargar datos y configurar el estado inicial al montar el componente
 onMounted(async () => {
   try {
-    // Fetch both app modules and roles/permissions
     await permissionStore.fetchAppModules();
     await permissionStore.fetchRolesAndPermissions();
-
-    // Select 'super-admin' by default if it exists, otherwise the first role
     const superAdminRole = roles.value.find((r) => r.name === "super-admin");
     if (superAdminRole) {
       selectedRole.value = superAdminRole.id;
@@ -247,16 +205,13 @@ onMounted(async () => {
   }
 });
 
-// Observar selectedRole para inicializar 'permissions' cuando cambia el rol
 watch(
   selectedRole,
   (newRoleId) => {
     if (newRoleId) {
       if (selectedRoleObject.value?.name === "super-admin") {
-        permissions.value[newRoleId] = {}; // Clear local permissions for super-admin
+        permissions.value[newRoleId] = {};
       } else {
-        // Deep copy permissions from the store's state for local editing
-        // Ensure it's an object, not an array
         permissions.value[newRoleId] = JSON.parse(JSON.stringify(permissionStore.getRolePermissions(newRoleId) || {}));
       }
     }
@@ -266,7 +221,6 @@ watch(
 </script>
 
 <style scoped>
-/* Add any specific styles you had or need here */
 .card {
   @apply bg-white shadow-md rounded-lg p-6;
 }
@@ -275,11 +229,5 @@ watch(
 }
 .btn-primary {
   @apply bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
-}
-.form-checkbox {
-  @apply rounded;
-}
-.form-input {
-  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500;
 }
 </style>

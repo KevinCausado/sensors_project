@@ -158,7 +158,7 @@
         </div>
       </div>
 
-      <div class="card lg:col-span-2">
+      <!-- <div class="card lg:col-span-2">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-medium text-gray-900">Monitoreo en Tiempo Real</h2>
           <button
@@ -188,7 +188,7 @@
           :height="expandedSection === 'chart' ? 600 : 300"
           :show-time-range-controls="true"
         />
-      </div>
+      </div> -->
     </div>
   </div>
 </template>

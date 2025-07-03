@@ -90,8 +90,10 @@ export default defineEventHandler(async (event) => {
       if (fetchSensorError) {
         if (fetchSensorError.code === 'PGRST116') { // Código para "No rows found"
           console.warn(`[${new Date().toLocaleTimeString()}] Sensor ID ${reading.sensor_id} no encontrado en la base de datos. Saltando procesamiento.`);
+          console.error(`[${new Date().toLocaleTimeString()}] Detalles del error fetch (PGRST116):`, fetchSensorError); // Log the full error object
         } else {
           console.error(`[${new Date().toLocaleTimeString()}] Error al obtener sensor ${reading.sensor_id}:`, fetchSensorError.message);
+          console.error(`[${new Date().toLocaleTimeString()}] Detalles del error fetch:`, fetchSensorError); // Log the full error object for other errors
         }
         continue; // Pasar al siguiente sensor si no se encontró
       }
@@ -105,6 +107,13 @@ export default defineEventHandler(async (event) => {
       let alertTypeForDb = null;
       let alertTitle = '';
 
+      // Umbrales específicos para la alerta
+      // Siempre inicializar a null, para asegurar que no sean 'undefined' al insertarse.
+      let alertThresholdNormalMin = null;
+      let alertThresholdNormalMax = null;
+      let alertThresholdCriticalMin = null; // Inicializar explícitamente a null
+      let alertThresholdCriticalMax = null; // Inicializar explícitamente a null
+
       const sensorTypeSpanish = {
         'temperature': 'Temperatura',
         'humidity': 'Humedad',
@@ -114,7 +123,7 @@ export default defineEventHandler(async (event) => {
         'light': 'Luz',
         'gas': 'Gas',
         'flow': 'Flujo',
-        'vibration': 'Vibración', // Añadir si tienes este tipo
+        'vibration': 'Vibración',
         'default': sensorData.type ? sensorData.type.charAt(0).toUpperCase() + sensorData.type.slice(1) : 'Sensor'
       }[sensorData.type] || 'Sensor';
 
@@ -147,51 +156,129 @@ export default defineEventHandler(async (event) => {
         const thresholds = sensorData.thresholds;
         let severity = null;
 
-        // Prioridad: Crítica (critical)
-        if (value < thresholds.criticalMin || value > thresholds.criticalMax) {
-          severity = 'critical';
-          alertTitle = `${sensorTypeSpanish} Crítica ${value < thresholds.criticalMin ? 'Baja' : 'Alta'}`;
-          // Mensaje de alerta crítica con la estructura solicitada
-          alertMessage = `¡Valor crítico ${value < thresholds.criticalMin ? 'bajo' : 'alto'}! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, fuera del rango crítico [${thresholds.criticalMin}-${thresholds.criticalMax}] ${sensorData.unit}.`;
-          alertPriority = 'high';
-        }
-        // Prioridad: Advertencia (warning)
-        else if (
-          (value >= thresholds.criticalMin && value < thresholds.normalMin) ||
-          (value > thresholds.normalMax && value <= thresholds.criticalMax)
-        ) {
-          severity = 'warning';
-          alertTitle = `${sensorTypeSpanish} Advertencia ${value < thresholds.normalMin ? 'Baja' : 'Alta'}`;
-          // Mensaje de alerta de advertencia con la estructura solicitada
-          alertMessage = `¡Advertencia de valor ${value < thresholds.normalMin ? 'bajo' : 'alto'}! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, fuera del rango normal [${thresholds.normalMin}-${thresholds.normalMax}] ${sensorData.unit}, pero dentro del rango crítico [${thresholds.criticalMin}-${thresholds.criticalMax}] ${sensorData.unit}.`;
-          alertPriority = 'medium';
-        }
+        if (sensorData.type === 'vibration') {
+          // Lógica específica para sensores de VIBRACIÓN (Zonas A, B, C, D)
+          const normalMin = thresholds.normalMin;
+          const normalMax = thresholds.normalMax;
+          const alarm_level = thresholds.alarm_level;
+          const critical_level = thresholds.critical_level;
+          const criticalMin = thresholds.criticalMin; // Asegurarse de que esté desestructurado
+          const criticalMax = thresholds.criticalMax;
 
-        // Si deseas añadir lógica específica para `alarm_level` o `critical_level`
-        // Esto depende de cómo quieras que se comporten estos umbrales en tu sistema.
-        // Si son puntos específicos que disparan ALARMAS o NIVELES CRÍTICOS distinctos,
-        // puedes añadir condiciones aquí. Por ejemplo:
-        /*
-        else if (thresholds.critical_level !== null && value >= thresholds.critical_level) {
-            severity = 'critical_level_breach'; // Nuevo tipo de severidad si aplica
-            alertTitle = `${sensorTypeSpanish} Nivel Crítico (Nivel)`;
-            alertMessage = `El sensor ${sensorData.name} (${sensorData.type}) ha alcanzado el nivel crítico de ${thresholds.critical_level}. Valor actual: ${value} ${sensorData.unit}.`;
-            alertPriority = 'high';
-        }
-        else if (thresholds.alarm_level !== null && value >= thresholds.alarm_level) {
-            severity = 'alarm_level_breach'; // Nuevo tipo de severidad si aplica
-            alertTitle = `${sensorTypeSpanish} Nivel de Alarma (Nivel)`;
-            alertMessage = `El sensor ${sensorData.name} (${sensorData.type}) ha superado el nivel de alarma de ${thresholds.alarm_level}. Valor actual: ${value} ${sensorData.unit}.`;
-            alertPriority = 'medium';
-        }
-        */
+          // Verificar que TODOS los umbrales de vibración necesarios existan
+          if (
+            typeof normalMin === 'undefined' || normalMin === null ||
+            typeof normalMax === 'undefined' || normalMax === null ||
+            typeof alarm_level === 'undefined' || alarm_level === null ||
+            typeof critical_level === 'undefined' || critical_level === null ||
+            typeof criticalMin === 'undefined' || criticalMin === null || 
+            typeof criticalMax === 'undefined' || criticalMax === null
+          ) {
+            console.warn(`[DEBUG] Umbrales incompletos para sensor de vibración ${sensorData.name}. No se aplica lógica de zonas.`);
+          } else {
+            // Zona A (Buena): normalMin - normalMax (0.71 - 2.8)
+            // Zona B (Satisfactoria): normalMax - alarm_level (2.8 - 7.1)
+            // Si es Zona A o B, NO se genera alerta.
+            if ((value >= normalMin && value <= normalMax) || (value > normalMax && value <= alarm_level)) {
+              console.log(`[DEBUG] Vibración en Zona A (${normalMin} - ${normalMax} ${sensorData.unit}) o Zona B (${normalMax} - ${alarm_level} ${sensorData.unit}). No se requiere alerta de umbral.`);
+              alertDetected = false; 
+            } else if (value > alarm_level && value <= critical_level) {
+              // Zona C (Insatisfactoria): alarm_level - critical_level (7.1 - 11.2)
+              severity = 'zona_C';
+              alertTitle = `Vibración Insatisfactoria: Zona C`;
+              alertMessage = `¡Advertencia de vibración! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, en Zona C (${alarm_level} - ${critical_level} ${sensorData.unit}). (No apta para operación continua).`;
+              alertPriority = 'medium';
+              alertDetected = true;
+              alertTypeForDb = 'threshold';
+              alertThresholdNormalMin = alarm_level;
+              alertThresholdNormalMax = critical_level;
+              alertThresholdCriticalMin = null; 
+              alertThresholdCriticalMax = null; 
+            } else if (value > critical_level && value <= criticalMax) {
+              // Zona D (Inaceptable): critical_level - criticalMax (11.2 - 18)
+              severity = 'zona_D';
+              alertTitle = `Vibración Inaceptable: Zona D`;
+              alertMessage = `¡Vibración crítica! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, en Zona D (${critical_level} - ${criticalMax} ${sensorData.unit}). (Peligro de daño).`;
+              alertPriority = 'high';
+              alertDetected = true;
+              alertTypeForDb = 'threshold';
+              alertThresholdNormalMin = critical_level;
+              alertThresholdNormalMax = criticalMax;
+              alertThresholdCriticalMin = critical_level; 
+              alertThresholdCriticalMax = criticalMax;
+            } else if (value < normalMin || value > criticalMax) {
+              // Fuera de todas las zonas definidas, considerado extremo
+              severity = 'extrema';
+              alertTitle = `Vibración Extrema: Fuera de Rango`;
+              
+              if (value < normalMin) {
+                alertMessage = `¡Vibración extrema! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, que está por debajo de la Zona A (rango: ${normalMin} - ${normalMax} ${sensorData.unit}).`;
+              } else { // value > criticalMax
+                alertMessage = `¡Vibración extrema! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, que está por encima de la Zona D (rango: ${critical_level} - ${criticalMax} ${sensorData.unit}).`;
+              }
 
-        if (severity) {
-          alertDetected = true;
-          alertTypeForDb = 'threshold'; // Puedes cambiar esto a 'alarm_level_breach', 'critical_level_breach' si usas los nuevos else if
-          console.log(`[DEBUG] Condición: Umbral ${severity}. Valor: ${value}`);
+              alertPriority = 'high';
+              alertDetected = true;
+              alertTypeForDb = 'threshold'; 
+              alertThresholdNormalMin = normalMin;
+              alertThresholdNormalMax = normalMax;
+              alertThresholdCriticalMin = criticalMin; 
+              alertThresholdCriticalMax = criticalMax;
+            }
+
+            if (alertDetected) {
+              console.log(`[DEBUG] Condición: Vibración ${severity}. Valor: ${value}`);
+            }
+          }
         } else {
-          console.log(`[DEBUG] Valor ${value} está DENTRO del rango normal para ${sensorData.name}. No se requiere alerta de umbral.`);
+          // Lógica existente para otros tipos de sensores (Temperatura, Humedad, etc.)
+          const normalMin = thresholds.normalMin;
+          const normalMax = thresholds.normalMax;
+          const criticalMin = thresholds.criticalMin;
+          const criticalMax = thresholds.criticalMax;
+
+          // Verificar que TODOS los umbrales estándar necesarios existan
+          if (
+            typeof normalMin === 'undefined' || normalMin === null ||
+            typeof normalMax === 'undefined' || normalMax === null ||
+            typeof criticalMin === 'undefined' || criticalMin === null ||
+            typeof criticalMax === 'undefined' || criticalMax === null
+          ) {
+            console.warn(`[DEBUG] Umbrales incompletos para sensor tipo '${sensorData.type}' ${sensorData.name}. No se aplica lógica de umbral.`);
+          } else {
+            // Solo si todos los umbrales necesarios están presentes, se evalúa la prioridad.
+            if (value < criticalMin || value > criticalMax) {
+              severity = 'critical';
+              alertTitle = `${sensorTypeSpanish} Crítica ${value < criticalMin ? 'Baja' : 'Alta'}`;
+              alertMessage = `¡Valor crítico ${value < criticalMin ? 'bajo' : 'alto'}! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, fuera del rango crítico [${criticalMin}-${criticalMax}] ${sensorData.unit}.`;
+              alertPriority = 'high';
+              alertThresholdNormalMin = normalMin;
+              alertThresholdNormalMax = normalMax;
+              alertThresholdCriticalMin = criticalMin;
+              alertThresholdCriticalMax = criticalMax;
+            }
+            else if (
+              (value >= criticalMin && value < normalMin) ||
+              (value > normalMax && value <= criticalMax)
+            ) {
+              severity = 'warning';
+              alertTitle = `${sensorTypeSpanish} Advertencia ${value < normalMin ? 'Baja' : 'Alta'}`;
+              alertMessage = `¡Advertencia de valor ${value < normalMin ? 'bajo' : 'alto'}! El sensor ${sensorData.name} (${sensorData.type}) reporta ${value} ${sensorData.unit}, fuera del rango normal [${normalMin}-${normalMax}] ${sensorData.unit}, pero dentro del rango crítico [${criticalMin}-${criticalMax}] ${sensorData.unit}.`;
+              alertPriority = 'medium';
+              alertThresholdNormalMin = normalMin;
+              alertThresholdNormalMax = normalMax;
+              alertThresholdCriticalMin = criticalMin;
+              alertThresholdCriticalMax = criticalMax;
+            }
+
+            if (severity) {
+              alertDetected = true;
+              alertTypeForDb = 'threshold';
+              console.log(`[DEBUG] Condición: Umbral ${severity}. Valor: ${value}`);
+            } else {
+              console.log(`[DEBUG] Valor ${value} está DENTRO del rango normal para ${sensorData.name}. No se requiere alerta de umbral.`);
+            }
+          }
         }
       } else if (typeof reading.value === 'number' && (!sensorData.thresholds || Object.keys(sensorData.thresholds).length === 0)) {
         console.log(`[DEBUG] Sensor ${sensorData.name} no tiene umbrales definidos o están vacíos. No se verifican umbrales.`);
@@ -209,13 +296,13 @@ export default defineEventHandler(async (event) => {
         } else {
           // La condición de alerta ha cambiado o es una nueva alerta de un tipo diferente.
           // Primero, resolver cualquier alerta activa anterior para este sensor (de cualquier tipo)
-          if (previousAlertType) { // Si había una alerta activa previa
+          if (previousAlertType) { 
             console.log(`[${new Date().toLocaleTimeString()}] La condición de alerta anterior ('${previousAlertType}') para el sensor ${sensorData.name} ha sido reemplazada. Resolviendo alerta(s) antigua(s)...`);
             const { error: deactivateError } = await supabase
-              .from('alerts') // Usar el nombre de tabla 'alerts' en minúsculas
-              .update({ status: 'resolved', resolved_time: new Date().toISOString() }) // Usar resolved_time
-              .eq('sensor_id', sensorData.id) // Usar sensor_id
-              .eq('status', 'active'); // Solo las que están activas
+              .from('alerts') 
+              .update({ status: 'resolved', resolved_time: new Date().toISOString() }) 
+              .eq('sensor_id', sensorData.id) 
+              .eq('status', 'active'); 
 
             if (deactivateError) {
               console.error(`[${new Date().toLocaleTimeString()}] Error al desactivar alertas previas para sensor ${sensorData.name}:`, deactivateError.message);
@@ -226,47 +313,34 @@ export default defineEventHandler(async (event) => {
 
           // Crear la nueva alerta en la tabla 'alerts'
           const { error: insertAlertError } = await supabase
-            .from('alerts') // Usar el nombre de tabla 'alerts' en minúsculas
+            .from('alerts') 
             .insert({
-              organization_id: sensorData.organization_id, // Tomar del sensor
-              sensor_id: sensorData.id, // Usar sensor_id
-              asset_id: sensorData.asset_id, // Tomar del sensor, puede ser null
+              organization_id: sensorData.organization_id, 
+              sensor_id: sensorData.id, 
+              asset_id: sensorData.asset_id, 
               type: alertTypeForDb,
               title: alertTitle,
-              description: alertMessage, // Este es el campo de mensaje de la alerta
+              description: alertMessage, 
               priority: alertPriority,
               value_at_alert: typeof reading.value === 'number' ? reading.value : null,
-              // Llenar solo los campos de umbral relevantes para tu estructura de BD
-              threshold_normal_min: sensorData.thresholds?.normalMin || null,
-              threshold_normal_max: sensorData.thresholds?.normalMax || null,
-              threshold_critical_min: sensorData.thresholds?.criticalMin || null,
-              threshold_critical_max: sensorData.thresholds?.criticalMax || null,
-              // Si añades critical_level y alarm_level a la alerta, añádelos aquí:
-              // threshold_alarm_level: sensorData.thresholds?.alarm_level || null,
-              // threshold_critical_level: sensorData.thresholds?.critical_level || null,
-              status: 'active', // Nueva alerta, siempre activa
-              alert_time: new Date().toISOString() // Usar alert_time
+              threshold_normal_min: alertThresholdNormalMin,
+              threshold_normal_max: alertThresholdNormalMax,
+              threshold_critical_min: alertThresholdCriticalMin,
+              threshold_critical_max: alertThresholdCriticalMax,
+              status: 'active', 
+              alert_time: new Date().toISOString() 
             });
 
           if (insertAlertError) {
             console.error(`[${new Date().toLocaleTimeString()}] ERROR al crear nueva alerta para sensor ${sensorData.name}:`, insertAlertError.message);
           } else {
             console.log(`[${new Date().toLocaleTimeString()}] Alerta '${alertTypeForDb}' creada exitosamente para ${sensorData.name}.`);
-
-            // Opcional: Insertar en alert_history si es necesario (descomentar y adaptar)
-            // const { error: historyError } = await supabase.from('alert_history').insert({
-            //   alert_id: insertedAlert[0].id,
-            //   change_type: 'created',
-            //   new_value: JSON.stringify({ type: alertTypeForDb, title: alertTitle }),
-            //   // changed_by: (puedes obtener el ID de un usuario de sistema si existe)
-            // });
-            // if (historyError) console.error('Error al insertar en alert_history:', historyError.message);
           }
         }
 
         // 3. Actualizar el estado de alerta del sensor en la tabla 'sensors'
         const { error: updateSensorAlertStateError } = await supabase
-          .from('sensors') // Usar el nombre de tabla 'sensors' en minúsculas
+          .from('sensors') 
           .update({
             current_alert_type: alertTypeForDb,
           })
@@ -286,9 +360,9 @@ export default defineEventHandler(async (event) => {
 
           // Actualizar el estado de las alertas activas en la tabla 'alerts' a 'resolved'
           const { error: resolveError } = await supabase
-            .from('alerts') // Usar el nombre de tabla 'alerts' en minúsculas
-            .update({ status: 'resolved', resolved_time: new Date().toISOString() }) // Usar resolved_time
-            .eq('sensor_id', sensorData.id) // Usar sensor_id
+            .from('alerts') 
+            .update({ status: 'resolved', resolved_time: new Date().toISOString() }) 
+            .eq('sensor_id', sensorData.id) 
             .eq('status', 'active');
 
           if (resolveError) {
@@ -299,7 +373,7 @@ export default defineEventHandler(async (event) => {
 
           // Limpiar el estado de alerta del sensor en la tabla 'sensors'
           const { error: clearSensorAlertStateError } = await supabase
-            .from('sensors') // Usar el nombre de tabla 'sensors' en minúsculas
+            .from('sensors') 
             .update({
               current_alert_type: null,
             })
@@ -321,13 +395,13 @@ export default defineEventHandler(async (event) => {
       if (updateDataForSensorTable) {
         console.log(`[${new Date().toLocaleTimeString()}] Actualizando campos 'last_value', 'last_unit', 'last_reading_timestamp', 'status', 'last_communication' para sensor ${updateDataForSensorTable.id}`);
         const { error: updateSensorError } = await supabase
-          .from('sensors') // Usar el nombre de tabla 'sensors' en minúsculas
+          .from('sensors') 
           .update({
             last_value: updateDataForSensorTable.value,
             last_unit: updateDataForSensorTable.unit,
-            last_reading_timestamp: updateDataForSensorTable.lastReading, // Se usó lastReading en el simulador
+            last_reading_timestamp: updateDataForSensorTable.lastReading, 
             status: updateDataForSensorTable.status,
-            last_communication: updateDataForSensorTable.lastReading // También actualizar last_communication
+            last_communication: updateDataForSensorTable.lastReading 
           })
           .eq('id', updateDataForSensorTable.id);
 
@@ -342,7 +416,7 @@ export default defineEventHandler(async (event) => {
       if (typeof reading.value === 'number') {
         console.log(`[${new Date().toLocaleTimeString()}] Intentando insertar lectura en ${APP_DB_SCHEMA}.sensor_readings...`);
         const { data: insertedReading, error: insertReadingError } = await supabase
-          .from('sensor_readings') // Usar el nombre de tabla 'sensor_readings' en minúsculas
+          .from('sensor_readings') 
           .insert({
             sensor_id: reading.sensor_id,
             value: reading.value,
@@ -359,7 +433,7 @@ export default defineEventHandler(async (event) => {
       } else {
         console.log(`[${new Date().toLocaleTimeString()}] Lectura de sensor ${reading.sensor_id} con valor nulo. No se inserta en sensor_readings.`);
       }
-    } // Fin del bucle forEach sobre readingsToProcess
+    } 
 
     // --- Respuesta final ---
     return {

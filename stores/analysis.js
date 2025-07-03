@@ -1,281 +1,214 @@
 import { defineStore } from 'pinia';
-// ¡CORRECCIÓN AQUÍ! Accede a useNuxtApp para obtener la instancia de Supabase provista por tu plugin.
-import { useNuxtApp } from '#app'; // Importa useNuxtApp de Nuxt 3
-
-// Importar stores de soporte necesarias para el mapeo de nombres de activos y sensores.
-import { useSensorStore } from './sensors'; // Asume que tienes una store 'sensors'
-import { useAssetStore } from './assets';   // Asume que tienes una store 'assets'
+import { useNuxtApp } from '#app';
+import { useSensorStore } from './sensors';
+import { useAssetStore } from './assets';
 
 export const useAnalysisStore = defineStore('analysis', {
     state: () => ({
-        analysisResults: [],      // Array that will store all fetched analysis results.
-        isLoading: false,         // Loading indicator.
-        error: null,              // To store error messages.
-        analysisSubscription: null, // Reference for the Supabase real-time subscription.
-
-        // Variables for pagination and filters in the frontend.
-        currentPage: 1,           // Current page of the table.
-        itemsPerPage: 10,         // Number of items per page.
-        filterByStatus: null,     // Filter by the final analysis status (e.g., 'Normal', 'Alerta', 'Peligro').
-        filterByAssetId: null,    // Filter by a specific asset ID.
-        filterBySensorId: null,   // Filter by a specific sensor ID.
-        searchQuery: '',          // New: Search query for general text search.
+        analysisResults: [],
+        isLoading: false,
+        error: null,
+        analysisSubscription: null,
+        currentPage: 1,
+        itemsPerPage: 10,
+        filterByStatus: '',
+        filterByAssetId: '',
+        searchQuery: '',
     }),
 
     getters: {
-        /**
-         * getFilteredAndSortedAnalysisResults: Applies filters and sorts results
-         * before pagination. This is used internally to calculate 'totalFilteredResults'.
-         * Now includes a search filter based on searchQuery.
-         * @returns {Array} Array of filtered and sorted analysis results.
-         */
-        getFilteredAndSortedAnalysisResults: (state) => {
-            let filteredResults = [...state.analysisResults];
-
-            // Apply filter by final status if selected.
-            if (state.filterByStatus) {
-                filteredResults = filteredResults.filter(result => result.final_status === state.filterByStatus);
-            }
-            // Apply filter by asset ID if selected.
-            if (state.filterByAssetId) {
-                filteredResults = filteredResults.filter(result => result.asset_id === state.filterByAssetId);
-            }
-            // Apply filter by sensor ID if selected.
-            if (state.filterBySensorId) {
-                filteredResults = filteredResults.filter(result => result.sensor_id === state.filterBySensorId);
-            }
-
-            // Apply search query filter if present.
-            if (state.searchQuery) {
-                const query = state.searchQuery.toLowerCase();
-                const sensorStore = useSensorStore(); // Get instance inside getter
-                const assetStore = useAssetStore();   // Get instance inside getter
-
-                filteredResults = filteredResults.filter(result => {
-                    const sensor = sensorStore.sensors.find(s => s.id === result.sensor_id);
-                    const asset = assetStore.assets.find(a => a.id === result.asset_id);
-
-                    // Check various fields for the search query
-                    return (
-                        (result.measured_value && result.measured_value.toString().toLowerCase().includes(query)) ||
-                        (result.iso_status && result.iso_status.toLowerCase().includes(query)) ||
-                        (result.profile_status && result.profile_status.toLowerCase().includes(query)) ||
-                        (result.final_status && result.final_status.toLowerCase().includes(query)) ||
-                        (sensor && sensor.name.toLowerCase().includes(query)) ||
-                        (asset && asset.name.toLowerCase().includes(query))
-                    );
-                });
-            }
-
-
-            // Sort results by analysis timestamp in descending order (most recent first).
-            filteredResults.sort((a, b) => new Date(b.analysis_timestamp) - new Date(a.analysis_timestamp));
-
-            return filteredResults;
-        },
-
-        /**
-         * getPaginatedAnalysisResults: Gets results after applying filters, sorting, and pagination.
-         * Also maps sensor and asset IDs to their corresponding names for display.
-         * @returns {Array} Array of analysis results ready for the UI table.
-         */
-        getPaginatedAnalysisResults: (state) => {
-            const filteredAndSorted = state.getFilteredAndSortedAnalysisResults;
-            const startIndex = (state.currentPage - 1) * state.itemsPerPage;
-            const endIndex = startIndex + state.itemsPerPage;
-            const paginated = filteredAndSorted.slice(startIndex, endIndex);
-
-            // To display sensor and asset names instead of just their IDs.
-            // These stores should ideally be already loaded by onMounted in the component.
-            const sensorStore = useSensorStore();
+        getFilteredAndGroupedResults(state) {
             const assetStore = useAssetStore();
+            const sensorStore = useSensorStore();
 
-            return paginated.map(result => {
+            if (!state.analysisResults.length) {
+                return [];
+            }
+
+            // 1. Agrupar todas las mediciones por asset_id
+            const resultsByAsset = state.analysisResults.reduce((acc, result) => {
+                const assetId = result.asset_id;
+                if (!acc[assetId]) {
+                    const asset = assetStore.assets.find(a => a.id === assetId);
+                    acc[assetId] = {
+                        asset_id: assetId,
+                        asset_name: asset ? asset.name : 'Activo Desconocido',
+                        sensor_readings: []
+                    };
+                }
                 const sensor = sensorStore.sensors.find(s => s.id === result.sensor_id);
-                const asset = assetStore.assets.find(a => a.id === result.asset_id);
-                return {
+                acc[assetId].sensor_readings.push({
                     ...result,
                     sensor_name: sensor ? sensor.name : 'Sensor Desconocido',
-                    asset_name: asset ? asset.name : 'Activo Desconocido',
-                    sensor_type: sensor ? sensor.type : 'N/A', // Assuming 'type' is the type in your 'sensors' table
-                    sensor_unit: sensor ? sensor.unit : 'N/A' // Assuming 'unit' is in your 'sensors' table
+                    sensor_type: sensor ? sensor.type : 'N/A',
+                    sensor_unit: sensor ? sensor.unit : 'N/A'
+                });
+                return acc;
+            }, {});
+
+            // 2. Procesar cada grupo para calcular estado general y última fecha
+            const statusSeverity = { 'Crítico': 5, 'critico': 5, 'Peligro': 4, 'Precaucion': 3, 'Precaución': 3, 'Alerta': 2, 'Normal': 1, 'No Definido': 0 };
+            let processedAssets = Object.values(resultsByAsset).map(assetGroup => {
+                assetGroup.sensor_readings.sort((a, b) => new Date(b.analysis_timestamp) - new Date(a.analysis_timestamp));
+                
+                let overallStatus = 'No Definido';
+                let maxSeverity = -1;
+
+                assetGroup.sensor_readings.forEach(reading => {
+                    const severity = statusSeverity[reading.final_status] || 0;
+                    if (severity > maxSeverity) {
+                        maxSeverity = severity;
+                        overallStatus = reading.final_status;
+                    }
+                });
+
+                return {
+                    ...assetGroup,
+                    latest_timestamp: assetGroup.sensor_readings[0]?.analysis_timestamp,
+                    overall_status: overallStatus,
                 };
             });
+            
+            // 3. Aplicar filtros
+            if (state.filterByStatus) {
+                processedAssets = processedAssets.filter(asset => asset.overall_status === state.filterByStatus);
+            }
+            if (state.filterByAssetId) {
+                processedAssets = processedAssets.filter(asset => asset.asset_id === state.filterByAssetId);
+            }
+            if (state.searchQuery) {
+                const query = state.searchQuery.toLowerCase();
+                processedAssets = processedAssets.filter(asset =>
+                    asset.asset_name.toLowerCase().includes(query) ||
+                    asset.sensor_readings.some(r => r.sensor_name.toLowerCase().includes(query))
+                );
+            }
+
+            // 4. Ordenar activos
+            processedAssets.sort((a, b) => new Date(b.latest_timestamp) - new Date(a.latest_timestamp));
+
+            return processedAssets;
         },
 
-        /**
-         * getTotalFilteredResults: Calculates the total number of results after applying filters (including search).
-         * Used for pagination.
-         * @returns {number} Total number of filtered results.
-         */
-        getTotalFilteredResults: (state) => {
-            return state.getFilteredAndSortedAnalysisResults.length;
+        getPaginatedResults(state) {
+            const results = this.getFilteredAndGroupedResults;
+            const startIndex = (state.currentPage - 1) * state.itemsPerPage;
+            return results.slice(startIndex, startIndex + state.itemsPerPage);
         },
 
-        /**
-         * getTotalPages: Calculates the total number of pages based on filtered results and items per page.
-         * @returns {number} Total number of pages.
-         */
-        getTotalPages: (state) => {
-            return Math.ceil(state.getTotalFilteredResults / state.itemsPerPage);
+        getTotalResults(state) {
+            return this.getFilteredAndGroupedResults.length;
+        },
+
+        getTotalPages(state) {
+            return Math.ceil(this.getTotalResults / state.itemsPerPage);
         }
     },
 
     actions: {
-        /**
-         * fetchAnalysisResults: Fetches all analysis results from the Supabase database.
-         * Also preloads sensor and asset stores if not already loaded, for name mapping.
-         */
         async fetchAnalysisResults() {
             this.isLoading = true;
             this.error = null;
-            // ¡CORRECCIÓN AQUÍ! Obtén la instancia de Supabase de `useNuxtApp()`
-            const { $supabase } = useNuxtApp();
-
             try {
-                // Ensure supporting stores are loaded for name mapping getters to work.
+                const { $supabase } = useNuxtApp();
                 const sensorStore = useSensorStore();
                 const assetStore = useAssetStore();
-                if (sensorStore.sensors.length === 0) {
-                    await sensorStore.fetchSensors();
-                }
-                if (assetStore.assets.length === 0) {
-                    await assetStore.fetchAssets();
-                }
+                if (sensorStore.sensors.length === 0) await sensorStore.fetchSensors();
+                if (assetStore.assets.length === 0) await assetStore.fetchAssets();
 
-                // Query the 'analysis_results' table.
-                const { data, error } = await $supabase // Use $supabase aquí
+                const { data, error } = await $supabase
                     .from('analysis_results')
                     .select('*')
                     .order('analysis_timestamp', { ascending: false });
 
-                if (error) {
-                    throw error;
-                }
+                if (error) throw error;
                 this.analysisResults = data || [];
             } catch (e) {
                 this.error = e.message;
-                console.error("Error fetching analysis results:", e.message);
             } finally {
                 this.isLoading = false;
             }
         },
 
         /**
-         * setSearchQuery: Sets the search query for filtering results.
-         * Resets pagination to the first page.
-         * @param {string} query - The search string.
+         * Maneja una actualización en tiempo real de Supabase.
+         * @param {Object} payload - El payload del evento de Supabase.
          */
-        setSearchQuery(query) {
-            this.searchQuery = query;
-            this.currentPage = 1;
-        },
+        handleRealtimeUpdate(payload) {
+            console.log('Realtime update received:', payload);
+            const { eventType, new: newRecord, old: oldRecord } = payload;
 
-        /**
-         * setFilterByStatus: Sets the filter by final analysis status.
-         * Resets pagination to the first page.
-         * @param {string | null} status - The status to filter by (e.g., 'Normal', 'Alerta', 'Peligro') or null to clear the filter.
-         */
-        setFilterByStatus(status) {
-            this.filterByStatus = status;
-            this.currentPage = 1;
-        },
-
-        /**
-         * setFilterByAssetId: Sets the filter by a specific asset ID.
-         * Resets pagination to the first page.
-         * @param {string | null} assetId - The asset ID to filter by or null to clear the filter.
-         */
-        setFilterByAssetId(assetId) {
-            this.filterByAssetId = assetId;
-            this.currentPage = 1;
-        },
-
-        /**
-         * setFilterBySensorId: Sets the filter by a specific sensor ID.
-         * Resets pagination to the first page.
-         * @param {string | null} sensorId - The sensor ID to filter by or null to clear the filter.
-         */
-        setFilterBySensorId(sensorId) {
-            this.filterBySensorId = sensorId;
-            this.currentPage = 1;
-        },
-
-        /**
-         * setCurrentPage: Updates the current page of pagination.
-         * @param {number} page - The page number to go to.
-         */
-        setCurrentPage(page) {
-            if (page >= 1 && page <= this.getTotalPages) {
-                this.currentPage = page;
+            if (eventType === 'INSERT') {
+                // Añade el nuevo registro al principio de la lista para que aparezca inmediatamente.
+                this.analysisResults.unshift(newRecord);
+            } 
+            else if (eventType === 'UPDATE') {
+                // Busca el índice del registro a actualizar.
+                const index = this.analysisResults.findIndex(r => r.id === newRecord.id);
+                if (index !== -1) {
+                    // Reemplaza el registro antiguo con el nuevo.
+                    this.analysisResults[index] = newRecord;
+                } else {
+                    // Si no lo encuentra, lo añade. Puede pasar si el registro no estaba en la carga inicial.
+                    this.analysisResults.unshift(newRecord);
+                }
+            } 
+            else if (eventType === 'DELETE') {
+                // Filtra el registro eliminado de la lista.
+                this.analysisResults = this.analysisResults.filter(r => r.id !== oldRecord.id);
             }
         },
 
         /**
-         * setItemsPerPage: Updates the number of items to display per page.
-         * Resets pagination to the first page.
-         * @param {number} count - The number of items per page.
-         */
-        setItemsPerPage(count) {
-            this.itemsPerPage = count;
-            this.currentPage = 1;
-        },
-
-        /**
-         * subscribeToAnalysisResults: Subscribes to real-time changes in the 'analysis_results' table from Supabase.
+         * Se suscribe a los cambios en la tabla 'analysis_results'.
          */
         subscribeToAnalysisResults() {
-            const { $supabase } = useNuxtApp(); // Use $supabase aquí
-            this.unsubscribeFromAnalysisResults();
+            // Si ya hay una suscripción, no hacer nada.
+            if (this.analysisSubscription) return;
 
-            this.analysisSubscription = $supabase // Use $supabase aquí
-                .channel('analysis_results_channel')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'analysis_results' }, payload => {
-                    console.log('Cambio detectado en analysis_results (tiempo real):', payload);
-                    this.fetchAnalysisResults();
-                })
-                .subscribe();
-            console.log('Suscrito a cambios en tiempo real en analysis_results.');
+            const { $supabase } = useNuxtApp();
+            this.analysisSubscription = $supabase
+                .channel('custom-analysis-channel')
+                .on(
+                    'postgres_changes', 
+                    { event: '*', schema: 'public', table: 'analysis_results' }, 
+                    (payload) => {
+                        // Llama a la nueva acción para manejar el cambio.
+                        this.handleRealtimeUpdate(payload);
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Successfully subscribed to analysis_results channel!');
+                    }
+                    if (status === 'CHANNEL_ERROR') {
+                        console.error(`Error subscribing to channel:`, err);
+                    }
+                });
         },
 
         /**
-         * unsubscribeFromAnalysisResults: Unsubscribes the Supabase client from real-time changes.
+         * Cancela la suscripción al canal de realtime.
          */
         unsubscribeFromAnalysisResults() {
-            const { $supabase } = useNuxtApp(); // Use $supabase aquí
             if (this.analysisSubscription) {
-                $supabase.removeChannel(this.analysisSubscription); // Use $supabase aquí
+                const { $supabase } = useNuxtApp();
+                $supabase.removeChannel(this.analysisSubscription);
                 this.analysisSubscription = null;
-                console.log('Desuscrito de cambios en tiempo real en analysis_results.');
+                console.log('Unsubscribed from analysis_results channel.');
             }
         },
 
-        /**
-         * translateStatus: Helper to translate analysis statuses to a user-friendly format for the UI.
-         */
+        // Otras acciones...
+        setSearchQuery(query) { this.searchQuery = query; this.currentPage = 1; },
+        setFilterByStatus(status) { this.filterByStatus = status; this.currentPage = 1; },
+        setFilterByAssetId(assetId) { this.filterByAssetId = assetId; this.currentPage = 1; },
+        setCurrentPage(page) { this.currentPage = page; },
+
         translateStatus(status) {
-            switch (status) {
-                case 'Normal': return 'Normal';
-                case 'Alerta': return 'Alerta';
-                case 'Precaucion': return 'Precaución';
-                case 'Peligro': return 'Peligro';
-                case 'No Definido': return 'No Definido';
-                default: return status;
-            }
+            if (!status) return 'N/A';
+            const translations = { 'Precaucion': 'Precaución', 'Critico': 'Crítico', 'critico': 'Crítico' };
+            return translations[status] || status;
         },
-
-        /**
-         * getStatusBadgeClass: Returns Tailwind CSS classes for a 'badge' based on the analysis status.
-         */
-        getStatusBadgeClass(status) {
-            switch (status) {
-                case 'Normal': return 'bg-green-100 text-green-800';
-                case 'Alerta': return 'bg-yellow-100 text-yellow-800';
-                case 'Precaucion': return 'bg-orange-100 text-orange-800';
-                case 'Peligro': return 'bg-red-100 text-red-800';
-                case 'No Definido': return 'bg-gray-100 text-gray-800';
-                default: return 'bg-gray-100 text-gray-800';
-            }
-        }
     }
 });

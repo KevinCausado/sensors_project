@@ -1,128 +1,172 @@
 <template>
   <div>
-    <!-- Componente de cabecera de página, como en tus otros diseños. -->
     <PageHeader
-      title="Análisis Básico"
-      subtitle="Resultados del análisis de vibración de tus activos y sensores."
+      title="Análisis por Activo"
+      subtitle="Resultados del análisis de vibración agrupados por cada activo."
     />
 
-    <!-- Sección de filtros y mensaje de paginación -->
     <div class="card p-6 mb-6">
+      <!-- Controles de Filtro -->
       <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
-        <!-- Campo de búsqueda -->
         <div class="relative w-full sm:w-64">
-          <input v-model="analysisStore.searchQuery" type="text" class="form-input pl-9" placeholder="Buscar análisis..." />
+          <input 
+            v-model="analysisStore.searchQuery"
+            type="text" 
+            class="form-input pl-9" 
+            placeholder="Buscar por activo o sensor..." />
           <MagnifyingGlassIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
 
-        <!-- Contenedor para los filtros, alineados a la derecha -->
         <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-          <!-- Filtro por Estado Final -->
           <div class="w-full sm:w-48">
-            <label for="statusFilter" class="sr-only">Filtrar por Estado</label>
-            <select
-              id="statusFilter"
-              v-model="analysisStore.filterByStatus"
-              class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-            >
-              <option :value="null">Todos los estados</option>
+            <select v-model="analysisStore.filterByStatus" class="form-select">
+              <option value="">Todos los estados</option>
               <option value="Normal">Normal</option>
               <option value="Alerta">Alerta</option>
               <option value="Precaucion">Precaución</option>
               <option value="Peligro">Peligro</option>
+              <option value="Crítico">Crítico</option>
               <option value="No Definido">No Definido</option>
             </select>
           </div>
-
-          <!-- Filtro por Activo (Dropdown de Activos Existentes) -->
           <div class="w-full sm:w-48">
-            <label for="assetFilter" class="sr-only">Filtrar por Activo</label>
-            <select
-              id="assetFilter"
-              v-model="analysisStore.filterByAssetId"
-              class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-            >
-              <option :value="null">Todos los activos</option>
+            <select v-model="analysisStore.filterByAssetId" class="form-select">
+              <option value="">Todos los activos</option>
               <option v-for="asset in assetStore.assets" :key="asset.id" :value="asset.id">
                 {{ asset.name }}
               </option>
             </select>
           </div>
-
-          <!-- Filtro por Sensor (Dropdown de Sensores Existentes) -->
-          <div class="w-full sm:w-48">
-            <label for="sensorFilter" class="sr-only">Filtrar por Sensor</label>
-            <select
-              id="sensorFilter"
-              v-model="analysisStore.filterBySensorId"
-              class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-            >
-              <option :value="null">Todos los sensores</option>
-              <option v-for="sensor in sensorStore.sensors" :key="sensor.id" :value="sensor.id">
-                {{ sensor.name }} ({{ translateSensorType(sensor.data_type) }})
-              </option>
-            </select>
-          </div>
         </div>
       </div>
 
-      <!-- Tabla de Resultados del Análisis -->
+      <!-- Tabla Principal de Activos -->
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
-          <thead>
+          <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha/Hora</th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activo</th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sensor</th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Medido</th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado ISO</th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado Perfil</th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado Final</th>
+              <th class="table-header">Última Actualización</th>
+              <th class="table-header">Activo</th>
+              <th class="table-header">Sensores con Medición</th>
+              <th class="table-header">Estado General</th>
+              <th class="table-header w-12"><span class="sr-only">Expandir</span></th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <!-- Estados de carga y error -->
             <tr v-if="analysisStore.isLoading">
-              <td colspan="7" class="px-6 py-4 text-center text-gray-500">Cargando resultados de análisis...</td>
+              <td colspan="5" class="table-cell-feedback">Cargando resultados...</td>
             </tr>
             <tr v-else-if="analysisStore.error">
-              <td colspan="7" class="px-6 py-4 text-center text-red-600">Error: {{ analysisStore.error }}</td>
+              <td colspan="5" class="table-cell-feedback text-red-600">Error: {{ analysisStore.error }}</td>
             </tr>
-            <tr v-else-if="analysisStore.getPaginatedAnalysisResults.length === 0">
-              <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron resultados de análisis.</td>
+            <tr v-else-if="!analysisStore.getPaginatedResults || analysisStore.getPaginatedResults.length === 0">
+              <td colspan="5" class="table-cell-feedback">No se encontraron activos con los filtros actuales.</td>
             </tr>
-            <!-- Filas de datos de análisis -->
-            <tr v-else v-for="result in analysisStore.getPaginatedAnalysisResults" :key="result.id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(result.analysis_timestamp) }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ result.asset_name }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ result.sensor_name }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ result.measured_value }} {{ result.sensor_unit }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', analysisStore.getStatusBadgeClass(result.iso_status)]">
-                  {{ analysisStore.translateStatus(result.iso_status) }}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', analysisStore.getStatusBadgeClass(result.profile_status)]">
-                  {{ analysisStore.translateStatus(result.profile_status) }}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', analysisStore.getStatusBadgeClass(result.final_status)]">
-                  {{ analysisStore.translateStatus(result.final_status) }}
-                </span>
-              </td>
-            </tr>
+            
+            <template v-else v-for="asset in analysisStore.getPaginatedResults" :key="asset.asset_id">
+              <tr class="hover:bg-gray-50 cursor-pointer" @click="toggleExpand(asset.asset_id)">
+                <td class="table-cell">{{ formatDate(asset.latest_timestamp) }}</td>
+                <td class="table-cell font-medium text-gray-900">{{ asset.asset_name }}</td>
+                <td class="table-cell">{{ asset.sensor_readings.length }} mediciones</td>
+                <td class="table-cell">
+                  <span :class="['status-badge', getStatusBadgeClass(asset.overall_status)]">
+                    {{ analysisStore.translateStatus(asset.overall_status) }}
+                  </span>
+                </td>
+                <td class="table-cell text-center">
+                    <button class="p-1 rounded-full hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        <ChevronDownIcon class="h-5 w-5 transition-transform" :class="{'rotate-180': expandedAssets.includes(asset.asset_id)}" />
+                    </button>
+                </td>
+              </tr>
+              <!-- Fila Desplegable con Tabla de Detalles -->
+              <tr v-if="expandedAssets.includes(asset.asset_id)">
+                 <td colspan="5" class="p-0 bg-gray-50">
+                    <div class="p-4 border-l-4" :class="getStatusBorderClass(asset.overall_status)">
+                        <h4 class="font-semibold text-sm mb-3 text-gray-700">Detalle de mediciones para {{ asset.asset_name }}:</h4>
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                               <tr>
+                                   <th class="detail-table-header">Fecha/Hora</th>
+                                   <th class="detail-table-header">Sensor</th>
+                                   <th class="detail-table-header">Valor Medido</th>
+                                   <th class="detail-table-header">Estado</th>
+                                   <!-- INICIO DE LA MODIFICACIÓN: Nueva columna -->
+                                   <th class="detail-table-header">Umbrales / Perfil</th>
+                                   <!-- FIN DE LA MODIFICACIÓN -->
+                               </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                               <tr v-for="reading in asset.sensor_readings" :key="reading.id">
+                                   <td class="detail-table-cell">{{ formatDate(reading.analysis_timestamp) }}</td>
+                                   <td class="detail-table-cell">{{ reading.sensor_name }}</td>
+                                   <td class="detail-table-cell">
+                                        <div v-if="reading.sensor_type === 'vibration' && reading.axes_values" class="flex items-center gap-1 sm:gap-2">
+                                            <span class="axis-badge bg-red-100 text-red-800"><b class="font-bold">X:</b> {{ reading.axes_values.x }}</span>
+                                            <span class="axis-badge bg-green-100 text-green-800"><b class="font-bold">Y:</b> {{ reading.axes_values.y }}</span>
+                                            <span class="axis-badge bg-blue-100 text-blue-800"><b class="font-bold">Z:</b> {{ reading.axes_values.z }}</span>
+                                            <span class="text-xs text-gray-500 ml-1 hidden sm:inline">{{ reading.sensor_unit }}</span>
+                                        </div>
+                                        <div v-else>
+                                            {{ reading.measured_value }} {{ reading.sensor_unit }}
+                                        </div>
+                                   </td>
+                                   <td class="detail-table-cell">
+                                       <span :class="['status-badge', getStatusBadgeClass(reading.final_status)]">
+                                            {{ analysisStore.translateStatus(reading.final_status) }}
+                                        </span>
+                                   </td>
+                                   <!-- INICIO DE LA MODIFICACIÓN: Contenido de la nueva celda -->
+                                   <td class="detail-table-cell align-top text-xs">
+                                     <template v-if="sensorStore.getSensorById(reading.sensor_id)">
+                                       <div v-if="sensorStore.getSensorById(reading.sensor_id).type === 'vibration'">
+                                         <template v-if="assetStore.getAssetById(reading.asset_id)">
+                                            <div v-if="assetStore.getAssetById(reading.asset_id).custom_vibration_profile_id && customProfileStore.getProfileById(assetStore.getAssetById(reading.asset_id).custom_vibration_profile_id)">
+                                                <p class="font-bold">{{ customProfileStore.getProfileById(assetStore.getAssetById(reading.asset_id).custom_vibration_profile_id).name }}</p>
+                                                <p class="text-gray-500 mb-1">(Personalizado)</p>
+                                                <table class="min-w-full text-left">
+                                                    <tbody>
+                                                        <tr v-for="range in customProfileStore.getProfileById(assetStore.getAssetById(reading.asset_id).custom_vibration_profile_id).ranges" :key="range.id">
+                                                            <td class="pr-2 py-0.5"><span :class="getSeverityClass(range.severity)" class="px-2 py-0.5 rounded-full font-bold">Z. {{range.severity}}</span></td>
+                                                            <td class="py-0.5">{{range.min_value}} - {{range.max_value}}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div v-else-if="assetStore.getAssetById(reading.asset_id).profileDisplayName !== 'N/A'">
+                                                <p class="font-bold">{{ assetStore.getAssetById(reading.asset_id).profileDisplayName }}</p>
+                                                <p class="text-gray-500">(Estándar ISO)</p>
+                                            </div>
+                                            <div v-else class="text-gray-400 italic">Sin perfil asignado</div>
+                                         </template>
+                                       </div>
+                                       <div v-else-if="sensorStore.getSensorById(reading.sensor_id).thresholds && Object.keys(sensorStore.getSensorById(reading.sensor_id).thresholds).length > 0">
+                                            <ul class="space-y-1">
+                                                <li v-if="isDefined(sensorStore.getSensorById(reading.sensor_id).thresholds.criticalMax)" class="flex justify-between"><span>Crítico ></span> <span class="font-semibold text-red-600">{{ sensorStore.getSensorById(reading.sensor_id).thresholds.criticalMax }}</span></li>
+                                                <li v-if="isDefined(sensorStore.getSensorById(reading.sensor_id).thresholds.normalMax)" class="flex justify-between"><span>Normal <</span> <span class="font-semibold text-green-600">{{ sensorStore.getSensorById(reading.sensor_id).thresholds.normalMax }}</span></li>
+                                                <li v-if="isDefined(sensorStore.getSensorById(reading.sensor_id).thresholds.normalMin)" class="flex justify-between"><span>Normal ></span> <span class="font-semibold text-green-600">{{ sensorStore.getSensorById(reading.sensor_id).thresholds.normalMin }}</span></li>
+                                                <li v-if="isDefined(sensorStore.getSensorById(reading.sensor_id).thresholds.criticalMin)" class="flex justify-between"><span>Crítico <</span> <span class="font-semibold text-red-600">{{ sensorStore.getSensorById(reading.sensor_id).thresholds.criticalMin }}</span></li>
+                                            </ul>
+                                       </div>
+                                       <div v-else class="text-gray-400 italic">Sin umbrales</div>
+                                     </template>
+                                   </td>
+                                   <!-- FIN DE LA MODIFICACIÓN -->
+                               </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                 </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
 
-      <!-- Componente de Paginación -->
+      <!-- Paginación -->
       <div class="mt-4">
         <Pagination
-          :total-items="analysisStore.getTotalFilteredResults"
+          :total-items="analysisStore.getTotalResults"
           :current-page="analysisStore.currentPage"
           :items-per-page="analysisStore.itemsPerPage"
           @page-change="handlePageChange"
@@ -133,115 +177,94 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useAnalysisStore } from '~/stores/analysis';
 import { useSensorStore } from '~/stores/sensors';
 import { useAssetStore } from '~/stores/assets';
+// ++ INICIO DE LA MODIFICACIÓN: Importar el store de perfiles personalizados ++
+import { useCustomVibrationProfileStore } from '~/stores/customVibrationProfiles';
 import PageHeader from '~/components/PageHeader.vue';
 import Pagination from '~/components/Pagination.vue';
-import { MagnifyingGlassIcon } from "@heroicons/vue/24/outline"; // Importa el ícono
+import { MagnifyingGlassIcon, ChevronDownIcon } from "@heroicons/vue/24/outline";
 
 definePageMeta({
-  // middleware: ['auth'] // Descomenta esta línea si estás usando un middleware de autenticación global en Nuxt.
+  // middleware: ['auth'] 
 });
 
-// Inicializar las stores Pinia necesarias.
 const analysisStore = useAnalysisStore();
 const sensorStore = useSensorStore();
 const assetStore = useAssetStore();
+const customProfileStore = useCustomVibrationProfileStore(); // ++ Añadido
 
-/**
- * handlePageChange: Método llamado por el componente Pagination cuando cambia la página.
- * Actualiza la página actual en la store de análisis.
- * @param {number} page - El nuevo número de página.
- */
+const expandedAssets = ref([]);
+
+const toggleExpand = (assetId) => {
+    const index = expandedAssets.value.indexOf(assetId);
+    if (index > -1) {
+        expandedAssets.value.splice(index, 1);
+    } else {
+        expandedAssets.value.push(assetId);
+    }
+};
+
+const getStatusBadgeClass = (status) => {
+    if (!status) return 'bg-gray-200 text-gray-700';
+    const normalizedStatus = status.trim().split(' (')[0].toLowerCase();
+    const statusStyles = { 'normal': 'bg-green-100 text-green-800', 'alerta': 'bg-yellow-100 text-yellow-800', 'precaucion': 'bg-orange-500 text-white', 'precaución': 'bg-orange-500 text-white', 'peligro': 'bg-red-500 text-white', 'crítico': 'bg-red-700 text-white font-bold', 'critico': 'bg-red-700 text-white font-bold', 'default': 'bg-gray-200 text-gray-700' };
+    return statusStyles[normalizedStatus] || statusStyles.default;
+};
+
+const getStatusBorderClass = (status) => {
+    if (!status) return 'border-gray-300';
+    const normalizedStatus = status.trim().split(' (')[0].toLowerCase();
+    const borderStyles = { 'normal': 'border-green-400', 'alerta': 'border-yellow-400', 'precaucion': 'border-orange-500', 'precaución': 'border-orange-500', 'peligro': 'border-red-500', 'crítico': 'border-red-700', 'critico': 'border-red-700', 'default': 'border-gray-300' };
+    return borderStyles[normalizedStatus] || borderStyles.default;
+};
+
 const handlePageChange = (page) => {
   analysisStore.setCurrentPage(page);
 };
 
-/**
- * formatDate: Función de utilidad para formatear marcas de tiempo en un formato legible localmente.
- * @param {string | Date} date - La fecha/hora a formatear.
- * @returns {string} La fecha/hora formateada o 'N/A' si no es válida.
- */
 const formatDate = (date) => {
   if (!date) return 'N/A';
-  const d = new Date(date);
-  return d.toLocaleString('es-ES', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
+  return new Date(date).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 };
 
-/**
- * translateSensorType: Helper para traducir los tipos de sensor de la base de datos a un formato más amigable en la UI.
- * @param {string} type - El tipo de sensor (ej. 'vibration', 'temperature').
- * @returns {string} El tipo de sensor traducido.
- */
-const translateSensorType = (type) => {
-  switch (type) {
-    case "vibration": return "Vibración";
-    case "temperature": return "Temperatura";
-    case "humidity": return "Humedad";
-    case "pressure": return "Presión";
-    case "current": return "Corriente";
-    case "voltage": return "Voltaje";
-    case "other": return "Otro";
-    default: return type;
-  }
-};
+// ++ INICIO DE LA MODIFICACIÓN: Funciones de ayuda para umbrales ++
+const getSeverityClass = (severity) => ({'A': 'bg-green-100 text-green-800', 'B': 'bg-blue-100 text-blue-800','C': 'bg-yellow-100 text-yellow-800', 'D': 'bg-red-100 text-red-800',}[severity] || 'bg-gray-100');
+const isDefined = (value) => value !== null && value !== undefined;
+// ++ FIN DE LA MODIFICACIÓN ++
 
-
-// Hook de ciclo de vida 'onMounted': Se ejecuta cuando el componente está montado en el DOM.
 onMounted(async () => {
-  // Cargar primero los datos de sensores y activos. Esto es importante para que los filtros
-  // dropdowns y el mapeo de nombres en la tabla funcionen correctamente al cargar la página.
+  // ++ MODIFICACIÓN: Cargar todos los datos necesarios en paralelo ++
   await Promise.all([
-    sensorStore.fetchSensors(),
-    assetStore.fetchAssets()
+      analysisStore.fetchAnalysisResults(),
+      sensorStore.fetchSensors(),
+      assetStore.fetchAssets(),
+      customProfileStore.fetchProfiles() // Cargar perfiles personalizados
   ]);
-
-  // Después de cargar las dependencias, cargar los resultados del análisis y suscribirse a cambios en tiempo real.
-  await analysisStore.fetchAnalysisResults();
   analysisStore.subscribeToAnalysisResults();
 });
 
-// Hook de ciclo de vida 'onUnmounted': Se ejecuta cuando el componente está a punto de ser desmontado.
-// Es crucial desuscribirse de los listeners en tiempo real para evitar fugas de memoria.
 onUnmounted(() => {
   analysisStore.unsubscribeFromAnalysisResults();
 });
 
-// Watcher: Observa cambios en los filtros de la store de análisis.
-// Cada vez que un filtro cambia, la paginación se reinicia a la primera página para una mejor UX.
-watch([
-  () => analysisStore.filterByStatus,
-  () => analysisStore.filterByAssetId,
-  () => analysisStore.filterBySensorId,
-  () => analysisStore.searchQuery // Agregado para observar cambios en la búsqueda
-], () => {
-  analysisStore.setCurrentPage(1);
-});
+watch(
+  [() => analysisStore.filterByStatus, () => analysisStore.filterByAssetId, () => analysisStore.searchQuery],
+  () => { analysisStore.setCurrentPage(1); }
+);
 </script>
 
 <style scoped>
-/* Estilos generales para las tarjetas, alineados con tus otros diseños. */
-.card {
-  @apply bg-white shadow-md rounded-lg;
-}
-
-/* Estilos para los select (dropdowns) de filtro. */
-.form-select {
-  @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm;
-}
-
-/* Estilos para los badges de estado. Las clases de color (bg-green-100, text-green-800, etc.)
-   son proporcionadas por el método getStatusBadgeClass en la store. */
-.px-2.inline-flex.text-xs.leading-5.font-semibold.rounded-full {
-  /* No se necesita CSS adicional aquí si Tailwind ya está configurado y las clases se aplican directamente. */
-}
+.card { @apply bg-white shadow-md rounded-lg; }
+.form-input { @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-shadow; }
+.form-select { @apply block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-shadow; }
+.table-header { @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider; }
+.table-cell { @apply px-6 py-4 whitespace-nowrap text-sm text-gray-700; }
+.table-cell-feedback { @apply px-6 py-8 text-center text-sm text-gray-500; }
+.status-badge { @apply px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full capitalize; }
+.axis-badge { @apply px-2 py-0.5 inline-flex text-xs leading-4 font-semibold rounded-md items-center; }
+.detail-table-header { @apply px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider; }
+.detail-table-cell { @apply px-4 py-3 whitespace-nowrap text-sm text-gray-700; }
 </style>

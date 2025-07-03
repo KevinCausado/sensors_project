@@ -8,7 +8,7 @@ const SENSOR_CONFIGS = [
   {
     // ID de un sensor de ejemplo que maneja los 4 umbrales
     // Asegúrate de que este ID existe en tu tabla 'public.sensors'
-    id: '10000000-0000-0000-0000-000000000001', 
+    id: '0dc8c09e-ebab-4ab0-a439-0c1cd88009e5', 
     type: 'temperature', 
     unit: 'C',     
     // Tus umbrales específicos (los que tienes en el JSONB de la DB)
@@ -19,13 +19,14 @@ const SENSOR_CONFIGS = [
     variation: 1.5 // Cuánto puede variar el valor en cada lectura
   },  
   {
-    id: '7761b176-a062-4c01-ad32-1aef55674bef', // ¡REEMPLAZA ESTO CON EL ID REAL DE TU SENSOR DE VIBRACIÓN!
+    id: '35b2c11b-0b8e-45a2-a453-edbe2cf722c4', // ¡REEMPLAZA ESTO CON EL ID REAL DE TU SENSOR DE VIBRACIÓN!
     type: 'vibration',
-    unit: 'mm/s', // O la unidad que uses para tu sensor de vibración (ej. G, mm/s)
-    normalMin: 1,
-    normalMax: 5,
-    criticalMin: 0.5,
-    criticalMax: 10,
+    unit: 'mm/s', // O la unidad que uses para tu sensor de vibración (ej. G, mm/s)-   
+    normalMin: 0.71,
+    normalMax: 1.8,
+    alarm_level: 4.5,     // Corresponde a la transición de Zona B a C
+    critical_level: 7.1,  // Corresponde a la transición de Zona C a D
+    criticalMax: 11.2,
     variation: 0.5 
   }
 ];
@@ -59,9 +60,19 @@ function generateRandomReading(sensorConfig) {
   // Empujar el valor cerca de los umbrales para probar alertas de baja prioridad
   if (Math.random() < 0.3) { // 30% de probabilidad de empujar hacia un umbral
     if (Math.random() < 0.5) { // Empujar hacia el límite inferior de normal
-      newValue = sensorConfig.normalMin - (Math.random() * sensorConfig.variation * 0.8);
+      // Para vibración, empujamos hacia normalMin o alarm_level
+      if (sensorConfig.type === 'vibration') {
+          newValue = sensorConfig.normalMin - (Math.random() * sensorConfig.variation * 0.8);
+      } else {
+          newValue = sensorConfig.normalMin - (Math.random() * sensorConfig.variation * 0.8);
+      }
     } else { // Empujar hacia el límite superior de normal
-      newValue = sensorConfig.normalMax + (Math.random() * sensorConfig.variation * 0.8);
+      // Para vibración, empujamos hacia normalMax o critical_level
+      if (sensorConfig.type === 'vibration') {
+          newValue = sensorConfig.normalMax + (Math.random() * sensorConfig.variation * 0.8);
+      } else {
+          newValue = sensorConfig.normalMax + (Math.random() * sensorConfig.variation * 0.8);
+      }
     }
   }
 

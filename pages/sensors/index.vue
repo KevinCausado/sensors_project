@@ -238,6 +238,7 @@ const confirmDelete = async () => {
     await sensorStore.deleteSensor(sensorToDelete.value.id);
     showDeleteModal.value = false;
     sensorToDelete.value = null;
+    await sensorStore.fetchSensors();
   } catch (error) {
     console.error("Error al eliminar sensor:", error);
   }

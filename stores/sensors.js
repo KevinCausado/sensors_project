@@ -26,6 +26,12 @@ export const useSensorStore = defineStore('sensors', {
   }),
 
   getters: {
+
+    getSensorById: (state) => (id) => {
+      return state.sensors.find(sensor => sensor.id === id);
+    },
+
+    
     filteredSensors: (state) => {
       const organizationStore = useOrganizationStore();
       const assetStore = useAssetStore(); 
@@ -91,7 +97,7 @@ export const useSensorStore = defineStore('sensors', {
   },
 
   actions: {
-    async fetchSensors() {
+     async fetchSensors() {
       this.isLoading = true;
       this.error = null;
       try {
@@ -104,10 +110,7 @@ export const useSensorStore = defineStore('sensors', {
             assets_base(name, city, state, country)
           `);
 
-        if (error) {
-            console.error('[Sensor Store] Supabase error fetching sensors:', error);
-            throw error;
-        }
+        if (error) throw error;
 
         this.sensors = data.map(sensor => ({
           id: sensor.id,
@@ -137,13 +140,111 @@ export const useSensorStore = defineStore('sensors', {
           last_reading_timestamp : sensor.last_reading_timestamp,
           created_at : sensor.created_at,
         }));
-        console.log('[Sensor Store] fetchSensors - FINALMENTE CARGADOS Y MAPEADOS:', this.sensors);
       } catch (e) {
         this.error = 'Failed to fetch sensors: ' + e.message;
         console.error('[Sensor Store] Error fetching sensors:', e);
       } finally {
         this.isLoading = false;
       }
+    },
+    
+    // ++ AJUSTE: Nueva acción para obtener los umbrales de un activo
+  async getVibrationProfileForAsset(assetId) {
+        if (!assetId) return { profile: null, thresholds: {} };
+        this.isLoading = true;
+        try {
+            const { $supabase } = useNuxtApp();
+            
+            // ++ CORRECCIÓN: Se especifica la relación de forma explícita para evitar ambigüedad ++
+            const { data: assetData, error: assetError } = await $supabase
+                .from('assets_base')
+                .select(`
+                    iso_group_id, 
+                    custom_vibration_profile_id, 
+                    rigidity_type_id,
+                    iso_group:iso_groups!assets_base_iso_group_id_fkey(name, description),
+                    custom_profile:custom_vibration_profiles!assets_base_custom_vibration_profile_id_fkey(name, description),
+                    rigidity:rigidity_types!assets_base_rigidity_type_id_fkey(name)
+                `)
+                .eq('id', assetId)
+                .single();
+
+            if (assetError) throw new Error(`Error al obtener el activo: ${assetError.message}`);
+            if (!assetData) return { profile: null, thresholds: {} };
+
+            let ranges = [];
+            let profileInfo = {
+                name: 'Perfil Desconocido',
+                description: '',
+                rigidity_name: assetData.rigidity?.name || 'N/A',
+                unit: 'mm/s'
+            };
+
+            const severityDescriptions = {
+                'A': 'Buena (Operación nueva)',
+                'B': 'Satisfactoria (Operación continua)',
+                'C': 'Insatisfactoria (No apta para op. continua)',
+                'D': 'Inaceptable (Peligro de daño)'
+            };
+
+            if (assetData.custom_vibration_profile_id) {
+                profileInfo.name = assetData.custom_profile?.name || 'Perfil Personalizado';
+                profileInfo.description = assetData.custom_profile?.description;
+
+                const { data: customRanges, error: customError } = await $supabase
+                    .from('custom_vibration_ranges')
+                    .select('severity, min_value, max_value, condition_name')
+                    .eq('custom_profile_id', assetData.custom_vibration_profile_id);
+                
+                if (customError) throw new Error(`Error al obtener rangos personalizados: ${customError.message}`);
+                ranges = customRanges;
+
+            } else if (assetData.iso_group_id) {
+                profileInfo.name = assetData.iso_group?.name || 'Estándar ISO';
+                profileInfo.description = assetData.iso_group?.description;
+
+                const { data: isoRanges, error: isoError } = await $supabase
+                    .from('vibration_ranges')
+                    .select('severity, min_value, max_value')
+                    .eq('iso_groups_id', assetData.iso_group_id)
+                    .eq('rigidity_id', assetData.rigidity_type_id);
+
+                if (isoError) throw new Error(`Error al obtener rangos ISO: ${isoError.message}`);
+                ranges = isoRanges.map(r => ({...r, condition_name: severityDescriptions[r.severity] || 'Desconocido' }));
+            }
+
+            if (ranges.length === 0) return { profile: null, thresholds: {} };
+            
+            profileInfo.ranges = ranges;
+
+            const thresholds = {};
+            const sortedRanges = ranges.sort((a, b) => a.severity.localeCompare(b.severity));
+            
+            sortedRanges.forEach(range => {
+                switch(range.severity) {
+                    case 'A':
+                        thresholds.normalMin = range.min_value;
+                        thresholds.normalMax = range.max_value;
+                        break;
+                    case 'B':
+                        thresholds.alarm_level = range.max_value; 
+                        break;
+                    case 'C':
+                        thresholds.critical_level = range.max_value;
+                        break;
+                }
+            });
+            thresholds.criticalMin = sortedRanges[0]?.min_value ?? null;
+            thresholds.criticalMax = sortedRanges[sortedRanges.length-1]?.max_value ?? null;
+
+            return { profile: profileInfo, thresholds };
+
+        } catch (e) {
+            console.error('[Sensor Store] Error en getVibrationProfileForAsset:', e.message);
+            return { profile: null, thresholds: {} };
+        } finally {
+            this.isLoading = false;
+        }
     },
 
     async fetchSensor(id) {
@@ -153,24 +254,17 @@ export const useSensorStore = defineStore('sensors', {
 
         try {
             const { $supabase } = useNuxtApp();
-            console.log(`[Sensor Store] fetchSensor: Intentando cargar sensor con ID: ${id}`);
             const { data, error } = await $supabase
                 .from('sensors')
                 .select('*, organizations(name), assets_base(name, city, state, country)')
                 .eq('id', id)
                 .single();
 
-            if (error) {
-                console.error('[Sensor Store] Supabase error fetching single sensor:', error);
-                throw error;
-            }
+            if (error) throw error;
             if (!data) {
                 this.error = `Sensor con ID ${id} no encontrado.`;
-                console.warn(`[Sensor Store] Sensor con ID ${id} no encontrado en la respuesta de Supabase.`);
                 return null;
             }
-
-            console.log('[Sensor Store] fetchSensor: Datos brutos de Supabase para el sensor:', data);
 
             const mappedSensor = {
                 id: data.id,
@@ -201,7 +295,6 @@ export const useSensorStore = defineStore('sensors', {
                 created_at: data.created_at
             };
             this.currentSensor = mappedSensor;
-            console.log('[Sensor Store] fetchSensor: Objeto currentSensor mapeado:', this.currentSensor);
             return mappedSensor;
         } catch (e) {
             this.error = 'Failed to fetch sensor: ' + e.message;
@@ -212,28 +305,52 @@ export const useSensorStore = defineStore('sensors', {
         }
     },
 
-    async createSensor(sensorData) {
+     async createSensor(sensorData) {
       this.isLoading = true;
       this.error = null;
       try {
-        const dataToSend = {
+        const { $supabase } = useNuxtApp();
+
+        // 1. Preparar datos iniciales sin el topic
+        const dataToInsert = {
           ...sensorData,
           organization_id: sensorData.organizationId,
           asset_id: sensorData.asset_id, 
         };
-        delete dataToSend.organizationId;
+        delete dataToInsert.organizationId; // Limpiar el campo duplicado
         
-        const { data, error } = await useNuxtApp().$supabase
+        // 2. Insertar el sensor y pedir que devuelva el registro creado
+        const { data: newSensor, error: insertError } = await $supabase
           .from('sensors')
-          .insert([dataToSend])
-          .select();
-        if (error) {
-            console.error('[Sensor Store] Supabase error creating sensor:', error);
-            throw error;
+          .insert([dataToInsert])
+          .select()
+          .single(); // .single() para obtener un objeto en lugar de un array
+
+        if (insertError) throw insertError;
+
+        // ++ AJUSTE: Generar y actualizar el mqtt_topic ++
+        // 3. Construir el topic con el ID y tipo del sensor recién creado
+        const mqttTopic = `${newSensor.type}/${newSensor.id}`;
+
+        // 4. Actualizar el registro recién creado con su mqtt_topic
+        const { data: updatedSensor, error: updateError } = await $supabase
+            .from('sensors')
+            .update({ mqtt_topic: mqttTopic })
+            .eq('id', newSensor.id)
+            .select()
+            .single();
+
+        if (updateError) {
+            // Si la actualización del topic falla, es bueno saberlo, aunque el sensor ya se creó.
+            console.error('Error al actualizar mqtt_topic para el nuevo sensor:', updateError);
+            throw updateError;
         }
+
+        // 5. Refrescar la lista de sensores en el state
         await this.fetchSensors(); 
-        console.log('[Sensor Store] Sensor creado:', data[0]);
-        return data[0];
+        
+        return updatedSensor; // Devolver el sensor final con el topic
+
       } catch (e) {
         this.error = 'Failed to create sensor: ' + e.message;
         console.error('[Sensor Store] Error creating sensor:', e);
@@ -247,28 +364,33 @@ export const useSensorStore = defineStore('sensors', {
       this.isLoading = true;
       this.error = null;
       try {
+        const { $supabase } = useNuxtApp();
+
+        // ++ AJUSTE: Generar el mqtt_topic antes de actualizar ++
+        const mqttTopic = `${sensorData.type}/${id}`;
+
         const dataToSend = {
           ...sensorData,
           organization_id: sensorData.organizationId,
           asset_id: sensorData.asset_id, 
+          mqtt_topic: mqttTopic, // Añadir el topic generado
         };
-        delete dataToSend.organizationId;
+        delete dataToSend.organizationId; // Limpiar campo duplicado
         
-        const { data, error } = await useNuxtApp().$supabase
+        const { data, error } = await $supabase
           .from('sensors')
           .update(dataToSend)
           .eq('id', id)
-          .select();
-        if (error) {
-            console.error('[Sensor Store] Supabase error updating sensor:', error);
-            throw error;
-        }
+          .select()
+          .single();
+
+        if (error) throw error;
+        
         await this.fetchSensors();
         if (this.currentSensor && this.currentSensor.id === id) {
           await this.fetchSensor(id); 
         }
-        console.log(`[Sensor Store] Sensor actualizado ID: ${id}`, data[0]);
-        return data[0];
+        return data;
       } catch (e) {
         this.error = 'Failed to update sensor: ' + e.message;
         console.error('[Sensor Store] Error updating sensor:', e);
@@ -286,15 +408,11 @@ export const useSensorStore = defineStore('sensors', {
           .from('sensors')
           .delete()
           .eq('id', id);
-        if (error) {
-            console.error('[Sensor Store] Supabase error deleting sensor:', error);
-            throw error;
-        }
+        if (error) throw error;
         this.sensors = this.sensors.filter(s => s.id !== id);
         if (this.currentSensor && this.currentSensor.id === id) {
           this.currentSensor = null;
         }
-        console.log(`[Sensor Store] Sensor eliminado ID: ${id}`);
       } catch (e) {
         this.error = 'Failed to delete sensor: ' + e.message;
         console.error('[Sensor Store] Error deleting sensor:', e);

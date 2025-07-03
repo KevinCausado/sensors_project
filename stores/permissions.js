@@ -18,7 +18,7 @@ export const usePermissionStore = defineStore('permissions', {
       sensors: ['view', 'create', 'manage', 'delete'],
       assets: ['view', 'create', 'manage', 'delete'],
       settings: ['view', 'manage'], // General settings might just be view/manage
-      // reports: ['view', 'generate', 'manage_schedules'], // Specific for reports
+      reports: ['view', 'generate'], // Specific for reports
       organization: ['view', 'create', 'manage', 'delete'],
       alerts: ['view', 'resolve'], // Example: view, create new alerts, manage existing, delete
       users: ['view', 'create', 'manage', 'delete'], // Includes users, roles, and possibly permissions management
@@ -26,8 +26,8 @@ export const usePermissionStore = defineStore('permissions', {
       messaging: ['view','generate'], // Monitor in real-time
       vibration_profiles: ['view', 'create', 'manage', 'delete'],
       parameters: ['view', 'create', 'manage', 'delete'],
-      // asset_status: ['view', 'manage', 'delete'], // Assuming asset_status is its own module-    
-      basic_analysis: ['view', 'create', 'manage', 'delete'], // Assuming 'analyze' is an action for your new module
+      asset_status: ['view'], // Assuming asset_status is its own module-    
+      basic_analysis: ['view'], // Assuming 'analyze' is an action for your new module
     },
   }),
 

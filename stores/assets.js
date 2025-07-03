@@ -20,6 +20,9 @@ export const useAssetStore = defineStore('assets', {
   }),
 
   getters: {
+     getAssetById: (state) => (id) => {
+      return state.assets.find(asset => asset.id === id);
+    },
     getAssets: (state) => state.assets,
     getAssetTypes: (state) => state.assetTypes,
     getIsoGroups: (state) => state.isoGroups,
@@ -48,7 +51,11 @@ export const useAssetStore = defineStore('assets', {
 
         let query = $supabase
           .from('assets_base')
-          .select(`*, vibration_profile_id, assets_vibration_config ( measurement_point, direction )`)
+          .select(`
+            *,
+            iso_group:iso_groups!assets_base_iso_group_id_fkey(name),
+            custom_profile:custom_vibration_profiles(name)
+          `)
           .order('name', { ascending: true });
 
         if (organizationStore.selectedOrganizationId) {
@@ -59,17 +66,18 @@ export const useAssetStore = defineStore('assets', {
 
         if (error) throw error;
 
-        this.assets = data.map(asset => ({
-          ...asset,
-          organization_name: organizationStore.organizations.find(org => org.id === asset.organization_id)?.name || 'N/A',
-          assetTypeName: this.assetTypes.find(type => type.id === asset.asset_type_id)?.name || 'N/A',       
-          iso_group_name: this.isoGroups.find(group => group.id === asset.iso_group_id)?.name || 'N/A',      
-          rigidity_type_name: this.rigidityTypes.find(type => type.id === asset.rigidity_type_id)?.name || 'N/A', 
-          foundation_type_name: this.foundationTypes.find(type => type.id === asset.foundation_type_id)?.name || 'N/A', 
-          coupling_type_name: this.couplingTypes.find(type => type.id === asset.coupling_type_id)?.name || 'N/A', 
-          vibration_profile_name: asset.assets_vibration_config ? 
-                                  `${asset.assets_vibration_config.measurement_point} (${asset.assets_vibration_config.direction})` : 'N/A',
-        }));
+              this.assets = data.map(asset => {
+          const isoGroupName = asset.iso_group?.name || 'N/A';
+          const customProfileName = asset.custom_profile?.name || null;
+
+          return {
+            ...asset,
+            organization_name: organizationStore.organizations.find(org => org.id === asset.organization_id)?.name || 'N/A',
+            assetTypeName: this.assetTypes.find(type => type.id === asset.asset_type_id)?.name || 'N/A',         
+            profileDisplayName: customProfileName ? customProfileName : isoGroupName,            
+            isCustomProfile: !!customProfileName 
+          };
+        });
         console.log('[Assets Store] Activos cargados (con assetTypeName y vibration_profile_name):', this.assets);
 
       } catch (e) {
@@ -86,7 +94,6 @@ export const useAssetStore = defineStore('assets', {
       try {
         const { $supabase } = useNuxtApp();
         const organizationStore = useOrganizationStore(); 
-        const sensorStore = useSensorStore();
 
         if (!this._dataInitialized) {
             await this.initializeDataForForms();
@@ -95,27 +102,34 @@ export const useAssetStore = defineStore('assets', {
             await organizationStore.fetchOrganizations();
         }
 
+       
         const { data, error } = await $supabase
           .from('assets_base')
-          .select(`*, assets_vibration_config ( id, measurement_point, direction, vibration_range_id )`)
+          .select(`
+            *,
+            iso_group:iso_groups!assets_base_iso_group_id_fkey(name),
+            custom_profile:custom_vibration_profiles(name)
+          `)
           .eq('id', id)
           .single();
-
+       
         if (error) throw error;
 
         if (data) {
+          const isoGroupName = data.iso_group?.name || 'N/A';
+          const customProfileName = data.custom_profile?.name || null;
+
           this.currentAsset = {
             ...data,
             organization_name: organizationStore.organizations.find(org => org.id === data.organization_id)?.name || 'N/A',
-            assetTypeName: this.assetTypes.find(type => type.id === data.asset_type_id)?.name || 'N/A',
-            iso_group_name: this.isoGroups.find(group => group.id === data.iso_group_id)?.name || 'N/A',
+            assetTypeName: this.assetTypes.find(type => type.id === data.asset_type_id)?.name || 'N/A',            
+            iso_group_name: isoGroupName,
             rigidity_type_name: this.rigidityTypes.find(type => type.id === data.rigidity_type_id)?.name || 'N/A',
             foundation_type_name: this.foundationTypes.find(type => type.id === data.foundation_type_id)?.name || 'N/A',
-            coupling_type_name: this.couplingTypes.find(type => type.id === data.coupling_type_id)?.name || 'N/A',
-            vibration_profile_display_name: data.assets_vibration_config ? 
-                                            `${data.assets_vibration_config.measurement_point} (${data.assets_vibration_config.direction})` : 'N/A',
+            coupling_type_name: this.couplingTypes.find(type => type.id === data.coupling_type_id)?.name || 'N/A',            
+            profileDisplayName: customProfileName ? customProfileName : isoGroupName,
+            isCustomProfile: !!customProfileName 
           };
-          console.log('[Assets Store] Activo individual cargado (con nombres mapeados):', this.currentAsset);
           return this.currentAsset;
         }
         return null;
@@ -156,10 +170,30 @@ export const useAssetStore = defineStore('assets', {
       this.loading = true;
       this.error = null;
       try {
-        const { $supabase } = useNuxtApp();
+        const { $supabase } = useNuxtApp();        
+       
+        const dataToUpdate = { ...assetData };
+
+        // Definimos una lista de claves que son calculadas o relacionales y no deben enviarse en la actualización.
+        const computedOrRelationKeys = [
+            'organization_name',
+            'assetTypeName',
+            'iso_group_name',
+            'rigidity_type_name',
+            'foundation_type_name',
+            'coupling_type_name',
+            'vibration_profile_name',
+            'vibration_profile_display_name',
+            'assets_vibration_config' // Es una relación, no una columna de 'assets_base'
+        ];
+
+        // Eliminamos las claves no deseadas del objeto que se enviará a Supabase.
+        computedOrRelationKeys.forEach(key => delete dataToUpdate[key]);
+      
+
         const { data, error } = await $supabase
           .from('assets_base')
-          .update(assetData)
+          .update(dataToUpdate) // Usamos el objeto "limpio".
           .eq('id', id)
           .select()
           .single();
@@ -199,10 +233,9 @@ export const useAssetStore = defineStore('assets', {
         this.loading = false;
       }
     },
-
-    async initializeDataForForms() {
+   async initializeDataForForms() {
       if (this._dataInitialized) {
-        console.log('[Assets Store] initializeDataForForms: Datos ya inicializados. Saliendo.');
+        console.log('[Assets Store] Datos de formulario ya inicializados.');
         return;
       }
 
@@ -211,41 +244,40 @@ export const useAssetStore = defineStore('assets', {
       try {
         const { $supabase } = useNuxtApp();
 
+        // Cargar todas las tablas de configuración en paralelo
         const [
-          { data: assetsTypesData, error: assetsTypesError },
-          { data: isoGroupsData, error: isoGroupsError },
-          { data: rigidityTypesData, error: rigidityTypesError },
-          { data: foundationTypesData, error: foundationTypesError },
-          { data: couplingTypesData, error: couplingTypesError },
-          { data: vibrationProfilesData, error: vibrationProfilesError },
+          assetsTypesRes,
+          isoGroupsRes,
+          rigidityTypesRes,
+          foundationTypesRes,
+          couplingTypesRes,
         ] = await Promise.all([
           $supabase.from('assets_types').select('id, name'),
-          $supabase.from('iso_groups').select('id, name'),
+          $supabase.from('iso_groups').select('id, name'), // Traemos los grupos ISO
           $supabase.from('rigidity_types').select('id, name'),
           $supabase.from('foundation_types').select('id, name'),
           $supabase.from('coupling_types').select('id, name'),
-          $supabase.from('assets_vibration_config').select('id, measurement_point, direction'), 
         ]);
 
-        if (assetsTypesError) throw assetsTypesError;
-        if (isoGroupsError) throw isoGroupsError;
-        if (rigidityTypesError) throw rigidityTypesError;
-        if (foundationTypesError) throw foundationTypesError;
-        if (couplingTypesError) throw couplingTypesError;
-        if (vibrationProfilesError) throw vibrationProfilesError; 
+        // Manejo de errores para cada consulta
+        if (assetsTypesRes.error) throw assetsTypesRes.error;
+        if (isoGroupsRes.error) throw isoGroupsRes.error;
+        if (rigidityTypesRes.error) throw rigidityTypesRes.error;
+        if (foundationTypesRes.error) throw foundationTypesRes.error;
+        if (couplingTypesRes.error) throw couplingTypesRes.error;
 
-        this.assetTypes = assetsTypesData;
-        this.isoGroups = isoGroupsData;
-        this.rigidityTypes = rigidityTypesData;
-        this.foundationTypes = foundationTypesData;
-        this.couplingTypes = couplingTypesData;
-        this.vibrationProfiles = vibrationProfilesData; 
+        // Asignar los datos al estado del store
+        this.assetTypes = assetsTypesRes.data;
+        this.isoGroups = isoGroupsRes.data;
+        this.rigidityTypes = rigidityTypesRes.data;
+        this.foundationTypes = foundationTypesRes.data;
+        this.couplingTypes = couplingTypesRes.data;
 
         this._dataInitialized = true; 
-        console.log('[Assets Store] initializeDataForForms: Datos de formularios inicializados con éxito. Perfiles de vibración cargados:', this.vibrationProfiles.length);
+        console.log('[Assets Store] Datos de formularios inicializados con éxito.');
 
       } catch (error) {
-        console.error('Error loading form initialization data:', error);
+        console.error('Error al cargar datos de inicialización de formularios:', error);
         this.error = error.message;
         throw error;
       } finally {

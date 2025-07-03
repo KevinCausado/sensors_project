@@ -22,13 +22,13 @@ export const navigationItems = [
     moduleId: "assets",
     permissionAction: "view"
   },
-  // {
-  //   name: "Estado de Activos",
-  //   to: "/asset-status",
-  //   icon: "i-heroicons-clipboard-document-check",
-  //   moduleId: "asset_status",
-  //   permissionAction: "view"
-  // },
+  {
+    name: "Estado de Activos",
+    to: "/asset-status",
+    icon: "i-heroicons-clipboard-document-check",
+    moduleId: "asset_status",
+    permissionAction: "view"
+  },
    {
     name: "Perfiles de Vibración",
     to: "/vibration-profiles",
@@ -93,6 +93,13 @@ export const navigationItems = [
     moduleId: "messaging",
     permissionAction: "view"
   }, 
+  {
+    name: "Reportes",
+    to: "/reports",
+    icon: "i-heroicons-document-text",
+    moduleId: "reports",
+    permissionAction: "view"
+  },
   {
     name: "Configuración General",
     to: "/settings",
