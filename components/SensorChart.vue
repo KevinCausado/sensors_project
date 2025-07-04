@@ -44,13 +44,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { useNuxtApp, useRoute } from '#app';
+import { ref, computed, watch } from 'vue';
+import { useNuxtApp } from '#app';
 import VueApexCharts from 'vue3-apexcharts';
 
 // Props
 const props = defineProps({
-  sensors: { // ARRAY DE OBJETOS SENSOR, AHORA CONTIENE TAMBIÉN LAS LECTURAS EN TIEMPO REAL
+  sensors: {
     type: Array,
     required: true,
     default: () => []
@@ -74,11 +74,9 @@ const props = defineProps({
 });
 
 // State
-const { $supabase } = useNuxtApp();
-const route = useRoute();
-const loading = ref(true);
+const loading = ref(false); // La carga ahora se maneja en el store
 const error = ref(null);
-const selectedRange = ref('day');
+const selectedRange = ref('day'); // Este control puede permanecer para futuras funcionalidades
 
 const timeRanges = [
   { value: 'day', label: '24h' },
@@ -86,232 +84,81 @@ const timeRanges = [
   { value: 'month', label: '30 días' }
 ];
 
-const isDetailPage = computed(() => {
-  return route.name === 'sensors-id';
-});
-
-// Almacenará los puntos de datos históricos reales del gráfico, organizados por sensorId
-const historicalChartData = ref({});
-
-// --- FUNCIÓN PARA CARGAR LECTURAS HISTÓRICAS REALES PARA MÚLTIPLES SENSORES ---
-const fetchHistoricalReadings = async () => {
-  if (props.sensors.length === 0) {
-    historicalChartData.value = {};
-    loading.value = false;
-    return;
+/**
+ * Parsea un valor a float de forma segura.
+ */
+function safeParseFloat(value) {
+  if (value === null || value === undefined) {
+    return null;
   }
+  const num = parseFloat(value);
+  return isNaN(num) ? null : num;
+}
 
-  loading.value = true;
-  error.value = null;
-
-  let timeAgo;
-  const now = new Date();
-
-  // En la página de detalle, fuerza el rango a 'day' si no se han mostrado los controles
-  if (isDetailPage.value && props.sensors.length === 1 && !props.showTimeRangeControls) {
-    selectedRange.value = 'day';
-  }
-
-  switch (selectedRange.value) {
-    case 'week':
-      timeAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    case 'month':
-      timeAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    default: // 'day'
-      timeAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      break;
-  }
-
-  try {
-    const newHistoricalData = {};
-    const promises = props.sensors.map(async (sensor) => {
-      if (!sensor || !sensor.id) {
-        console.warn('Sensor object is missing ID:', sensor);
-        return { sensorId: null, data: [], error: { message: 'Sensor ID is missing' } };
-      }
-
-      const { data, error: fetchError } = await $supabase
-        .from('sensor_readings') // <-- ¡CORREGIDO! Asegúrate de que esta línea es 'sensor_readings'
-        .select('value, timestamp')
-        .eq('sensor_id', sensor.id) // <-- ¡CORREGIDO! Asegúrate de que esta línea es 'sensor_id'
-        .gte('timestamp', timeAgo.toISOString())
-        .order('timestamp', { ascending: true });
-
-      if (fetchError) {
-        console.error(`Error fetching historical data for sensor ${sensor.name} (${sensor.id}):`, fetchError);
-        return { sensorId: sensor.id, data: [], error: fetchError };
-      } else {
-        let mappedData = data.map(reading => ({
-          x: new Date(reading.timestamp).getTime(),
-          y: parseFloat(reading.value.toFixed(2))
-        }));
-        return { sensorId: sensor.id, data: mappedData, error: null };
-      }
-    });
-
-    const results = await Promise.all(promises);
-
-    results.forEach(result => {
-      if (result.sensorId && !result.error) {
-        newHistoricalData[result.sensorId] = result.data;
-      }
-    });
-
-    historicalChartData.value = newHistoricalData;
-
-    const allFailed = results.every(r => r.error);
-    if (allFailed && props.sensors.length > 0) {
-      error.value = 'No se pudo cargar la gráfica para ningún sensor. Verifique la conexión o los permisos.';
-    } else if (Object.keys(newHistoricalData).length === 0 && props.sensors.length > 0) {
-      // Si no hay datos, pero no hubo errores fatales, simplemente no se muestra la gráfica
-      // El mensaje de 'emptyDataMessage' se encargará de esto.
-      error.value = null;
-    } else {
-      error.value = null;
-    }
-
-  } catch (err) {
-    console.error('Error general en fetchHistoricalReadings:', err);
-    error.value = 'Error inesperado al cargar datos de la gráfica.';
-    historicalChartData.value = {};
-  } finally {
-    loading.value = false;
-  }
-};
-
-// Observar cambios en 'selectedRange' o la SELECCIÓN de sensores (IDs)
-// Solo disparamos la carga histórica cuando cambia el rango o los IDs de los sensores seleccionados.
-watch([() => props.sensors.map(s => s.id), selectedRange], async ([newSensorIds, newRange], [oldSensorIds, oldRange]) => {
-  // Para evitar recargar si solo cambian los datos de Realtime dentro de un sensor,
-  // chequeamos si los IDs de los sensores seleccionados han cambiado.
-  const idsChanged = JSON.stringify(newSensorIds) !== JSON.stringify(oldSensorIds);
-  if (idsChanged || newRange !== oldRange) {
-    await fetchHistoricalReadings();
-  }
-}, { immediate: true, deep: true });
-
-// Chart options (ahora usa `computed` para ser reactivo)
 const chartOptions = computed(() => ({
   chart: {
     type: 'line',
-    animations: {
-      enabled: true,
-      easing: 'linear',
-      dynamicAnimation: {
-        speed: 1000
-      }
-    },
-    toolbar: {
-      show: true,
-      tools: {
-        download: true,
-        selection: true,
-        zoom: true,
-        zoomIn: true,
-        zoomOut: true,
-        pan: true,
-        reset: true
-      }
-    },
-    locales: [{
-      name: 'es',
-      options: {
-        months: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
-        shortMonths: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
-        days: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'],
-        shortDays: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
-        toolbar: {
-          download: 'Descargar CSV',
-          selection: 'Selección',
-          selectionZoom: 'Zoom de Selección',
-          zoomIn: 'Acercar',
-          zoomOut: 'Alejar',
-          pan: 'Panorámica',
-          reset: 'Resetear Zoom'
-        }
-      }
-    }],
+    animations: { enabled: true, easing: 'linear', dynamicAnimation: { speed: 500 }},
+    toolbar: { show: true },
+    locales: [{ name: 'es', options: { months: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'], shortMonths: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'], days: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'], shortDays: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], toolbar: { download: 'Descargar CSV', selection: 'Selección', selectionZoom: 'Zoom de Selección', zoomIn: 'Acercar', zoomOut: 'Alejar', pan: 'Panorámica', reset: 'Resetear Zoom' } } }],
     defaultLocale: 'es'
   },
-  stroke: {
-    curve: 'smooth',
-    width: 2
-  },
-  markers: {
-    size: 0,
-    hover: {
-      size: 5
-    }
-  },
-  xaxis: {
-    type: 'datetime',
-    labels: {
-      datetimeUTC: false,
-      format: 'dd MMM HH:mm'
-    }
-  },
-  yaxis: {
-    labels: {
-      formatter: (value) => value !== undefined && value !== null ? value.toFixed(2) : ''
-    }
-  },
-  tooltip: {
-    x: {
-      format: 'dd MMM HH:mm:ss'
-    },
-    y: {
-      formatter: function (val) {
-        return val !== undefined && val !== null ? val.toFixed(2) : 'N/A';
-      }
-    }
-  },
-  legend: {
-    position: 'top'
-  },
-  grid: {
-    borderColor: '#f1f1f1'
-  },
-  theme: {
-    palette: 'palette1'
-  }
+  stroke: { curve: 'smooth', width: 2 },
+  markers: { size: 0, hover: { size: 5 } },
+  xaxis: { type: 'datetime', labels: { datetimeUTC: false, format: 'dd MMM HH:mm' } },
+  yaxis: { labels: { formatter: (value) => value !== undefined && value !== null ? value.toFixed(2) : '' } },
+  tooltip: { x: { format: 'dd MMM HH:mm:ss' }, y: { formatter: (val) => val !== undefined && val !== null ? val.toFixed(2) : 'N/A' } },
+  legend: { position: 'top' },
+  grid: { borderColor: '#f1f1f1' },
+  theme: { palette: 'palette1' }
 }));
 
-
-// Chart series data: Ahora fusiona datos históricos con datos en tiempo real
+// =================================================================================
+// INICIO DE LA MODIFICACIÓN: Lógica de `series` simplificada y reactiva
+// =================================================================================
 const series = computed(() => {
-  console.log('--- La propiedad computada `series` de SensorChart se está re-evaluando. ---', Date.now());
-  const datasets = props.sensors.map(sensor => {
-    // Obtener datos históricos para el sensor
-    const historicalData = historicalChartData.value[sensor.id] || [];
+  const allSeries = [];
 
-    // Obtener datos en tiempo real (vienen en la prop `sensors` dentro del objeto `sensor.readings`)
-    // Asegúrate de que `sensor.readings` esté en el formato {value, timestamp}
-    const realtimeData = (sensor.readings || []).map(reading => ({
-      x: new Date(reading.timestamp).getTime(),
-      y: parseFloat(reading.value.toFixed(2))
-    }));
+  props.sensors.forEach(sensor => {
+    if (!sensor || !sensor.id) return;
 
-    // Fusionar y ordenar los datos
-    const combinedData = [...historicalData, ...realtimeData];
+    // Los datos ahora vienen completos y listos desde el prop `readings`
+    const dataToDisplay = sensor.readings || [];
 
-    // Eliminar duplicados y ordenar por timestamp
-    const uniqueAndSortedData = Array.from(new Map(combinedData.map(item => [item.x, item])).values())
-      .sort((a, b) => a.x - b.x);
+    if (sensor.type === 'vibration') {
+      if (dataToDisplay.length > 0) {
+        const sortedData = [...dataToDisplay].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    return {
-      name: `${sensor.name} (${sensor.unit || ''})`,
-      data: uniqueAndSortedData
-    };
+        allSeries.push({
+          name: `${sensor.name} (X)`,
+          data: sortedData.map(d => ({ x: new Date(d.timestamp).getTime(), y: safeParseFloat(d.x?.oavelocity ?? d.x) }))
+        });
+        allSeries.push({
+          name: `${sensor.name} (Y)`,
+          data: sortedData.map(d => ({ x: new Date(d.timestamp).getTime(), y: safeParseFloat(d.y?.oavelocity ?? d.y) }))
+        });
+        allSeries.push({
+          name: `${sensor.name} (Z)`,
+          data: sortedData.map(d => ({ x: new Date(d.timestamp).getTime(), y: safeParseFloat(d.z?.oavelocity ?? d.z) }))
+        });
+      }
+    } else {
+      // Lógica para sensores no-vibración
+      if (dataToDisplay.length > 0) {
+        const sortedData = [...dataToDisplay].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        allSeries.push({
+          name: `${sensor.name} (${sensor.unit || ''})`,
+          data: sortedData.map(d => ({ x: new Date(d.timestamp).getTime(), y: safeParseFloat(d.value) }))
+        });
+      }
+    }
   });
 
-  return datasets.filter(s => s.data.length > 0);
+  return allSeries.filter(s => s.data && s.data.some(point => point.y !== null));
 });
-
-onMounted(() => {
-  // El watch con 'immediate: true' ya maneja la carga inicial.
-});
+// =================================================================================
+// FIN DE LA MODIFICACIÓN
+// =================================================================================
 </script>
 
 <style scoped>

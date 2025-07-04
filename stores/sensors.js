@@ -82,14 +82,17 @@ export const useSensorStore = defineStore('sensors', {
 
   actions: {
     _getReadingsTableName(sensorType) {
-      if (sensorType === 'temperature') {
-        return 'temperature_readings';
+      const typeMap = {
+        temperature: 'temperature_readings',
+        vibration: 'vibration_readings',
+        humidity: 'humidity_readings',
+        pressure: 'pressure_readings'
+      };
+      const tableName = typeMap[sensorType];
+      if (!tableName) {
+        console.warn(`Unsupported sensor type for readings table: ${sensorType}`);
       }
-      if (sensorType === 'vibration') {
-        return 'vibration_readings';
-      }
-      console.warn(`Unsupported sensor type for readings table: ${sensorType}`);
-      return null;
+      return tableName;
     },
 
     async fetchSensorHierarchy() {
@@ -171,9 +174,6 @@ export const useSensorStore = defineStore('sensors', {
         if (setLoading) this.isLoading = true;
         this.error = null;
         
-        // No limpiar currentSensor aquí para evitar parpadeos en la UI durante la recarga reactiva
-        // this.currentSensor = null;
-
         try {
             const { $supabase } = useNuxtApp();
             const { data, error } = await $supabase
@@ -410,12 +410,9 @@ export const useSensorStore = defineStore('sensors', {
 
               if (payload.eventType === 'UPDATE') {
                   const updatedId = payload.new.id;
-                  // **NUEVO**: Actualización en tiempo real para la página de detalle del sensor
                   if (this.currentSensor && this.currentSensor.id === updatedId) {
-                      // Recargamos los datos del sensor actual sin mostrar el spinner de carga
                       await this.fetchSensor(updatedId, false);
                   }
-                  // Actualiza el sensor en la lista general
                   const fullData = await getFullSensorData(updatedId);
                   if (fullData) {
                       const mappedData = mapFullSensor(fullData);
@@ -453,6 +450,9 @@ export const useSensorStore = defineStore('sensors', {
       }
     },
 
+    // =================================================================================
+    // INICIO DE LA MODIFICACIÓN: Lógica de subscripción optimizada para reactividad
+    // =================================================================================
     async fetchAndSubscribeToDetailReadings(sensorId) {
       if (this.detailRealtimeSubscription) {
         await this.detailRealtimeSubscription.unsubscribe();
@@ -483,57 +483,58 @@ export const useSensorStore = defineStore('sensors', {
       }
 
       try {
-        // **NUEVO**: Lógica diferenciada para sensores de vibración
+        const readingsMap = new Map();
+
         if (sensorType === 'vibration') {
             const { data, error } = await $supabase
               .from('vibration_readings')
               .select('id, timestamp, axis, oavelocity, peak, rms')
               .eq('sensor_id', sensorId)
               .order('timestamp', { ascending: false })
-              .limit(300); // Pedimos más para asegurar ternas completas
+              .limit(300);
 
             if (error) throw error;
 
-            const groupedReadings = new Map();
+            // Procesar datos históricos
             data.forEach(reading => {
-                const ts = reading.timestamp;
-                if (!groupedReadings.has(ts)) {
-                    groupedReadings.set(ts, {
-                        id: ts, // Usamos el timestamp como ID único para el grupo
-                        timestamp: ts,
-                        unit: this.currentSensor.unit,
-                        x: null, y: null, z: null
-                    });
+                const ts = new Date(reading.timestamp).getTime();
+                if (!readingsMap.has(ts)) {
+                    readingsMap.set(ts, { id: ts, timestamp: reading.timestamp, unit: this.currentSensor.unit, x: null, y: null, z: null });
                 }
-                const group = groupedReadings.get(ts);
+                const group = readingsMap.get(ts);
                 const axis = reading.axis.toLowerCase();
                 if (['x', 'y', 'z'].includes(axis)) {
                     group[axis] = { id: reading.id, oavelocity: reading.oavelocity, peak: reading.peak, rms: reading.rms };
                 }
             });
-            this.currentSensorReadings = Array.from(groupedReadings.values());
+            
+            // Asignar datos históricos ordenados
+            this.currentSensorReadings = Array.from(readingsMap.values()).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+            // Subscribirse a nuevos datos
             const channel = $supabase.channel(`sensor_readings_${sensorId}`);
             channel.on('postgres_changes', {
                 event: 'INSERT', schema: 'public', table: 'vibration_readings', filter: `sensor_id=eq.${sensorId}`
             }, payload => {
                 const newReading = payload.new;
-                const ts = newReading.timestamp;
+                const ts = new Date(newReading.timestamp).getTime();
                 const axis = newReading.axis.toLowerCase();
-                let group = this.currentSensorReadings.find(r => r.timestamp === ts);
+                
+                let group = readingsMap.get(ts);
 
-                if (group) {
+                if (group) { // Si el timestamp existe, actualiza el eje
                     group[axis] = { id: newReading.id, oavelocity: newReading.oavelocity, peak: newReading.peak, rms: newReading.rms };
-                    this.currentSensorReadings = [...this.currentSensorReadings]; // Forzar reactividad
-                } else {
-                    const newGroup = { id: ts, timestamp: ts, unit: this.currentSensor.unit, x: null, y: null, z: null };
-                    newGroup[axis] = { id: newReading.id, oavelocity: newReading.oavelocity, peak: newReading.peak, rms: newReading.rms };
-                    this.currentSensorReadings.unshift(newGroup);
+                } else { // Si es nuevo, crea el grupo
+                    group = { id: ts, timestamp: newReading.timestamp, unit: this.currentSensor.unit, x: null, y: null, z: null };
+                    group[axis] = { id: newReading.id, oavelocity: newReading.oavelocity, peak: newReading.peak, rms: newReading.rms };
+                    readingsMap.set(ts, group);
                 }
+                // Actualizar el array reactivo de forma eficiente
+                this.currentSensorReadings = Array.from(readingsMap.values()).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
             }).subscribe();
             this.detailRealtimeSubscription = channel;
 
-        } else { // Lógica original para otros tipos de sensores
+        } else { // Para otros tipos de sensores
             const { data, error } = await $supabase
               .from(tableName)
               .select('id, value, timestamp')
@@ -579,7 +580,7 @@ export const useSensorStore = defineStore('sensors', {
         this.detailRealtimeSubscription = null;
       }
     },
-
+    
     async subscribeToGraphReadings(sensorIds) {
       const { $supabase } = useNuxtApp();
       for (const id in this.dashboardRealtimeSubscriptions) {
@@ -589,6 +590,7 @@ export const useSensorStore = defineStore('sensors', {
           delete this.allSensorRecentReadings[id];
         }
       }
+
       for (const sensorId of sensorIds) {
         if (!this.dashboardRealtimeSubscriptions[sensorId]) {
           const sensor = this.sensors.find(s => s.id === sensorId);
@@ -598,51 +600,101 @@ export const useSensorStore = defineStore('sensors', {
           if (!tableName) continue;
           
           try {
-            let query = $supabase
+            const readingsMap = new Map();
+
+            if (sensor.type === 'vibration') {
+              const { data, error } = await $supabase
                 .from(tableName)
-                .select(tableName === 'vibration_readings' ? 'oavelocity, timestamp' : 'value, timestamp')
+                .select('timestamp, axis, oavelocity')
+                .eq('sensor_id', sensorId)
+                .order('timestamp', { ascending: false })
+                .limit(300);
+
+              if (error) throw error;
+              
+              data.forEach(reading => {
+                  const ts = new Date(reading.timestamp).getTime();
+                  if (!readingsMap.has(ts)) {
+                      readingsMap.set(ts, { timestamp: reading.timestamp, x: null, y: null, z: null });
+                  }
+                  const group = readingsMap.get(ts);
+                  const axis = reading.axis.toLowerCase();
+                  if (['x', 'y', 'z'].includes(axis)) {
+                      group[axis] = reading.oavelocity;
+                  }
+              });
+              
+              this.allSensorRecentReadings[sensorId] = Array.from(readingsMap.values());
+              
+              const channel = $supabase.channel(`graph_chart_readings_${sensorId}`);
+              channel.on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: tableName,
+                filter: `sensor_id=eq.${sensorId}`
+              }, payload => {
+                const newReading = payload.new;
+                const ts = new Date(newReading.timestamp).getTime();
+                const axis = newReading.axis.toLowerCase();
+                
+                let group = readingsMap.get(ts);
+                if (group) {
+                  group[axis] = newReading.oavelocity;
+                } else {
+                  group = { timestamp: newReading.timestamp, x: null, y: null, z: null };
+                  group[axis] = newReading.oavelocity;
+                  readingsMap.set(ts, group);
+                }
+
+                this.allSensorRecentReadings[sensorId] = Array.from(readingsMap.values());
+                if (this.allSensorRecentReadings[sensorId].length > 200) {
+                    // Simple shift if map gets too large, can be improved
+                    const oldestKey = readingsMap.keys().next().value;
+                    readingsMap.delete(oldestKey);
+                }
+              }).subscribe();
+              this.dashboardRealtimeSubscriptions[sensorId] = channel;
+
+            } else {
+              const { data, error } = await $supabase
+                .from(tableName)
+                .select('value, timestamp')
                 .eq('sensor_id', sensorId)
                 .order('timestamp', { ascending: false })
                 .limit(100);
 
-            if (tableName === 'vibration_readings') {
-                query = query.eq('axis', 'X'); 
+              if (error) throw error;
+              
+              this.allSensorRecentReadings[sensorId] = data.map(r => ({ value: r.value, timestamp: r.timestamp }));
+              
+              const channel = $supabase.channel(`graph_chart_readings_${sensorId}`);
+              channel.on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: tableName,
+                filter: `sensor_id=eq.${sensorId}`
+              }, payload => {
+                const newReading = { value: payload.new.value, timestamp: payload.new.timestamp };
+                if (!this.allSensorRecentReadings[sensorId]) {
+                  this.allSensorRecentReadings[sensorId] = [];
+                }
+                this.allSensorRecentReadings[sensorId].unshift(newReading); 
+                if (this.allSensorRecentReadings[sensorId].length > 200) {
+                  this.allSensorRecentReadings[sensorId].pop();
+                }
+              }).subscribe();
+              this.dashboardRealtimeSubscriptions[sensorId] = channel;
             }
-
-            const { data, error } = await query;
-
-            if (error) throw error;
-            
-            const valueKey = tableName === 'vibration_readings' ? 'oavelocity' : 'value';
-            this.allSensorRecentReadings[sensorId] = data.map(r => ({ value: r[valueKey], timestamp: r.timestamp })).reverse(); 
-            
-            const channel = $supabase.channel(`graph_chart_readings_${sensorId}`);
-            channel.on('postgres_changes', {
-              event: 'INSERT',
-              schema: 'public',
-              table: tableName,
-              filter: `sensor_id=eq.${sensorId}`
-            }, payload => {
-              if (tableName === 'vibration_readings' && payload.new.axis !== 'X') {
-                  return;
-              }
-              const valueKey = tableName === 'vibration_readings' ? 'oavelocity' : 'value';
-              const newReading = { value: payload.new[valueKey], timestamp: payload.new.timestamp };
-              if (!this.allSensorRecentReadings[sensorId]) {
-                this.allSensorRecentReadings[sensorId] = [];
-              }
-              this.allSensorRecentReadings[sensorId].push(newReading); 
-              if (this.allSensorRecentReadings[sensorId].length > 200) {
-                this.allSensorRecentReadings[sensorId].shift();
-              }
-            }).subscribe();
-            this.dashboardRealtimeSubscriptions[sensorId] = channel;
           } catch (e) {
             console.error(`[Sensors Store] Error al suscribirse a lecturas de gráfico para sensor ${sensorId}:`, e);
           }
         }
       }
     },
+    // =================================================================================
+    // FIN DE LA MODIFICACIÓN
+    // =================================================================================
+
 
     async unsubscribeFromAllGraphReadings() {
       for (const id in this.dashboardRealtimeSubscriptions) {

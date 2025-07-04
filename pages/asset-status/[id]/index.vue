@@ -16,14 +16,12 @@
       </template>
     </PageHeader>
 
-    <!-- INICIO DE LA MODIFICACIÓN: Las StatCards ahora recibirán datos correctos -->
     <div class="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-4 max-w-7xl mx-auto" v-if="!loading && asset">
       <StatCard title="Sensores del Activo" :value="totalSensorsForAsset" icon="sensor" color="primary" />
       <StatCard title="Sensores Activos" :value="activeSensorsForAsset" icon="sensor" color="success" />
       <StatCard title="En Mantenimiento" :value="maintenanceSensorsForAsset" icon="sensor" color="warning" />
       <StatCard title="Alertas Activas" :value="activeAlertsForCurrentAsset" icon="alert" color="error" />
     </div>
-    <!-- FIN DE LA MODIFICACIÓN -->
 
     <div v-if="loading" class="flex items-center justify-center py-8">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -34,10 +32,8 @@
       Activo no encontrado. Verifique el ID o si existen datos.
     </div>
 
-    <!-- Contenedor principal para las tarjetas de detalle -->
     <div v-else class="max-w-7xl mx-auto space-y-6">
 
-      <!-- TARJETA DE MONITOREO EN TIEMPO REAL -->
       <div class="card p-6">
         <h3 class="text-lg font-semibold mb-4">Monitoreo en Tiempo Real</h3>
         
@@ -70,7 +66,6 @@
         </div>
       </div>
 
-      <!-- TARJETA DE SENSORES ASOCIADOS (Realtime) -->
       <div class="card p-6">
         <h3 class="text-lg font-semibold mb-4">Sensores Asociados ({{ sensorsForCurrentAsset?.length || 0 }})</h3>
         <div v-if="sensorsForCurrentAsset && sensorsForCurrentAsset.length > 0" class="overflow-x-auto">
@@ -105,7 +100,6 @@
         <div v-else class="text-center text-gray-500 py-4">No hay sensores asociados a este activo.</div>
       </div>
 
-      <!-- TARJETA DE ALERTAS ASOCIADAS (Paginación y Realtime) -->
       <div class="card p-6">
         <h3 class="text-lg font-semibold mb-4">Alertas Asociadas ({{ totalFilteredAlertsForAsset }})</h3>
         <div v-if="paginatedAlertsForCurrentAsset && paginatedAlertsForCurrentAsset.length > 0" class="overflow-x-auto">
@@ -140,7 +134,6 @@
         </div>
         <div v-else class="text-center text-gray-500 py-4">No hay alertas asociadas a este activo.</div>
         
-        <!-- MODIFICACIÓN: La paginación ahora se muestra si hay al menos 1 alerta -->
         <div class="mt-4" v-if="totalFilteredAlertsForAsset > 0">
           <Pagination
             :total-items="totalFilteredAlertsForAsset"
@@ -164,7 +157,6 @@ import { useAlertStore } from '~/stores/alerts';
 import PageHeader from '~/components/PageHeader.vue';
 import SensorChart from '~/components/SensorChart.vue'; 
 import Pagination from '~/components/Pagination.vue'; 
-// ++ INICIO DE LA MODIFICACIÓN: Se importa el componente StatCard ++
 import StatCard from '~/components/StatCard.vue';
 
 // Inicialización
@@ -195,9 +187,7 @@ const loadAssetData = async () => {
 
       selectedSensorIds.value = availableSensorsForCharts.value.map(s => s.id);
 
-      if (selectedSensorIds.value.length > 0) {
-        sensorStore.subscribeToGraphReadings(selectedSensorIds.value);
-      }
+      // La subscripción se maneja con el watcher
       alertStore.subscribeToAlertUpdates();
       sensorStore.subscribeToSensorUpdates();
 
@@ -212,7 +202,6 @@ const loadAssetData = async () => {
   }
 };
 
-// ++ INICIO DE LA MODIFICACIÓN: Propiedades computadas para las StatCards ++
 const sensorsForCurrentAsset = computed(() => {
   if (!asset.value) return [];
   return sensorStore.sensors.filter(sensor => sensor.assetId === asset.value.id);
@@ -230,20 +219,26 @@ const alertsForCurrentAsset = computed(() => {
 });
 
 const activeAlertsForCurrentAsset = computed(() => alertsForCurrentAsset.value.filter(a => a.status !== 'resolved').length);
-// ++ FIN DE LA MODIFICACIÓN ++
-
 
 const availableSensorsForCharts = computed(() => {
   return sensorsForCurrentAsset.value.filter(s => s.status === 'active' && s.last_communication);
 });
 
+// =================================================================================
+// INICIO DE LA MODIFICACIÓN: `realtimeSelectedSensorsForChart` ahora es más directo
+// =================================================================================
 const realtimeSelectedSensorsForChart = computed(() => {
-  const selected = sensorsForCurrentAsset.value.filter(sensor => selectedSensorIds.value.includes(sensor.id));
-  return selected.map(sensor => ({
-    ...sensor,
-    readings: sensorStore.getReadingsBySensorId(sensor.id), 
-  }));
+  return sensorsForCurrentAsset.value
+    .filter(sensor => selectedSensorIds.value.includes(sensor.id))
+    .map(sensor => ({
+      ...sensor,
+      // El store ya gestiona el array de lecturas (`allSensorRecentReadings`) de forma reactiva.
+      readings: sensorStore.getReadingsBySensorId(sensor.id), 
+    }));
 });
+// =================================================================================
+// FIN DE LA MODIFICACIÓN
+// =================================================================================
 
 const paginatedAlertsForCurrentAsset = computed(() => {
   const start = (currentAlertPage.value - 1) * alertsPerPage.value;
@@ -254,12 +249,11 @@ const paginatedAlertsForCurrentAsset = computed(() => {
 const totalFilteredAlertsForAsset = computed(() => alertsForCurrentAsset.value.length);
 
 // Watcher para la selección de sensores
-watch(selectedSensorIds, (newIds) => {
-  sensorStore.unsubscribeFromAllGraphReadings(); 
-  if (newIds.length > 0) {
+watch(selectedSensorIds, (newIds, oldIds) => {
+  if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
     sensorStore.subscribeToGraphReadings(newIds);
   }
-}, { deep: true });
+}, { deep: true, immediate: true });
 
 // Manejo de paginación
 const handleAlertPageChange = (page) => {

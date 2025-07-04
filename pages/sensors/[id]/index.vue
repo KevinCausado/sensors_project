@@ -155,11 +155,23 @@
       </div>
       
       <div class="card">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Gráfica del Historial</h2>
+        <SensorChart
+          v-if="sensorForChart"
+          :sensors="[sensorForChart]"
+          :height="400"
+          :show-time-range-controls="true"
+          initial-empty-message="Sensor no disponible para la gráfica."
+          empty-data-message="No hay lecturas disponibles para este sensor en el rango seleccionado."
+        />
+        <div v-else class="text-center text-gray-500 py-4">No se puede mostrar la gráfica.</div>
+      </div>
+
+      <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Historial de Lecturas Recientes</h2>
         <p v-if="sensorStore.isLoading" class="text-gray-500">Cargando lecturas...</p>
         <div v-else-if="paginatedReadings.length === 0" class="text-gray-500">No hay lecturas disponibles para este sensor.</div>
         <ul v-else class="space-y-3">
-          <!-- **NUEVO**: Template para Sensores de Vibración -->
           <template v-if="sensorStore.currentSensor.type === 'vibration'">
             <li v-for="reading in paginatedReadings" :key="reading.id" class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <span class="text-sm text-gray-600 font-mono w-1/3">{{ new Date(reading.timestamp).toLocaleString() }}</span>
@@ -183,7 +195,6 @@
             </li>
           </template>
 
-          <!-- Template para otros tipos de sensores (original) -->
           <template v-else>
             <li v-for="reading in paginatedReadings" :key="reading.id" class="flex justify-between items-center p-2 bg-gray-50 rounded-md">
               <span>{{ new Date(reading.timestamp).toLocaleString() }}</span>
@@ -200,19 +211,6 @@
             Siguiente
           </button>
         </div>
-      </div>
-
-      <div class="card">
-        <h2 class="text-lg font-medium text-gray-900 mb-4">Gráfica del Historial</h2>
-        <SensorChart
-          v-if="sensorForChart"
-          :sensors="[sensorForChart]"
-          :height="400"
-          :show-time-range-controls="true"
-          initial-empty-message="Sensor no disponible para la gráfica."
-          empty-data-message="No hay lecturas disponibles para este sensor en el rango seleccionado."
-        />
-        <div v-else class="text-center text-gray-500 py-4">No se puede mostrar la gráfica.</div>
       </div>
 
       <div class="card">
@@ -253,7 +251,8 @@ const loadSensorDetails = async (sensorId) => {
     error.value = null;
     vibrationProfile.value = null;
     try {
-        await sensorStore.fetchSensor(sensorId);
+        // La carga de lecturas ahora está centralizada en el store
+        await sensorStore.fetchAndSubscribeToDetailReadings(sensorId);
         
         const sensor = sensorStore.currentSensor;
         if (sensor && sensor.type === 'vibration' && sensor.assetId) {
@@ -263,7 +262,6 @@ const loadSensorDetails = async (sensorId) => {
             }
         }
         
-        await sensorStore.fetchAndSubscribeToDetailReadings(sensorId);
         await alertStore.fetchAlerts();
         await alertStore.subscribeToAlertUpdates();
         await sensorStore.subscribeToSensorUpdates();
@@ -306,11 +304,21 @@ const alertsForCurrentSensor = computed(() => {
   }));
 });
 
+// =================================================================================
+// INICIO DE LA MODIFICACIÓN: `sensorForChart` ahora es más directo
+// =================================================================================
 const sensorForChart = computed(() => {
   if (!sensorStore.currentSensor) return null;
-  const readingsForChart = sensorStore.currentSensorReadings || [];
-  return { ...sensorStore.currentSensor, readings: readingsForChart };
+  // El store ya gestiona el array de lecturas (`currentSensorReadings`) de forma reactiva.
+  // Simplemente pasamos el sensor actual con sus lecturas.
+  return { 
+    ...sensorStore.currentSensor, 
+    readings: sensorStore.currentSensorReadings 
+  };
 });
+// =================================================================================
+// FIN DE LA MODIFICACIÓN
+// =================================================================================
 
 const combinedAssetLocation = computed(() => {
   const sensor = sensorStore.currentSensor;
