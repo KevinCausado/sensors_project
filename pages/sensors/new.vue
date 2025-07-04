@@ -14,21 +14,56 @@
           <!-- Campos Generales del Sensor -->
           <div>
             <label class="form-label">Nombre</label>
-            <input v-model="form.name" type="text" required class="form-input" />
+            <input v-model="form.name" type="text" required class="form-input" placeholder="Ej: Sensor de Vibración Motor Principal"/>
           </div>
+
+          <div>
+            <label class="form-label">Código</label>
+            <input v-model="form.code" type="text" class="form-input" placeholder="Ej: SEN-VIB-001" />
+          </div>
+
+          <!-- Selección de Jerarquía -->
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div>
+              <label class="form-label">Marca</label>
+              <select v-model="selectedBrand" class="form-input" :disabled="sensorStore.hierarchyIsLoading">
+                <option :value="null" disabled>
+                  {{ sensorStore.hierarchyIsLoading ? 'Cargando...' : 'Seleccione una marca' }}
+                </option>
+                <option v-for="brand in brands" :key="brand.id" :value="brand.id">
+                  {{ brand.name }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Modelo</label>
+              <select v-model="selectedModel" class="form-input" :disabled="!selectedBrand || filteredModels.length === 0">
+                <option :value="null" disabled>Seleccione un modelo</option>
+                <option v-for="model in filteredModels" :key="model.id" :value="model.id">
+                  {{ model.name }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Firmware</label>
+              <select v-model="form.firmware_id" class="form-input" :disabled="!selectedModel || filteredFirmwares.length === 0">
+                <option :value="null" disabled>Seleccione un firmware</option>
+                <option v-for="fw in filteredFirmwares" :key="fw.id" :value="fw.id">
+                  {{ fw.version }}
+                </option>
+              </select>
+            </div>
+          </div>
+
 
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <label class="form-label">Tipo</label>
               <select v-model="form.type" required class="form-input">
                 <option value="temperature">Temperatura</option>
-                <option value="humidity">Humedad</option>
                 <option value="vibration">Vibración</option>
-                <option value="pressure">Presión</option>
-                <option value="other">Otro</option>
               </select>
             </div>
-
             <div>
               <label class="form-label">Unidad de Medida</label>
               <select v-model="form.unit" class="form-input" :disabled="!!vibrationProfile">
@@ -48,30 +83,17 @@
                 {{ assetOption.name }} ({{ assetOption.asset_code || 'N/A' }})
               </option>
             </select>
-            <!-- <p v-if="form.type !== 'vibration'" class="text-xs text-gray-500 mt-1">
-                La asignación de perfiles solo está disponible para sensores de tipo Vibración.
-            </p> -->
-          </div>
-
-           <div>
-            <label class="form-label">Número de Serie</label>
-            <input v-model="form.serial_number" type="text" class="form-input" />
-          </div>
-
-          <div>
-            <label class="form-label">Modelo</label>
-            <input v-model="form.model" type="text" class="form-input" />
           </div>
          
            <div>
             <label class="form-label">Descripción de Ubicación</label>
-            <textarea v-model="form.location_description" class="form-input"></textarea>
+            <textarea v-model="form.location_description" class="form-input" placeholder="Ej: Lado acople del motor"></textarea>
           </div>
 
           <div>
             <label class="form-label">Organización</label>
-            <select v-model="form.organizationId" required class="form-input" :disabled="organizationStore.isLoading">
-              <option value="">Seleccione una organización</option>
+            <select v-model="form.organization_id" required class="form-input" :disabled="organizationStore.isLoading">
+              <option value="" disabled>Seleccione una organización</option>
               <option v-for="org in organizations" :key="org.id" :value="org.id">
                 {{ org.name }}
               </option>
@@ -88,37 +110,17 @@
             </select>
           </div>
 
-          <!-- SECCIÓN DE UMBRALES CON LÓGICA CONDICIONAL -->
           <div class="space-y-2">
             <h3 class="text-md font-medium text-gray-900">Rangos de Umbral</h3>
-            
-            <!-- CASO 1: VIBRACIÓN CON PERFIL -> Muestra la tabla "quemada" -->
             <div v-if="form.type === 'vibration' && vibrationProfile">
                 <VibrationProfileDisplay :profile="vibrationProfile" />
             </div>
-
-          
-           
-
-            <!-- CASO 3: OTROS TIPOS DE SENSORES -> Muestra inputs normales -->
             <div v-else-if="form.type !== 'vibration'" class="card p-4 bg-gray-50 border border-gray-200">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="form-label">Crítico Mínimo</label>
-                    <input v-model.number="form.thresholds.criticalMin" type="number" step="any" class="form-input" />
-                  </div>
-                  <div>
-                    <label class="form-label">Crítico Máximo</label>
-                    <input v-model.number="form.thresholds.criticalMax" type="number" step="any" class="form-input" />
-                  </div>
-                  <div>
-                    <label class="form-label">Normal Mínimo</label>
-                    <input v-model.number="form.thresholds.normalMin" type="number" step="any" class="form-input" />
-                  </div>
-                  <div>
-                    <label class="form-label">Normal Máximo</label>
-                    <input v-model.number="form.thresholds.normalMax" type="number" step="any" class="form-input" />
-                  </div>
+                  <div><label class="form-label">Crítico Mínimo</label><input v-model.number="form.thresholds.criticalMin" type="number" step="any" class="form-input" /></div>
+                  <div><label class="form-label">Crítico Máximo</label><input v-model.number="form.thresholds.criticalMax" type="number" step="any" class="form-input" /></div>
+                  <div><label class="form-label">Normal Mínimo</label><input v-model.number="form.thresholds.normalMin" type="number" step="any" class="form-input" /></div>
+                  <div><label class="form-label">Normal Máximo</label><input v-model.number="form.thresholds.normalMax" type="number" step="any" class="form-input" /></div>
               </div>
             </div>
           </div>
@@ -155,29 +157,33 @@ const router = useRouter();
 const saving = ref(false);
 const vibrationProfile = ref(null);
 
+const selectedBrand = ref(null);
+const selectedModel = ref(null);
+
 const form = ref({
   name: "",
+  code: "",
+  firmware_id: null,
   type: "temperature", 
   unit: "", 
-  serial_number: "",
-  model: "",
   location_description: "",
-  organizationId: "", 
+  organization_id: "", 
   asset_id: null, 
   status: "active", 
   thresholds: { 
-    criticalMin: null, 
-    criticalMax: null,
-    normalMin: null,
-    normalMax: null,
-    alarm_level: null,
-    critical_level: null,
+    criticalMin: null, criticalMax: null,
+    normalMin: null, normalMax: null,
+    alarm_level: null, critical_level: null,
   },
 });
 
 const organizations = computed(() => organizationStore.organizations);
 const assets = computed(() => assetStore.assets); 
 const availableUnits = computed(() => parameterStore.getUnitParameters);
+
+const brands = computed(() => sensorStore.brands);
+const filteredModels = computed(() => sensorStore.getModelsByBrand(selectedBrand.value));
+const filteredFirmwares = computed(() => sensorStore.getFirmwaresByModel(selectedModel.value));
 
 const saveSensor = async () => {
   saving.value = true;
@@ -198,12 +204,18 @@ const saveSensor = async () => {
 };
 
 const resetThresholds = () => ({ 
-    criticalMin: null, 
-    criticalMax: null,
-    normalMin: null, 
-    normalMax: null,
-    alarm_level: null, 
-    critical_level: null,
+    criticalMin: null, criticalMax: null,
+    normalMin: null, normalMax: null,
+    alarm_level: null, critical_level: null,
+});
+
+watch(selectedBrand, () => {
+  selectedModel.value = null;
+  form.value.firmware_id = null;
+});
+
+watch(selectedModel, () => {
+  form.value.firmware_id = null;
 });
 
 watch([() => form.value.type, () => form.value.asset_id], async ([newType, newAssetId]) => {
@@ -234,9 +246,10 @@ onMounted(async () => {
     organizationStore.fetchOrganizations(),
     assetStore.fetchAssets(), 
     parameterStore.fetchParameters(),
+    sensorStore.fetchSensorHierarchy(),
   ]);
-  if (organizationStore.organizations.length > 0 && !form.value.organizationId) {
-    form.value.organizationId = organizationStore.organizations[0].id;
+  if (organizationStore.organizations.length > 0 && !form.value.organization_id) {
+    form.value.organization_id = organizationStore.organizations[0].id;
   }
 });
 </script>

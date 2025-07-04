@@ -184,13 +184,25 @@ export const useAssetStore = defineStore('assets', {
             'coupling_type_name',
             'vibration_profile_name',
             'vibration_profile_display_name',
-            'assets_vibration_config' // Es una relación, no una columna de 'assets_base'
+            'assets_vibration_config', // Es una relación, no una columna de 'assets_base'
+            'iso_group', // Objeto de relación
+            'custom_profile', // Objeto de relación
+            'profileDisplayName', // Propiedad calculada
+            'isCustomProfile' // Propiedad calculada
         ];
 
         // Eliminamos las claves no deseadas del objeto que se enviará a Supabase.
         computedOrRelationKeys.forEach(key => delete dataToUpdate[key]);
       
+        // Manejar cadenas vacías convirtiéndolas a null
+        Object.keys(dataToUpdate).forEach(key => {
+          if (dataToUpdate[key] === '') {
+            dataToUpdate[key] = null;
+          }
+        });
 
+        console.log('Data to update (before Supabase call):', dataToUpdate);
+      
         const { data, error } = await $supabase
           .from('assets_base')
           .update(dataToUpdate) // Usamos el objeto "limpio".

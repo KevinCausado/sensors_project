@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Sensores" subtitle="Gestionar sensores del sistema">
       <template #actions>
-        <PermissionGuard moduleId="sensors" permission="crear">
+        <PermissionGuard moduleId="sensors" permission="create">
           <NuxtLink to="/sensors/new" class="btn btn-primary flex items-center">
             <PlusIcon class="h-5 w-5 mr-2" />
             Nuevo Sensor
@@ -13,21 +13,17 @@
 
     <div class="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-4">
       <StatCard title="Total Sensores" :value="totalSensors" icon="sensor" color="primary" />
-
       <StatCard title="Sensores Activos" :value="activeSensors" icon="sensor" color="success" />
-
       <StatCard title="En Mantenimiento" :value="maintenanceSensors" icon="sensor" color="warning" />
-
       <StatCard title="Inactivos" :value="inactiveSensors" icon="sensor" color="error" />
     </div>
 
     <div class="card">
       <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
         <div class="relative w-full sm:w-64">
-          <input v-model="searchQuery" type="text" class="form-input pl-9" placeholder="Buscar sensores..." />
+          <input v-model="searchQuery" type="text" class="form-input pl-9" placeholder="Buscar por nombre, código, marca..." />
           <MagnifyingGlassIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
-
         <div class="flex gap-2">
           <select v-model="filterStatus" class="form-input py-2 text-sm">
             <option value="">Todos los Estados</option>
@@ -42,84 +38,40 @@
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organización</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activo</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación Geográfica (Activo)</th> <!-- Columna ajustada -->
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción de la ubicación</th> 
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Com.</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batería</th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Señal</th>
-              <th scope="col" class="relative px-6 py-3">
-                <span class="sr-only">Acciones</span>
-              </th>
+              <th scope="col" class="th-cell">Nombre</th>
+              <th scope="col" class="th-cell">Código</th>
+              <th scope="col" class="th-cell">Marca</th>
+              <th scope="col" class="th-cell">Modelo</th>
+              <th scope="col" class="th-cell">Activo Asignado</th>
+              <th scope="col" class="th-cell">Estado</th>
+              <th scope="col" class="relative px-6 py-3"><span class="sr-only">Acciones</span></th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-if="sensorStore.isLoading || organizationStore.isLoading || assetStore.isLoading" class="text-center">
-              <td colspan="11" class="py-8 text-gray-500">Cargando sensores...</td> <!-- Colspan ajustado -->
-            </tr>
-            <tr v-else-if="sensorStore.error || organizationStore.error || assetStore.error" class="text-center">
-              <td colspan="11" class="py-8 text-error-600">Error: {{ sensorStore.error || organizationStore.error || assetStore.error }}</td> <!-- Colspan ajustado -->
-            </tr>
-            <tr v-else-if="paginatedSensors.length === 0" class="text-center">
-              <td colspan="11" class="py-8 text-gray-500">No se encontraron sensores.</td> <!-- Colspan ajustado -->
-            </tr>
+            <tr v-if="sensorStore.isLoading"><td colspan="7" class="py-8 text-center text-gray-500">Cargando sensores...</td></tr>
+            <tr v-else-if="sensorStore.error"><td colspan="7" class="py-8 text-center text-red-600">Error: {{ sensorStore.error }}</td></tr>
+            <tr v-else-if="paginatedSensors.length === 0"><td colspan="7" class="py-8 text-center text-gray-500">No se encontraron sensores.</td></tr>
             <tr v-else v-for="sensor in paginatedSensors" :key="sensor.id">
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">
-                  {{ sensor.name }}
-                </div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.serial_number || "N/A" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.model || "N/A" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.organizationName || "Desconocida" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.assetName || "N/A" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ getAssetGeographicLocation(sensor) }} <!-- Usa la nueva función del activo -->
-              </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.location_description || "Desconocida" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
+              <td class="td-cell font-medium text-gray-900">{{ sensor.name }}</td>
+              <td class="td-cell">{{ sensor.code || "N/A" }}</td>
+              <td class="td-cell">{{ sensor.brand || "N/A" }}</td>
+              <td class="td-cell">{{ sensor.model || "N/A" }}</td>
+              <td class="td-cell">{{ sensor.assetName || "N/A" }}</td>
+              <td class="td-cell">
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" :class="getSensorStatusClass(sensor.status)">
                   {{ translateSensorStatus(sensor.status) }}
                 </span>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.last_communication || "N/A" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.battery_level ? `${sensor.battery_level}%` : "N/A" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ sensor.signal_strength ? `${sensor.signal_strength} dBm` : "N/A" }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex items-center justify-end">
-                <button @click="viewSensor(sensor.id)" class="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-100 transition-colors duration-200" title="Ver">
-                  <EyeIcon class="h-5 w-5" />
-                </button>
-                <PermissionGuard moduleId="sensors" permission="editar">
-                  <button @click="editSensor(sensor.id)" class="text-primary-600 hover:text-primary-900 p-1 rounded-full hover:bg-primary-100 transition-colors duration-200 ml-2" title="Editar">
-                    <PencilIcon class="h-5 w-5" />
-                  </button>
-                </PermissionGuard>
-                <PermissionGuard moduleId="sensors" permission="eliminar">
-                  <button @click="showDeleteConfirm(sensor)" class="text-error-600 hover:text-error-900 p-1 rounded-full hover:bg-error-100 transition-colors duration-200 ml-2" title="Eliminar">
-                    <TrashIcon class="h-5 w-5" />
-                  </button>
-                </PermissionGuard>
+              <td class="td-cell text-right">
+                <div class="flex items-center justify-end space-x-1">
+                    <button @click="viewSensor(sensor.id)" class="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-100" title="Ver Detalles"><EyeIcon class="h-5 w-5" /></button>
+                    <PermissionGuard moduleId="sensors" permission="manage">
+                        <button @click="editSensor(sensor.id)" class="text-primary-600 hover:text-primary-900 p-1 rounded-full hover:bg-primary-100" title="Editar"><PencilIcon class="h-5 w-5" /></button>
+                    </PermissionGuard>
+                    <PermissionGuard moduleId="sensors" permission="delete">
+                        <button @click="showDeleteConfirm(sensor)" class="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-100" title="Eliminar"><TrashIcon class="h-5 w-5" /></button>
+                    </PermissionGuard>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -131,7 +83,7 @@
       </div>
     </div>
 
-    <ConfirmModal v-if="showDeleteModal" title="Eliminar Usuario" :message="`¿Estás seguro que deseas eliminar al sensor '${sensorToDelete?.name}'? Esta acción no se puede deshacer.`" @confirm="confirmDelete" @cancel="cancelDelete" />
+    <ConfirmModal v-if="showDeleteModal" title="Eliminar Sensor" :message="`¿Estás seguro que deseas eliminar el sensor '${sensorToDelete?.name}'?`" @confirm="confirmDelete" @cancel="cancelDelete" />
   </div>
 </template>
 
@@ -141,10 +93,7 @@ import { useSensorStore } from "~/stores/sensors";
 import { useOrganizationStore } from "~/stores/organizations";
 import { useAssetStore } from "~/stores/assets";
 import { useRouter } from "vue-router";
-
 import { PlusIcon, MagnifyingGlassIcon, EyeIcon, PencilIcon, TrashIcon } from "@heroicons/vue/24/outline";
-
-// Componentes
 import PageHeader from "@/components/PageHeader.vue";
 import StatCard from "@/components/StatCard.vue";
 import Pagination from "@/components/Pagination.vue";
@@ -152,16 +101,14 @@ import ConfirmModal from "@/components/ConfirmModal.vue";
 import PermissionGuard from "@/components/PermissionGuard.vue";
 
 definePageMeta({
-  permission: "sensors.ver",
+  permission: "sensors.view",
 });
 
-// Stores
 const sensorStore = useSensorStore();
 const organizationStore = useOrganizationStore();
 const assetStore = useAssetStore();
 const router = useRouter();
 
-// Estado local para los filtros
 const searchQuery = ref("");
 const filterStatus = ref("");
 const currentPage = ref(1);
@@ -169,37 +116,26 @@ const itemsPerPage = ref(10);
 const showDeleteModal = ref(false);
 const sensorToDelete = ref(null);
 
-const organizations = computed(() => organizationStore.organizations);
-const sensors = computed(() => sensorStore.sensors);
 const selectedOrganizationIdFromStore = computed(() => organizationStore.selectedOrganizationId);
 
 const filteredSensors = computed(() => {
   let result = [...sensorStore.sensors]; 
-
   if (selectedOrganizationIdFromStore.value) {
     result = result.filter((sensor) => sensor.organizationId === selectedOrganizationIdFromStore.value);
   }
-
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
-    result = result.filter(
-      (sensor) =>
-        sensor.name.toLowerCase().includes(query) ||
-        (sensor.serial_number && sensor.serial_number.toLowerCase().includes(query)) ||
-        (sensor.model && sensor.model.toLowerCase().includes(query)) ||
-        // Buscar por la ubicación del activo enlazado
-        (sensor.assetCity && sensor.assetCity.toLowerCase().includes(query)) ||
-        (sensor.assetState && sensor.assetState.toLowerCase().includes(query)) ||
-        (sensor.assetCountry && sensor.assetCountry.toLowerCase().includes(query)) ||
-        (sensor.organizationName && sensor.organizationName.toLowerCase().includes(query)) ||
-        (sensor.assetName && sensor.assetName.toLowerCase().includes(query))
+    result = result.filter((s) =>
+        s.name.toLowerCase().includes(query) ||
+        (s.code && s.code.toLowerCase().includes(query)) ||
+        (s.brand && s.brand.toLowerCase().includes(query)) ||
+        (s.model && s.model.toLowerCase().includes(query)) ||
+        (s.assetName && s.assetName.toLowerCase().includes(query))
     );
   }
-
   if (filterStatus.value) {
     result = result.filter((sensor) => sensor.status === filterStatus.value);
   }
-
   return result;
 });
 
@@ -215,95 +151,43 @@ const activeSensors = computed(() => filteredSensors.value.filter((s) => s.statu
 const maintenanceSensors = computed(() => filteredSensors.value.filter((s) => s.status === "maintenance").length);
 const inactiveSensors = computed(() => filteredSensors.value.filter((s) => s.status === "inactive").length);
 
-// --- Métodos ---
-const handlePageChange = (page) => {
-  currentPage.value = page;
-};
-
-const viewSensor = (id) => {
-  router.push(`/sensors/${id}`);
-};
-
-const editSensor = (id) => {
-  router.push(`/sensors/${id}/edit`);
-};
+const handlePageChange = (page) => { currentPage.value = page; };
+const viewSensor = (id) => { router.push(`/sensors/${id}`); };
+const editSensor = (id) => { router.push(`/sensors/${id}/edit`); };
 
 const showDeleteConfirm = (sensor) => {
   sensorToDelete.value = sensor;
   showDeleteModal.value = true;
 };
-
 const confirmDelete = async () => {
-  try {
-    await sensorStore.deleteSensor(sensorToDelete.value.id);
-    showDeleteModal.value = false;
-    sensorToDelete.value = null;
-    await sensorStore.fetchSensors();
-  } catch (error) {
-    console.error("Error al eliminar sensor:", error);
-  }
+  await sensorStore.deleteSensor(sensorToDelete.value.id);
+  showDeleteModal.value = false;
+  sensorToDelete.value = null;
 };
-
 const cancelDelete = () => {
   showDeleteModal.value = false;
   sensorToDelete.value = null;
 };
 
-const getSensorStatusClass = (status) => {
-  switch (status) {
-    case "active":
-      return "bg-green-100 text-green-800";
-    case "maintenance":
-      return "bg-yellow-100 text-yellow-800";
-    case "inactive":
-      return "bg-red-100 text-red-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-};
+const getSensorStatusClass = (status) => ({ "active": "bg-green-100 text-green-800", "maintenance": "bg-yellow-100 text-yellow-800", "inactive": "bg-red-100 text-red-800" }[status] || "bg-gray-100 text-gray-800");
+const translateSensorStatus = (status) => ({ "active": "Activo", "maintenance": "Mantenimiento", "inactive": "Inactivo" }[status] || status);
 
-const translateSensorStatus = (status) => {
-  switch (status) {
-    case "active":
-      return "Activo";
-    case "maintenance":
-      return "Mantenimiento";
-    case "inactive":
-      return "Inactivo";
-    default:
-      return status;
-  }
-};
-
-// Función para obtener la ubicación geográfica combinada del ACTIVO ENLAZADO
-const getAssetGeographicLocation = (sensor) => {
-  const parts = [];
-  if (sensor.assetCity && sensor.assetCity !== 'N/A') parts.push(sensor.assetCity);
-  if (sensor.assetState && sensor.assetState !== 'N/A') parts.push(sensor.assetState);
-  if (sensor.assetCountry && sensor.assetCountry !== 'N/A') parts.push(sensor.assetCountry);
-  return parts.length > 0 ? parts.join(", ") : "N/A";
-};
-
-// --- Lifecycle Hook ---
 onMounted(async () => {
-  console.log('[Sensors Page] onMounted: Iniciando carga de datos...');
   await Promise.all([
     organizationStore.fetchOrganizations(),
     assetStore.fetchAssets(),
     sensorStore.fetchSensors()
   ]);
-  console.log('[Sensors Page] onMounted: Carga de datos iniciales completada.');
-  console.log(`[Sensors Page] onMounted: sensorStore.sensors despues de carga (con nombres y ubicación de activo):`, sensorStore.sensors);
 });
 
-// Watch for changes in the globally selected organization ID
-watch(selectedOrganizationIdFromStore, (newOrgId, oldOrgId) => {
-  if (newOrgId !== oldOrgId) {
-    currentPage.value = 1;
-  }
-});
+watch(selectedOrganizationIdFromStore, () => { currentPage.value = 1; });
 </script>
 
 <style scoped>
-/* Tus estilos aquí */
+.card { @apply bg-white shadow rounded-lg p-6; }
+.form-input { @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm; }
+.btn { @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm; }
+.btn-primary { @apply bg-primary-600 text-white hover:bg-primary-700; }
+.th-cell { @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider; }
+.td-cell { @apply px-6 py-4 whitespace-nowrap text-sm text-gray-500; }
 </style>

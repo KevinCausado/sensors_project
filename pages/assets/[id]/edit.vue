@@ -52,10 +52,10 @@
           <h2 class="text-lg font-medium text-gray-900 border-b pb-2 mb-4 mt-8">Parámetros Operativos</h2>
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div><label class="form-label">Velocidad (RPM)</label><input v-model.number="form.speed_rpm" type="number" step="1" class="form-input" /></div>
-            <div><label class="form-label">Velocidad Crítica (RPM)</label><input v-model.number="form.critical_speed_rpm" type="number" step="1" class="form-input" /></div>
+            <!-- <div><label class="form-label">Velocidad Crítica (RPM)</label><input v-model.number="form.critical_speed_rpm" type="number" step="1" class="form-input" /></div> -->
             <div><label class="form-label">Temperatura Operativa (°C)</label><input v-model.number="form.operating_temp_c" type="number" step="0.1" class="form-input" /></div>
-            <div><label class="form-label">Dirección IP</label><input v-model="form.ip_address" type="text" class="form-input" /></div>
-            <div><label class="form-label">Versión de Firmware</label><input v-model="form.firmware_version" type="text" class="form-input" /></div>
+            <!-- <div><label class="form-label">Dirección IP</label><input v-model="form.ip_address" type="text" class="form-input" /></div>
+            <div><label class="form-label">Versión de Firmware</label><input v-model="form.firmware_version" type="text" class="form-input" /></div> -->
             <div><label class="form-label">Estado</label><select v-model="form.is_active" required class="form-input"><option :value="true">Activo</option><option :value="false">Inactivo</option></select></div>
           </div>
 
@@ -117,7 +117,16 @@ const loadAssetForEdit = async () => {
     await Promise.all([ assetStore.initializeDataForForms(), organizationStore.fetchOrganizations(), customProfileStore.fetchProfiles() ]);
     const fetchedAsset = await assetStore.fetchAssetById(assetId);
     if (fetchedAsset) {
-      Object.assign(form.value, fetchedAsset);
+      // Copiamos solo las propiedades que son relevantes para el formulario y la base de datos.
+      // Evitamos copiar propiedades calculadas o de relación directamente.
+      const formProps = {};
+      for (const key in form.value) { // Iteramos sobre las claves predefinidas en el formulario
+        if (fetchedAsset.hasOwnProperty(key)) {
+          formProps[key] = fetchedAsset[key];
+        }
+      }
+      Object.assign(form.value, formProps); // Asignamos solo las propiedades filtradas
+
       form.value.custom_vibration_profile_id = fetchedAsset.custom_vibration_profile_id || null;
       form.value.manufacture_date = formatDateForInput(fetchedAsset.manufacture_date);
       form.value.installation_date = formatDateForInput(fetchedAsset.installation_date);
@@ -139,6 +148,9 @@ const saveAsset = async () => {
     const assetId = route.params.id;
     const payload = { ...form.value };
     Object.keys(payload).forEach(key => { if (payload[key] === '') payload[key] = null; });
+    
+    console.log('Payload sent to updateAsset (from pageAssetEdit):', payload);
+
     await assetStore.updateAsset(assetId, payload);
     router.push('/assets/');
   } catch (e) { console.error('Error updating asset:', e); } finally { saving.value = false; }

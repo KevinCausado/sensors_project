@@ -119,7 +119,7 @@
             <p class="text-sm font-medium text-gray-500">Velocidad (RPM)</p>
             <p class="form-input-static">{{ asset.speed_rpm ?? 'N/A' }}</p>
           </div>
-          <div>
+          <!-- <div>
             <p class="text-sm font-medium text-gray-500">Velocidad Crítica (RPM)</p>
             <p class="form-input-static">{{ asset.critical_speed_rpm ?? 'N/A' }}</p>
           </div>
@@ -134,7 +134,7 @@
           <div>
             <p class="text-sm font-medium text-gray-500">Versión de Firmware</p>
             <p class="form-input-static">{{ asset.firmware_version || 'N/A' }}</p>
-          </div>
+          </div> -->
           <div>
             <p class="text-sm font-medium text-gray-500">Estado</p>
             <span :class="['badge', getAssetStatusClass(asset.is_active)]">

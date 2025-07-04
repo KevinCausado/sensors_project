@@ -29,18 +29,52 @@
             <input v-model="form.name" type="text" required class="form-input" />
           </div>
 
+          <div>
+            <label class="form-label">Código</label>
+            <input v-model="form.code" type="text" class="form-input" />
+          </div>
+
+          <!-- Selección de Jerarquía -->
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div>
+              <label class="form-label">Marca</label>
+              <select v-model="selectedBrand" class="form-input" :disabled="sensorStore.hierarchyIsLoading">
+                <option :value="null" disabled>
+                  {{ sensorStore.hierarchyIsLoading ? 'Cargando...' : 'Seleccione una marca' }}
+                </option>
+                <option v-for="brand in brands" :key="brand.id" :value="brand.id">
+                  {{ brand.name }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Modelo</label>
+              <select v-model="selectedModel" class="form-input" :disabled="!selectedBrand || filteredModels.length === 0">
+                <option :value="null" disabled>Seleccione un modelo</option>
+                <option v-for="model in filteredModels" :key="model.id" :value="model.id">
+                  {{ model.name }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Firmware</label>
+              <select v-model="form.firmware_id" class="form-input" :disabled="!selectedModel || filteredFirmwares.length === 0">
+                <option :value="null" disabled>Seleccione un firmware</option>
+                <option v-for="fw in filteredFirmwares" :key="fw.id" :value="fw.id">
+                  {{ fw.version }}
+                </option>
+              </select>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <label class="form-label">Tipo</label>
               <select v-model="form.type" required class="form-input">
                 <option value="temperature">Temperatura</option>
-                <option value="humidity">Humedad</option>
                 <option value="vibration">Vibración</option>
-                <option value="pressure">Presión</option>
-                <option value="other">Otro</option>
               </select>
             </div>
-
             <div>
               <label class="form-label">Unidad de Medida</label>
               <select v-model="form.unit" class="form-input" :disabled="!!vibrationProfile">
@@ -60,19 +94,6 @@
                 {{ assetOption.name }} ({{ assetOption.asset_code || 'N/A' }})
               </option>
             </select>
-             <!-- <p v-if="form.type !== 'vibration'" class="text-xs text-gray-500 mt-1">
-                La asignación de perfiles solo está disponible para sensores de tipo Vibración.
-            </p> -->
-          </div>
-
-          <div>
-            <label class="form-label">Número de Serie</label>
-            <input v-model="form.serial_number" type="text" class="form-input" />
-          </div>
-
-          <div>
-            <label class="form-label">Modelo</label>
-            <input v-model="form.model" type="text" class="form-input" />
           </div>
          
           <div>
@@ -82,8 +103,8 @@
 
           <div>
             <label class="form-label">Organización</label>
-            <select v-model="form.organizationId" required class="form-input" :disabled="organizationStore.isLoading">
-              <option value="">Seleccione una organización</option>
+            <select v-model="form.organization_id" required class="form-input" :disabled="organizationStore.isLoading">
+              <option value="" disabled>Seleccione una organización</option>
               <option v-for="org in organizations" :key="org.id" :value="org.id">
                 {{ org.name }}
               </option>
@@ -100,15 +121,11 @@
             </select>
           </div>
 
-          <!-- SECCIÓN DE UMBRALES CON LÓGICA CONDICIONAL -->
           <div class="space-y-2">
             <h3 class="text-md font-medium text-gray-900">Rangos de Umbral</h3>
-            
             <div v-if="form.type === 'vibration' && vibrationProfile">
                 <VibrationProfileDisplay :profile="vibrationProfile" />
             </div>
-
-          
             <div v-else-if="form.type !== 'vibration'" class="card p-4 bg-gray-50 border border-gray-200">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div><label class="form-label">Crítico Mínimo</label><input v-model.number="form.thresholds.criticalMin" type="number" step="any" class="form-input" /></div>
@@ -121,7 +138,7 @@
 
           <!-- Botones de Acción -->
           <div class="flex justify-end gap-3 pt-4">
-            <NuxtLink to="/sensors" class="btn btn-secondary">Cancelar</NuxtLink>
+            <NuxtLink :to="`/sensors/${route.params.id}`" class="btn btn-secondary">Cancelar</NuxtLink>
             <button type="submit" class="btn btn-primary" :disabled="saving">
               {{ saving ? 'Guardando...' : 'Guardar Cambios' }}
             </button>
@@ -133,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSensorStore } from '~/stores/sensors';
 import { useOrganizationStore } from '~/stores/organizations';
@@ -154,13 +171,16 @@ const saving = ref(false);
 const error = ref(null);
 const vibrationProfile = ref(null);
 
+const selectedBrand = ref(null);
+const selectedModel = ref(null);
+
 const form = ref({
   id: '',
   name: '',
-  serial_number: '',
-  model: '',
+  code: '',
+  firmware_id: null,
   location_description: '', 
-  organizationId: '',
+  organization_id: '',
   asset_id: null,
   status: 'active',
   type: '',
@@ -175,6 +195,10 @@ const form = ref({
 const organizations = computed(() => organizationStore.organizations);
 const assets = computed(() => assetStore.assets);
 const availableUnits = computed(() => parameterStore.getUnitParameters);
+
+const brands = computed(() => sensorStore.brands);
+const filteredModels = computed(() => sensorStore.getModelsByBrand(selectedBrand.value));
+const filteredFirmwares = computed(() => sensorStore.getFirmwaresByModel(selectedModel.value));
 
 const resetThresholds = () => ({ 
     criticalMin: null, criticalMax: null,
@@ -192,6 +216,7 @@ const loadSensorData = async () => {
       organizationStore.fetchOrganizations(),
       assetStore.fetchAssets(), 
       parameterStore.fetchParameters(),
+      sensorStore.fetchSensorHierarchy(),
     ]);
 
     const fetchedSensor = await sensorStore.fetchSensor(sensorId);
@@ -204,10 +229,10 @@ const loadSensorData = async () => {
     form.value = {
       id: fetchedSensor.id,
       name: fetchedSensor.name || '',
-      serial_number: fetchedSensor.serial_number || '',
-      model: fetchedSensor.model || '',
+      code: fetchedSensor.code || '',
+      firmware_id: fetchedSensor.firmware_id || null,
       location_description: fetchedSensor.location_description || '',
-      organizationId: fetchedSensor.organizationId || '',
+      organization_id: fetchedSensor.organizationId || '',
       asset_id: fetchedSensor.assetId || null, 
       status: fetchedSensor.status || 'active',
       type: fetchedSensor.type || '',
@@ -221,6 +246,16 @@ const loadSensorData = async () => {
         critical_level: fetchedSensor.thresholds?.critical_level ?? null,
       },
     };
+
+    if (fetchedSensor.brandId) {
+      selectedBrand.value = fetchedSensor.brandId;
+    }
+    
+    await nextTick();
+
+    if (fetchedSensor.modelId) {
+      selectedModel.value = fetchedSensor.modelId;
+    }
 
     if (form.value.type === 'vibration' && form.value.asset_id) {
         const { profile } = await sensorStore.getVibrationProfileForAsset(form.value.asset_id);
@@ -246,14 +281,30 @@ const saveSensor = async () => {
             payload.thresholds[key] = null;
         }
     }
+    delete payload.id;
     await sensorStore.updateSensor(route.params.id, payload);
-    router.push('/sensors');
+    router.push(`/sensors/`);
   } catch (err) {
     error.value = 'Error al guardar el sensor: ' + err.message;
   } finally {
     saving.value = false;
   }
 };
+
+watch(selectedBrand, (newVal, oldVal) => {
+  // Solo reiniciar si el valor fue cambiado por el usuario (no en la carga inicial)
+  if (oldVal !== null) { 
+    selectedModel.value = null;
+    form.value.firmware_id = null;
+  }
+});
+
+watch(selectedModel, (newVal, oldVal) => {
+  // Solo reiniciar si el valor fue cambiado por el usuario (no en la carga inicial)
+  if (oldVal !== null) {
+    form.value.firmware_id = null;
+  }
+});
 
 watch([() => form.value.type, () => form.value.asset_id], async ([newType, newAssetId]) => {
   if (loading.value) return;

@@ -3,7 +3,7 @@
     <PageHeader title="Detalles del Sensor" :subtitle="sensorStore.currentSensor?.name">
       <template #actions>
         <div class="flex gap-2">
-          <NuxtLink to="/sensors" class="btn btn-secondary">Volver</NuxtLink>      
+          <NuxtLink to="/sensors" class="btn btn-secondary">Volver</NuxtLink>
         </div>
       </template>
     </PageHeader>
@@ -32,12 +32,20 @@
             <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.assetName || "N/A" }}</p>
           </div>
           <div>
-            <p class="text-sm font-medium text-gray-500">Número de Serie</p>
-            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.serial_number || "N/A" }}</p>
+            <p class="text-sm font-medium text-gray-500">Código</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.code || "N/A" }}</p>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-gray-500">Marca</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.brandName || "N/A" }}</p>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Modelo</p>
-            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.model || "N/A" }}</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.modelName || "N/A" }}</p>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-gray-500">Firmware</p>
+            <p class="mt-1 text-gray-900">{{ sensorStore.currentSensor.firmwareVersion || "N/A" }}</p>
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Tipo</p>
@@ -68,19 +76,7 @@
           <div>
             <p class="text-sm font-medium text-gray-500">Última Comunicación</p>
             <p class="mt-1 text-gray-900">
-              {{ sensorStore.currentSensor.last_communication ? new Date(sensorStore.currentSensor.last_communication).toLocaleString() : "N/A" }}
-            </p>
-          </div>
-          <div>
-            <p class="text-sm font-medium text-gray-500">Nivel de Batería</p>
-            <p class="mt-1 text-gray-900">
-              {{ sensorStore.currentSensor.battery_level !== null ? `${sensorStore.currentSensor.battery_level}%` : "N/A" }}
-            </p>
-          </div>
-          <div>
-            <p class="text-sm font-medium text-gray-500">Intensidad de Señal</p>
-            <p class="mt-1 text-gray-900">
-              {{ sensorStore.currentSensor.signal_strength !== null ? `${sensorStore.currentSensor.signal_strength} dBm` : "N/A" }}
+              {{ sensorStore.currentSensor.last_reading_timestamp ? new Date(sensorStore.currentSensor.last_reading_timestamp).toLocaleString() : "N/A" }}
             </p>
           </div>
           <div>
@@ -97,15 +93,9 @@
 
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Umbrales Definidos</h2>
-
-        <!-- ++ INICIO DEL AJUSTE: Lógica condicional para mostrar el perfil o los umbrales ++ -->
-        
-        <!-- CASO 1: Es un sensor de vibración y tiene un perfil cargado -->
         <div v-if="sensorStore.currentSensor.type === 'vibration' && vibrationProfile">
            <VibrationProfileDisplay :profile="vibrationProfile" />
         </div>
-        
-        <!-- CASO 2: Es un sensor de cualquier tipo SIN perfil de vibración visible -->
         <div v-else>
             <div v-if="hasThresholds">              
                <p class="text-sm text-gray-600 mb-4">
@@ -162,19 +152,46 @@
                 <span v-else>No hay umbrales definidos para este sensor.</span>
             </div>
         </div>
-        <!-- ++ FIN DEL AJUSTE ++ -->
       </div>
       
-      <!-- Secciones de Historial, Gráfica y Alertas (sin cambios) -->
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Historial de Lecturas Recientes</h2>
         <p v-if="sensorStore.isLoading" class="text-gray-500">Cargando lecturas...</p>
         <div v-else-if="paginatedReadings.length === 0" class="text-gray-500">No hay lecturas disponibles para este sensor.</div>
-        <ul v-else class="space-y-2">
-          <li v-for="reading in paginatedReadings" :key="reading.timestamp" class="flex justify-between items-center p-2 bg-gray-50 rounded-md">
-            <span>{{ new Date(reading.timestamp).toLocaleString() }}</span>
-            <span class="font-medium">{{ reading.value }} {{ sensorStore.currentSensor.unit }}</span>
-          </li>
+        <ul v-else class="space-y-3">
+          <!-- **NUEVO**: Template para Sensores de Vibración -->
+          <template v-if="sensorStore.currentSensor.type === 'vibration'">
+            <li v-for="reading in paginatedReadings" :key="reading.id" class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <span class="text-sm text-gray-600 font-mono w-1/3">{{ new Date(reading.timestamp).toLocaleString() }}</span>
+              <div class="flex items-center justify-end space-x-6 w-2/3 text-right font-mono">
+                <div class="flex flex-col items-center">
+                  <span class="text-xs text-gray-500">Eje X</span>
+                  <span v-if="reading.x" class="font-medium text-gray-900">{{ reading.x.oavelocity.toFixed(3) }} {{ reading.unit }}</span>
+                  <span v-else class="text-gray-400">-</span>
+                </div>
+                <div class="flex flex-col items-center">
+                  <span class="text-xs text-gray-500">Eje Y</span>
+                  <span v-if="reading.y" class="font-medium text-gray-900">{{ reading.y.oavelocity.toFixed(3) }} {{ reading.unit }}</span>
+                  <span v-else class="text-gray-400">-</span>
+                </div>
+                <div class="flex flex-col items-center">
+                  <span class="text-xs text-gray-500">Eje Z</span>
+                  <span v-if="reading.z" class="font-medium text-gray-900">{{ reading.z.oavelocity.toFixed(3) }} {{ reading.unit }}</span>
+                  <span v-else class="text-gray-400">-</span>
+                </div>
+              </div>
+            </li>
+          </template>
+
+          <!-- Template para otros tipos de sensores (original) -->
+          <template v-else>
+            <li v-for="reading in paginatedReadings" :key="reading.id" class="flex justify-between items-center p-2 bg-gray-50 rounded-md">
+              <span>{{ new Date(reading.timestamp).toLocaleString() }}</span>
+              <span class="font-medium">
+                {{ reading.value }} {{ reading.unit }}
+              </span>
+            </li>
+          </template>
         </ul>
         <div v-if="totalPages > 1" class="flex justify-center items-center mt-4 space-x-2">
           <button @click="prevPage" :disabled="currentPage === 1" class="px-3 py-1 rounded-md text-sm" :class="currentPage === 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-primary-100 text-primary-700 hover:bg-primary-200'">Anterior</button>
@@ -218,7 +235,8 @@ import { useAssetStore } from "@/stores/assets";
 import AlertList from "@/components/AlertList.vue";
 import SensorChart from "@/components/SensorChart.vue"; 
 import PageHeader from "@/components/PageHeader.vue";
-import VibrationProfileDisplay from "@/components/VibrationProfileDisplay.vue"; // ++ IMPORTAR COMPONENTE
+import VibrationProfileDisplay from "@/components/VibrationProfileDisplay.vue";
+import PermissionGuard from "@/components/PermissionGuard.vue";
 
 const route = useRoute();
 const sensorStore = useSensorStore();
@@ -227,17 +245,16 @@ const organizationStore = useOrganizationStore();
 const assetStore = useAssetStore(); 
 
 const error = ref(null);
-const vibrationProfile = ref(null); // ++ AÑADIR REF PARA EL PERFIL
+const vibrationProfile = ref(null);
 const itemsPerPage = ref(10);
 const currentPage = ref(1);
 
 const loadSensorDetails = async (sensorId) => {
     error.value = null;
-    vibrationProfile.value = null; // Reset on load
+    vibrationProfile.value = null;
     try {
         await sensorStore.fetchSensor(sensorId);
         
-        // Si el sensor cargado es de vibración y tiene un activo, buscar su perfil
         const sensor = sensorStore.currentSensor;
         if (sensor && sensor.type === 'vibration' && sensor.assetId) {
             const { profile } = await sensorStore.getVibrationProfileForAsset(sensor.assetId);
@@ -246,7 +263,6 @@ const loadSensorDetails = async (sensorId) => {
             }
         }
         
-        // Cargar lecturas y alertas
         await sensorStore.fetchAndSubscribeToDetailReadings(sensorId);
         await alertStore.fetchAlerts();
         await alertStore.subscribeToAlertUpdates();
@@ -259,8 +275,7 @@ const loadSensorDetails = async (sensorId) => {
 };
 
 const sortedAllReadings = computed(() => {
-  if (!sensorStore.currentSensorReadings) return [];
-  return [...sensorStore.currentSensorReadings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  return sensorStore.currentSensorReadings || [];
 });
 
 const totalPages = computed(() => {
@@ -293,7 +308,8 @@ const alertsForCurrentSensor = computed(() => {
 
 const sensorForChart = computed(() => {
   if (!sensorStore.currentSensor) return null;
-  return { ...sensorStore.currentSensor, readings: sensorStore.currentSensorReadings };
+  const readingsForChart = sensorStore.currentSensorReadings || [];
+  return { ...sensorStore.currentSensor, readings: readingsForChart };
 });
 
 const combinedAssetLocation = computed(() => {
@@ -331,11 +347,16 @@ watch(() => route.params.id, async (newId) => {
     }
 });
 
-watch(() => sensorStore.currentSensorReadings, () => { currentPage.value = 1; }, { deep: true });
+watch(() => sensorStore.currentSensorReadings, () => { 
+    if (currentPage.value > totalPages.value) {
+        currentPage.value = totalPages.value || 1;
+    }
+}, { deep: true });
 </script>
 
 <style scoped>
 .card { @apply bg-white shadow rounded-lg p-6; }
 .btn { @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow; }
+.btn-primary { @apply text-white bg-primary-600 hover:bg-primary-700; }
 .btn-secondary { @apply text-gray-700 bg-gray-200 hover:bg-gray-300; }
 </style>

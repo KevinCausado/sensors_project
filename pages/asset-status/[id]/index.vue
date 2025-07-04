@@ -81,6 +81,7 @@
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Lectura</th>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Comunicación</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -96,6 +97,7 @@
                   {{ sensor.last_value !== null ? sensor.last_value : "N/A" }}
                   <span v-if="sensor.last_unit">{{ sensor.last_unit }}</span>
                 </td>
+                 <td class="px-6 py-4 whitespace-nowrap">{{ sensor.last_reading_timestamp ? new Date(sensor.last_reading_timestamp).toLocaleString() : 'N/A' }}</td>
               </tr>
             </tbody>
           </table>
@@ -138,7 +140,8 @@
         </div>
         <div v-else class="text-center text-gray-500 py-4">No hay alertas asociadas a este activo.</div>
         
-        <div class="mt-4" v-if="totalFilteredAlertsForAsset > alertsPerPage">
+        <!-- MODIFICACIÓN: La paginación ahora se muestra si hay al menos 1 alerta -->
+        <div class="mt-4" v-if="totalFilteredAlertsForAsset > 0">
           <Pagination
             :total-items="totalFilteredAlertsForAsset"
             :current-page="currentAlertPage"
