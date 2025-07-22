@@ -10,7 +10,7 @@
             to="/assets/new"
             class="btn btn-primary flex items-center"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a.75.75 0 0 1 .75.75v6.5h6.5a.75.75 0 0 1 0 1.5h-6.5v6.5a.75.75 0 0 1-1.5 0v-6.5h-6.5a.75.75 0 0 1 0-1.5h6.5v-6.5A.75.75 0 0 1 12 4z"/></svg>
+           <PlusIcon class="h-5 w-5 mr-2" />
             Nuevo Activo
           </NuxtLink>
         </PermissionGuard>
@@ -21,20 +21,20 @@
       <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
         <div class="relative w-full sm:w-64">
           <input v-model="searchQuery" type="text" class="form-input pl-9" placeholder="Buscar activos..." />
-          <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M10.5 2a8.5 8.5 0 0 1 6.545 13.914l5.352 5.353a.75.75 0 1 1-1.06 1.06l-5.354-5.353A8.502 8.502 0 0 1 2 10.5C2 6.91 4.91 4 8.5 4a8.5 8.5 0 0 1 2 0zM10.5 3.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z"/></svg>
+         <SearchIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
 
         <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <select v-model="statusFilter" class="form-select">
+          <select v-model="statusFilter" class="form-select pr-10 text-left">
             <option :value="null">Todos los estados</option>
             <option :value="true">Activo</option>
             <option :value="false">Inactivo</option>
           </select>
-          <select v-model="typeFilter" class="form-select">
+          <select v-model="typeFilter" class="form-select ">
             <option :value="null">Todos los tipos</option>
             <option v-for="type in assetStore.getAssetTypes" :key="type.id" :value="type.id">{{ type.name }}</option>
           </select>
-          <select v-model="profileFilter" class="form-select">
+          <select v-model="profileFilter" class="form-select sm:w-70">
             <option :value="null">Todos los perfiles</option>
             <optgroup label="Estándares ISO">
               <option v-for="group in assetStore.getIsoGroups" :key="group.id" :value="{ id: group.id, type: 'iso' }">
@@ -76,7 +76,7 @@
               <td class="td-cell"><div class="flex flex-col"><span>{{ asset.profileDisplayName }}</span><span class="text-xs font-semibold px-2 py-0.5 rounded-full self-start mt-1" :class="asset.isCustomProfile ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'">{{ asset.isCustomProfile ? 'Personalizado' : 'Estándar ISO' }}</span></div></td>
               <td class="td-cell">{{ getCombinedLocation(asset) }}</td>
               <td class="td-cell"><span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', getAssetStatusClass(asset.is_active)]">{{ translateAssetStatus(asset.is_active) }}</span></td>
-              <td class="td-cell text-right"><div class="flex justify-end space-x-1"><PermissionGuard moduleId="assets" permission="view"><ActionButton icon="eye" tooltip="Ver detalles" color="primary" @click="router.push(`/assets/${asset.id}`)" /></PermissionGuard><PermissionGuard moduleId="assets" permission="manage"><ActionButton icon="pencil" tooltip="Editar activo" color="warning" @click="router.push(`/assets/${asset.id}/edit`)" /></PermissionGuard><PermissionGuard moduleId="assets" permission="delete"><ActionButton icon="trash" tooltip="Eliminar activo" color="error" @click="showDeleteConfirm(asset.id, asset.name)" /></PermissionGuard></div></td>
+              <td class="td-cell text-right"><div class="flex justify-end space-x-1"><PermissionGuard moduleId="assets" permission="view"><ActionButton icon="eye" title="Ver detalles" color="primary" @click="router.push(`/assets/${asset.id}`)" /></PermissionGuard><PermissionGuard moduleId="assets" permission="manage"><ActionButton icon="pencil" title="Editar activo" color="warning" @click="router.push(`/assets/${asset.id}/edit`)" /></PermissionGuard><PermissionGuard moduleId="assets" permission="delete"><ActionButton icon="trash" title="Eliminar activo" color="error" @click="showDeleteConfirm(asset.id, asset.name)" /></PermissionGuard></div></td>
             </tr>
           </tbody>
         </table>
@@ -98,6 +98,19 @@ import ActionButton from '~/components/ActionButton.vue';
 import Pagination from '~/components/Pagination.vue'; 
 import PermissionGuard from '~/components/PermissionGuard.vue';
 import ConfirmModal from '~/components/ConfirmModal.vue';
+
+
+// Iconos (placeholders)
+const PlusIcon = defineComponent({
+  render: () => h('svg', { class: 'h-5 w-5', viewBox: '0 0 24 24', fill: 'currentColor' }, [
+    h('path', { d: 'M12 4a.75.75 0 0 1 .75.75v6.5h6.5a.75.75 0 0 1 0 1.5h-6.5v6.5a.75.75 0 0 1-1.5 0v-6.5h-6.5a.75.75 0 0 1 0-1.5h6.5v-6.5A.75.75 0 0 1 12 4z' })
+  ])
+});
+const SearchIcon = defineComponent({
+  render: () => h('svg', { class: 'h-4 w-4', viewBox: '0 0 24 24', fill: 'currentColor' }, [
+    h('path', { d: 'M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm-8 8a10 10 0 1 1 17.32 5.92l4.68 4.68a1 1 0 0 1-1.42 1.42l-4.68-4.68A10 10 0 0 1 2 10z' })
+  ])
+});
 
 const assetStore = useAssetStore();
 const customProfileStore = useCustomVibrationProfileStore();
@@ -170,6 +183,17 @@ onMounted(async () => {
 <style scoped>
 .th-cell { @apply px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider; }
 .td-cell { @apply px-6 py-4 whitespace-nowrap text-sm text-gray-500; }
-.form-select { @apply block w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm; }
+
+.form-select {
+  @apply block pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+}
+
 .action-btn { @apply p-1 rounded-full transition-colors duration-200; }
 </style>

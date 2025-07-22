@@ -16,7 +16,7 @@
     </PageHeader>
 
     <div class="card">
-      <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
+       <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
         <div class="relative w-full sm:w-64">
           <input
             v-model="searchQuery"
@@ -27,19 +27,15 @@
           <SearchIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
 
-        <!-- Nuevo Selector: Filtrar por Estado -->
-        <div class="w-full sm:w-64">
-          <label for="status-filter" class="sr-only">Filtrar por Estado</label>
-          <select
-            id="status-filter"
-            v-model="selectedStatus"
-            class="form-select"
-          >
-            <option :value="null">Todos los Estados</option>
-            <option value="active">Activo</option>
-            <option value="inactive">Inactivo</option>
-          </select>
-        </div>
+        <select
+          id="status-filter"
+          v-model="selectedStatus"
+          class="form-select"
+        >
+          <option :value="null">Todos los Estados</option>
+          <option value="active">Activo</option>
+          <option value="inactive">Inactivo</option>
+        </select>
       </div>
 
       <div class="overflow-x-auto">
@@ -119,7 +115,7 @@
           <PermissionGuard moduleId="organization" permission="ver">
             <ActionButton
               icon="eye" 
-              tooltip="Ver detalles" 
+              title="Ver detalles" 
               color="primary" 
               @click="router.push(`/Organizations/${org.id}`)" /> 
           </PermissionGuard>
@@ -127,7 +123,7 @@
           <PermissionGuard moduleId="organization" permission="editar">
             <ActionButton 
               icon="pencil" 
-              tooltip="Editar organización" 
+              title="Editar organización" 
               color="warning" 
               @click="router.push(`/Organizations/${org.id}/edit`)" /> 
           </PermissionGuard>
@@ -135,7 +131,7 @@
           <PermissionGuard moduleId="organization" permission="eliminar">
             <ActionButton 
               icon="trash" 
-              tooltip="Eliminar organización" 
+              title="Eliminar organización" 
               color="error" 
               @click="showDeleteConfirm(org)" /> 
           </PermissionGuard>
@@ -329,9 +325,6 @@ onMounted(async () => {
 .form-input {
   @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
 }
-.form-select {
-  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2;
-}
 .btn {
   @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors;
 }
@@ -340,5 +333,16 @@ onMounted(async () => {
 }
 .btn-secondary {
   @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+}
+
+.form-select {
+  @apply block w-full sm:w-44 pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
 }
 </style>

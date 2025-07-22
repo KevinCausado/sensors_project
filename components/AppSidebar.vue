@@ -1,30 +1,12 @@
 <template>
-  <!--
-    Main sidebar container.
-    - `w-64`: Defines the sidebar width.
-    - `bg-white shadow-lg z-30`: Visual styles.
-    - `transition-transform duration-200 ease-in-out`: For the slide animation.
 
-    Conditional classes:
-    - **Mobile behavior (md and below):** Sidebar is `fixed`, slides in/out.
-      - `fixed inset-y-0 left-0`: Fixes it to the viewport.
-      - `-translate-x-full`: Hides it off-screen when `isOpen` is false (and not desktop).
-      - `translate-x-0`: Shows it on-screen when `isOpen` is true (and not desktop).
-      - `z-40`: Ensures it's above main content when open.
-    - **Desktop behavior (md and above):** Sidebar is `relative`, always visible, and *pushes* content.
-      - `md:relative md:translate-x-0 md:block`: Makes it part of the normal flex flow,
-                                                ensures it's visible, and is always a block element.
-                                                `md:flex-shrink-0` ensures it keeps its `w-64`.
-  -->
   <aside
     :class="{
-      // Mobile-specific classes (when not desktop)
-      'fixed inset-y-0 left-0 z-40': !isDesktop, // Apply fixed positioning only on mobile
-      'transform -translate-x-full': !isOpen && !isDesktop, // Hide on mobile if closed
-      'transform translate-x-0': isOpen && !isDesktop, // Show on mobile if open
-
-      // Desktop-specific classes (when it is desktop)
-      'md:relative md:translate-x-0 md:block md:flex-shrink-0': isDesktop // Push content on desktop
+      
+      'fixed inset-y-0 left-0 z-40': !isDesktop, 
+      'transform -translate-x-full': !isOpen && !isDesktop, 
+      'transform translate-x-0': isOpen && !isDesktop,      
+      'md:relative md:translate-x-0 md:block md:flex-shrink-0': isDesktop 
     }"
     class="w-64 bg-white border-r border-gray-200
            transition duration-200 ease-in-out"
@@ -41,7 +23,7 @@
                 :label="item.name"
                 :has-children="!!item.children"
                 :is-active="isActiveRoute(item)"
-                @click="!isDesktop && toggleSidebar()" /> <!-- Close sidebar on navigation in mobile -->
+                @click="!isDesktop && toggleSidebar()" /> 
             </PermissionGuard>
           </template>
         </div>
@@ -81,8 +63,6 @@
     </div>
   </aside>
 
-  <!-- This overlay is no longer needed in AppSidebar as it's now handled in default.vue -->
-  <!-- <div v-if="isOpen" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-20 md:hidden" @click="toggleSidebar"></div> -->
 </template>
 
 <script setup>
@@ -93,7 +73,7 @@ import { useRoute, useRouter } from "vue-router";
 import { navigationItems } from "~/utils/navigation";
 import PermissionGuard from "~/components/PermissionGuard.vue";
 
-// Mapea las cadenas de iconos de navigationItems al formato esperado por <Icon>
+
 const processedNavigationItems = computed(() => {
   return navigationItems.map((item) => ({
     ...item,
@@ -101,13 +81,13 @@ const processedNavigationItems = computed(() => {
   }));
 });
 
-// Props from parent (layout)
+
 const props = defineProps({
   isOpen: {
     type: Boolean,
     default: true,
   },
-  isDesktop: { // NEW PROP: indicates if current screen size is desktop
+  isDesktop: { 
     type: Boolean,
     default: true
   }
@@ -152,7 +132,8 @@ const shouldShowOrganizationFilter = computed(() => {
   const isOnRelevantPage =
     currentPath === "/dashboard" ||
     currentPath.startsWith("/sensors") ||
-    currentPath.startsWith("/alerts");
+    currentPath.startsWith("/alerts")||
+    currentPath.startsWith("/asset-status");
   return hasOrganizations && isOnRelevantPage;
 });
 
@@ -166,8 +147,10 @@ const logout = async () => {
   router.push("/auth/login");
 };
 
-const changeOrganization = () => {
-  organizationStore.setSelectedOrganizationId(organizationStore.selectedOrganizationId);
+const changeOrganization = () => {  
+  if (typeof organizationStore.setSelectedOrganizationId === 'function') {
+    organizationStore.setSelectedOrganizationId(organizationStore.selectedOrganizationId);
+  }
 };
 
 // Helper functions
@@ -180,12 +163,11 @@ const isActiveRoute = (item) => {
 
 // Initialize organization selector
 onMounted(async () => {
-  await organizationStore.fetchOrganizations();
-  organizationStore.setSelectedOrganization(null); // Set initial selection to "All Organizations"
-  console.log('[AppSidebar] Estableciendo la selección inicial a "Todas las Organizaciones".');
+  await organizationStore.fetchOrganizations();  
+  organizationStore.selectedOrganizationId = null; 
 });
 </script>
 
 <style scoped>
-/* No specific scoped styles here. Use Tailwind classes directly. */
+
 </style>

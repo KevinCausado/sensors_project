@@ -176,7 +176,7 @@ const saveUser = async () => {
     };
 
     // Opcional: Para depuración, puedes ver qué se va a enviar
-    console.log('Datos preparados para crear usuario:', userDataToSave);
+    // console.log('Datos preparados para crear usuario:', userDataToSave);
 
     // 3. Llama a la acción `createUser` del store con los datos preparados
     await userStore.createUser(userDataToSave);

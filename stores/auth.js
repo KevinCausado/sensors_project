@@ -69,8 +69,8 @@ export const useAuthStore = defineStore('auth', {
 
     // Comprueba si el usuario tiene un permiso específico (legacy, si lo usabas así)
      can: (state) => (permissionString) => {
-      console.log('[Auth Store - can] Checking permission:', permissionString);
-      console.log('[Auth Store - can] Current permissions:', state.permissions);
+      // console.log('[Auth Store - can] Checking permission:', permissionString);
+      // console.log('[Auth Store - can] Current permissions:', state.permissions);
 
       if (!permissionString || typeof permissionString !== 'string') {
         // console.warn('[Auth Store - can] Invalid permission string provided. Returning false.');
@@ -90,7 +90,7 @@ export const useAuthStore = defineStore('auth', {
 
       // Si no hay permisos cargados, o el objeto de permisos está vacío
       if (!state.permissions || typeof state.permissions !== 'object' || Object.keys(state.permissions).length === 0) {
-        console.log(`[Auth Store - can] No permissions loaded or empty for ${permissionString}. Returning false.`);
+        // console.log(`[Auth Store - can] No permissions loaded or empty for ${permissionString}. Returning false.`);
         return false;
       }
 
@@ -99,13 +99,13 @@ export const useAuthStore = defineStore('auth', {
 
       // Si el módulo no existe en los permisos del usuario
       if (!modulePermissions) {
-        console.log(`[Auth Store - can] Module '${moduleId}' not found in permissions. Returning false.`);
+        // console.log(`[Auth Store - can] Module '${moduleId}' not found in permissions. Returning false.`);
         return false;
       }
 
       // Finalmente, verifica si la acción específica existe para ese módulo y si su valor es 'true'
       const hasActionPermission = modulePermissions[action] === true;
-      console.log(`[Auth Store - can] Result for ${permissionString}: ${hasActionPermission}`);
+      // console.log(`[Auth Store - can] Result for ${permissionString}: ${hasActionPermission}`);
       return hasActionPermission;
     },
 
@@ -147,7 +147,7 @@ export const useAuthStore = defineStore('auth', {
         const { data, error } = await $supabase.auth.signUp(credentials);
         if (error) throw error;
         this.user = data.user;
-        console.log('[Auth Store] Registro exitoso:', data.user);
+        // console.log('[Auth Store] Registro exitoso:', data.user);
         // Si el registro es exitoso, esperamos que el onAuthStateChange maneje la carga del perfil.
         // Pero podríamos precargar aquí si es necesario.
       } catch (e) {
@@ -166,7 +166,7 @@ export const useAuthStore = defineStore('auth', {
         const { data, error } = await $supabase.auth.signInWithPassword(credentials);
         if (error) throw error;
         this.user = data.user;
-        console.log('[Auth Store] Inicio de sesión exitoso:', data.user);
+        // console.log('[Auth Store] Inicio de sesión exitoso:', data.user);
         // El listener de onAuthStateChange manejará la carga del perfil después de este evento.
       } catch (e) {
         this.error = e.message;
@@ -187,7 +187,7 @@ export const useAuthStore = defineStore('auth', {
         this.userProfile = null;
         this.role = null;
         this.permissions = {};
-        console.log('[Auth Store] Sesión cerrada exitosamente.');
+        // console.log('[Auth Store] Sesión cerrada exitosamente.');
         navigateTo('/login'); // Redirigir al usuario al cerrar sesión
       } catch (e) {
         this.error = e.message;
@@ -206,7 +206,7 @@ export const useAuthStore = defineStore('auth', {
           redirectTo: `${window.location.origin}/update-password`, // Asegúrate que esta URL exista
         });
         if (error) throw error;
-        console.log('[Auth Store] Correo de restablecimiento de contraseña enviado.');
+        // console.log('[Auth Store] Correo de restablecimiento de contraseña enviado.');
         return true; // Indica éxito
       } catch (e) {
         this.error = e.message;
@@ -224,7 +224,7 @@ export const useAuthStore = defineStore('auth', {
         const { $supabase } = useNuxtApp();
         const { data, error } = await $supabase.auth.updateUser({ password: newPassword });
         if (error) throw error;
-        console.log('[Auth Store] Contraseña actualizada exitosamente.');
+        // console.log('[Auth Store] Contraseña actualizada exitosamente.');
         this.user = data.user;
         return true;
       } catch (e) {
@@ -266,7 +266,7 @@ export const useAuthStore = defineStore('auth', {
             this.role = profile.role; // Assign the main role name to the 'role' property of the store
             this.permissions = profile.permissions || {}; // Assign the JSONB permissions object
 
-            console.log('[Auth Store] Perfil de usuario y permisos cargados:', this.userProfile, this.permissions);
+            // console.log('[Auth Store] Perfil de usuario y permisos cargados:', this.userProfile, this.permissions);
         } else {
             this.userProfile = null;
             this.role = null;
@@ -284,7 +284,7 @@ export const useAuthStore = defineStore('auth', {
      async ensureUserProfileExists(userId) {
     // Intenta cargar el perfil si no está ya cargado o si el user.id no coincide
     if (!this.userProfile || this.userProfile.auth_id !== userId) {
-        console.log('[Auth Store] Asegurando que el perfil de usuario exista para:', userId);
+        // console.log('[Auth Store] Asegurando que el perfil de usuario exista para:', userId);
         
         // Primero, intentar cargar el perfil existente por auth_id
         await this.fetchUserProfile(userId);
@@ -292,7 +292,7 @@ export const useAuthStore = defineStore('auth', {
         // Si después de intentar cargar, el perfil *aún* no se encontró (o no coincide con el auth_id actual)
         // Y tenemos un usuario Supabase autenticado
         if ((!this.userProfile || this.userProfile.auth_id !== userId) && this.user && this.user.id === userId) {
-            console.log('[Auth Store] Perfil de usuario no encontrado o desactualizado localmente. Verificando en DB y creando/actualizando si es necesario.');
+            // console.log('[Auth Store] Perfil de usuario no encontrado o desactualizado localmente. Verificando en DB y creando/actualizando si es necesario.');
             try {
                 const { $supabase } = useNuxtApp();
 
@@ -312,7 +312,7 @@ export const useAuthStore = defineStore('auth', {
                     // Si ya existe un perfil con este auth_id, significa que el fetchUserProfile inicial
                     // pudo haber fallado o el this.userProfile no se actualizó por alguna razón.
                     // No necesitamos crear uno nuevo, solo asegurarnos de que this.userProfile esté correcto.
-                    console.log('[Auth Store] Perfil con auth_id ya existe en DB, actualizando el store local.');
+                    // console.log('[Auth Store] Perfil con auth_id ya existe en DB, actualizando el store local.');
                     // Esto es crucial: Si el perfil ya existe, lo asignamos directamente al store
                     // para evitar el intento de inserción/upsert que causaría el duplicado.
                     this.userProfile = existingProfile; 
@@ -320,7 +320,7 @@ export const useAuthStore = defineStore('auth', {
                     await this.fetchUserProfile(userId); // Re-fetch para cargar permisos y otros datos completos
                 } else {
                     // Solo si NO existe un perfil con este auth_id, procedemos a crearlo
-                    console.log('[Auth Store] Perfil de usuario NO encontrado por auth_id. Procediendo a CREAR uno nuevo.');
+                    // console.log('[Auth Store] Perfil de usuario NO encontrado por auth_id. Procediendo a CREAR uno nuevo.');
 
                     if (this.availableRoles.length === 0) {
                         await this.fetchAvailableRoles();
@@ -362,7 +362,7 @@ export const useAuthStore = defineStore('auth', {
                         throw insertError;
                     }
 
-                    console.log('[Auth Store] Perfil de usuario creado:', data[0]);
+                    // console.log('[Auth Store] Perfil de usuario creado:', data[0]);
                     this.userProfile = data[0]; // Asignar el perfil recién creado al store
                 }
 
@@ -377,7 +377,7 @@ export const useAuthStore = defineStore('auth', {
             console.warn('[Auth Store] No hay usuario autenticado para crear o asegurar perfil.');
         }
     } else {
-        console.log('[Auth Store] Perfil de usuario ya cargado y válido.');
+        // console.log('[Auth Store] Perfil de usuario ya cargado y válido.');
     }
 },
     // === NUEVA FUNCIÓN: checkAuth (adaptada para el error que reportaste) ===
@@ -393,18 +393,18 @@ export const useAuthStore = defineStore('auth', {
 
         if (session) {
           this.user = session.user;
-          console.log('[Auth Store - checkAuth] Sesión activa, usuario:', session.user.id);
+          // console.log('[Auth Store - checkAuth] Sesión activa, usuario:', session.user.id);
           await this.ensureUserProfileExists(session.user.id);
         } else {
           this.user = null;
           this.userProfile = null;
           this.role = null;
           this.permissions = {};
-          console.log('[Auth Store - checkAuth] No hay sesión activa.');
+          // console.log('[Auth Store - checkAuth] No hay sesión activa.');
         }
       } catch (e) {
         this.error = e.message;
-        console.error('[Auth Store - checkAuth] Error al verificar autenticación:', e.message);
+        // console.error('[Auth Store - checkAuth] Error al verificar autenticación:', e.message);
       } finally {
         this.isLoading = false;
       }
@@ -422,7 +422,7 @@ export const useAuthStore = defineStore('auth', {
                 .select('id, name, description, type, organization_id'); // Ahora incluye 'type' y 'organization_id'
             if (error) throw error;
             this.availableRoles = data;
-            console.log('[Auth Store] Roles disponibles cargados:', this.availableRoles);
+            // console.log('[Auth Store] Roles disponibles cargados:', this.availableRoles);
         } catch (e) {
             this.error = e.message;
             console.error('[Auth Store] Error al cargar roles disponibles:', e.message);
@@ -442,7 +442,7 @@ export const useAuthStore = defineStore('auth', {
           .select('id, name, slug'); // Selecciona los campos relevantes de la tabla organizations
         if (error) throw error;
         this.organizations = data;
-        console.log('[Auth Store] Organizaciones cargadas:', this.organizations);
+        // console.log('[Auth Store] Organizaciones cargadas:', this.organizations);
       } catch (e) {
         this.error = e.message;
         console.error('[Auth Store] Error al cargar organizaciones:', e.message);
@@ -512,7 +512,7 @@ export const useAuthStore = defineStore('auth', {
         this.filterRole = filterRole;
         this.filterOrganization = filterOrganization;
 
-        console.log('[Auth Store] Usuarios cargados:', this.users);
+        // console.log('[Auth Store] Usuarios cargados:', this.users);
       } catch (e) {
         this.error = e.message;
         console.error('[Auth Store] Error al cargar usuarios:', e.message);
@@ -561,7 +561,7 @@ export const useAuthStore = defineStore('auth', {
             throw userProfileError;
         }
 
-        console.log('[Auth Store] Usuario creado en Auth y Perfil:', userProfileData);
+        // console.log('[Auth Store] Usuario creado en Auth y Perfil:', userProfileData);
         // Refresh user list
         await this.fetchUsers();
       } catch (e) {
@@ -594,7 +594,7 @@ export const useAuthStore = defineStore('auth', {
           .select(); // Return the updated row
 
         if (error) throw error;
-        console.log('[Auth Store] Usuario actualizado:', data);
+        // console.log('[Auth Store] Usuario actualizado:', data);
 
         // Actualizar el correo electrónico del usuario en auth.users si ha cambiado
         if (this.editingUser && this.editingUser.email !== userData.email) {
@@ -606,7 +606,7 @@ export const useAuthStore = defineStore('auth', {
                 console.warn('[Auth Store] Advertencia: Falló la actualización de correo electrónico en auth.users:', authUpdateError.message);
                 // No lanzar error fatal aquí, ya que el perfil en public.users ya se actualizó.
             } else {
-                console.log('[Auth Store] Correo electrónico de auth.users actualizado.');
+                // console.log('[Auth Store] Correo electrónico de auth.users actualizado.');
             }
         }
         await this.fetchUsers(); // Refresh user list
@@ -638,10 +638,10 @@ export const useAuthStore = defineStore('auth', {
             // Log a warning if auth user deletion fails, but don't stop if profile was deleted
             console.warn('[Auth Store] Advertencia: Falló la eliminación del usuario de auth.users:', authError.message);
         } else {
-            console.log('[Auth Store] Usuario eliminado de Auth.');
+            // console.log('[Auth Store] Usuario eliminado de Auth.');
         }
 
-        console.log('[Auth Store] Usuario eliminado exitosamente:', userId);
+        // console.log('[Auth Store] Usuario eliminado exitosamente:', userId);
         await this.fetchUsers(); // Refresh user list
       } catch (e) {
         this.error = e.message;
@@ -694,7 +694,7 @@ export const useAuthStore = defineStore('auth', {
 
         if (error) throw error;
         this.roles = data;
-        console.log('[Auth Store] Roles cargados:', this.roles);
+        // console.log('[Auth Store] Roles cargados:', this.roles);
       } catch (e) {
         this.error = e.message;
         console.error('[Auth Store] Error al cargar roles:', e.message);
@@ -714,7 +714,7 @@ export const useAuthStore = defineStore('auth', {
           .select('id, name, description, permissions_schema'); // Selecciona los campos relevantes
         if (error) throw error;
         this.appModules = data;
-        console.log('[Auth Store] Módulos de aplicación cargados:', this.appModules);
+        // console.log('[Auth Store] Módulos de aplicación cargados:', this.appModules);
       } catch (e) {
         this.error = e.message;
         console.error('[Auth Store] Error al cargar módulos de aplicación:', e.message);
@@ -747,7 +747,7 @@ export const useAuthStore = defineStore('auth', {
         if (data && data.length > 0 && data[0].permissions) {
           this.editingRolePermissions = data[0].permissions;
           this.initialPermissions = JSON.parse(JSON.stringify(data[0].permissions)); // Store for tracking changes
-          console.log('[Auth Store] Permisos del rol cargados:', this.editingRolePermissions);
+          // console.log('[Auth Store] Permisos del rol cargados:', this.editingRolePermissions);
         } else {
           this.editingRolePermissions = {};
           this.initialPermissions = {};
@@ -806,7 +806,7 @@ export const useAuthStore = defineStore('auth', {
           if (permError) throw permError;
         }
 
-        console.log('[Auth Store] Rol y permisos creados:', newRole);
+        // console.log('[Auth Store] Rol y permisos creados:', newRole);
         await this.fetchRoles(); // Refresh role list
       } catch (e) {
         this.error = e.message;
@@ -866,7 +866,7 @@ export const useAuthStore = defineStore('auth', {
           if (insertPermError) throw insertPermError;
         }
 
-        console.log('[Auth Store] Rol y permisos actualizados:', roleId);
+        // console.log('[Auth Store] Rol y permisos actualizados:', roleId);
         await this.fetchRoles(); // Refresh role list
         this.setEditingRole(null); // Exit editing mode
       } catch (e) {
@@ -938,7 +938,7 @@ export const useAuthStore = defineStore('auth', {
                     delete this.userProfile.roles;
                     delete this.userProfile.organizations;
                 }
-                console.log('Perfil actualizado con éxito:', this.userProfile);
+                // console.log('Perfil actualizado con éxito:', this.userProfile);
 
                 return this.userProfile;
 
@@ -966,7 +966,7 @@ export const useAuthStore = defineStore('auth', {
           .eq('id', roleId);
 
         if (error) throw error;
-        console.log('[Auth Store] Rol eliminado:', roleId);
+        // console.log('[Auth Store] Rol eliminado:', roleId);
         await this.fetchRoles(); // Refresh role list
       } catch (e) {
         this.error = e.message;
@@ -1006,20 +1006,20 @@ export const useAuthStore = defineStore('auth', {
             // Desuscribe cualquier listener anterior para evitar duplicados
             if (this.authListenerUnsubscribe) {
                 this.authListenerUnsubscribe();
-                console.log('[Auth Store - Listener] Desuscripto del listener anterior.');
+                // console.log('[Auth Store - Listener] Desuscripto del listener anterior.');
             }
 
             const { $supabase } = useNuxtApp();
-            console.log('[Auth Store - Listener] Inicializando listener de onAuthStateChange...');
+            // console.log('[Auth Store - Listener] Inicializando listener de onAuthStateChange...');
 
             // Configura el nuevo listener y guarda la función de desuscripción
             const { data: { subscription } } = $supabase.auth.onAuthStateChange(async (event, session) => {
-                console.log(`[Auth Store - Listener] Evento de Auth recibido: ${event}`);
+                // console.log(`[Auth Store - Listener] Evento de Auth recibido: ${event}`);
 
                 if (session) {
                     // Siempre actualiza el objeto de usuario de Supabase Auth en el store
                     this.user = session.user;
-                    console.log('[Auth Store - Listener] Sesión activa. Intentando cargar perfil de usuario de la aplicación.');
+                    // console.log('[Auth Store - Listener] Sesión activa. Intentando cargar perfil de usuario de la aplicación.');
 
                     // Llama a ensureUserProfileExists para cargar/verificar el perfil de la aplicación
                     // Esto es clave para obtener el rol de la aplicación.
@@ -1027,7 +1027,7 @@ export const useAuthStore = defineStore('auth', {
 
                 } else {
                     // Si no hay sesión, significa que el usuario ha cerrado sesión o la sesión ha expirado
-                    console.log('[Auth Store - Listener] Sesión cerrada (evento) o expirada. Limpiando store.');
+                    // console.log('[Auth Store - Listener] Sesión cerrada (evento) o expirada. Limpiando store.');
                     this.user = null; // Limpia el objeto de usuario de Supabase Auth
                     this.userProfile = null; // Limpia el perfil de la aplicación
                     this.role = null;       // Limpia el rol de la aplicación
@@ -1035,7 +1035,7 @@ export const useAuthStore = defineStore('auth', {
                 }
             });
             this.authListenerUnsubscribe = subscription.unsubscribe;
-            console.log('[Auth Store - Listener] Listener de Auth configurado.');
+            // console.log('[Auth Store - Listener] Listener de Auth configurado.');
         },
   },
 });

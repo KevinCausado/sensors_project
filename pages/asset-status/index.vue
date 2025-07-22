@@ -97,33 +97,50 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAssetStore } from '~/stores/assets';
+import { useOrganizationStore } from '~/stores/organizations';
 import PageHeader from '~/components/PageHeader.vue';
 import Pagination from '~/components/Pagination.vue'; 
 
 // Inicialización de stores y router
 const assetStore = useAssetStore();
+const organizationStore = useOrganizationStore();
 const router = useRouter();
 
 // Estado para filtros y paginación
 const selectedAssetFilter = ref(null);
 const statusFilter = ref(null); 
 const currentPage = ref(1);
-const itemsPerPage = ref(10); // Puedes ajustar este valor por defecto
+const itemsPerPage = ref(10);
 
 // Carga inicial de datos
-onMounted(async () => {
-  await assetStore.fetchAssets();
+onMounted(() => { 
+  assetStore.fetchAssets();
 });
+
+// Observar cambios en el ID de la organización seleccionada en el sidebar
+watch(() => organizationStore.selectedOrganizationId, (newOrgId, oldOrgId) => {  
+  if (newOrgId !== oldOrgId) {
+    assetStore.fetchAssets();
+    // Resetear filtros locales y paginación para evitar inconsistencias
+    currentPage.value = 1;
+    selectedAssetFilter.value = null;
+    statusFilter.value = null;
+  }
+}, { immediate: false }); // `immediate: false` para evitar una doble carga al inicio.
 
 // Lógica de filtrado
 const filteredAssets = computed(() => {
+  // La lista de `assetStore.getAssets` ya viene filtrada por organización desde el store.
+  // Aquí solo aplicamos los filtros locales de la página.
   let assets = [...assetStore.getAssets];
+  
   if (statusFilter.value !== null) {
     assets = assets.filter(asset => asset.is_active === statusFilter.value);
   }
   if (selectedAssetFilter.value !== null) {
     assets = assets.filter(asset => asset.id === selectedAssetFilter.value);
   }
+  
   assets.sort((a, b) => (b.is_active - a.is_active));
   return assets;
 });
@@ -137,13 +154,11 @@ const paginatedAssets = computed(() => {
   return filteredAssets.value.slice(start, end);
 });
 
-// La propiedad `paginationSummary` se ha eliminado porque tu componente ya la gestiona.
-
 const handlePageChange = (page) => {
   currentPage.value = page;
 };
 
-// Observar cambios en filtros para resetear la página
+// Observar cambios en filtros locales para resetear la paginación
 watch([selectedAssetFilter, statusFilter], () => {
   currentPage.value = 1;
 });

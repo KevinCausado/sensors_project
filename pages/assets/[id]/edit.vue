@@ -149,7 +149,7 @@ const saveAsset = async () => {
     const payload = { ...form.value };
     Object.keys(payload).forEach(key => { if (payload[key] === '') payload[key] = null; });
     
-    console.log('Payload sent to updateAsset (from pageAssetEdit):', payload);
+    // console.log('Payload sent to updateAsset (from pageAssetEdit):', payload);
 
     await assetStore.updateAsset(assetId, payload);
     router.push('/assets/');

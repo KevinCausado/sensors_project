@@ -7,16 +7,16 @@
     ]"
     v-bind="$attrs"
     :disabled="disabled"
-    ref="buttonRef">
-    <component :is="icon" class="w-5 h-5" />
+  >
+    <!-- El `ref` ya no es necesario -->
+    <component v-if="iconComponent" :is="iconComponent" class="w-5 h-5" />
   </button>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import tippy from 'tippy.js';
-import 'tippy.js/dist/tippy.css';
+import { computed } from 'vue';
 
+// Se han importado todos los íconos que usas en tu aplicación.
 import {
   EyeIcon,
   PencilIcon,
@@ -26,7 +26,8 @@ import {
   XMarkIcon,
   ArrowDownTrayIcon,
   ArrowPathIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  PaperAirplaneIcon 
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -34,10 +35,7 @@ const props = defineProps({
     type: String,
     required: true
   },
-  tooltip: {
-    type: String,
-    required: true
-  },
+  // Se eliminó el prop 'tooltip'.
   color: {
     type: String,
     default: 'primary',
@@ -49,8 +47,7 @@ const props = defineProps({
   }
 });
 
-const buttonRef = ref(null);
-
+// El mapa de íconos para resolver el string del prop.
 const icons = {
   'eye': EyeIcon,
   'pencil': PencilIcon,
@@ -60,7 +57,8 @@ const icons = {
   'x-mark': XMarkIcon,
   'download': ArrowDownTrayIcon,
   'refresh': ArrowPathIcon,
-  'chart': ChartBarIcon
+  'chart': ChartBarIcon,
+  'paper-airplane': PaperAirplaneIcon
 };
 
 const colorClasses = {
@@ -71,12 +69,8 @@ const colorClasses = {
   gray: 'text-gray-600 hover:bg-gray-50'
 };
 
-const icon = computed(() => icons[props.icon]);
+// Resuelve el componente de ícono a partir del prop 'icon'.
+const iconComponent = computed(() => icons[props.icon]);
 
-onMounted(() => {
-  tippy(buttonRef.value, {
-    content: props.tooltip,
-    placement: 'top'
-  });
-});
+// Se eliminó por completo el hook onMounted y toda la lógica de Tippy.js.
 </script>

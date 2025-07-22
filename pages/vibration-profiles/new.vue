@@ -241,7 +241,7 @@ const handleSubmit = async () => {
       ),
     };
 
-    console.log('[NewVibrationProfile] Creando perfil con datos:', newProfileData);
+    // console.log('[NewVibrationProfile] Creando perfil con datos:', newProfileData);
     await vibrationProfileStore.createVibrationProfile(newProfileData);
     router.push('/vibration-profiles'); // Redirige a la lista después de crear
   } catch (e) {

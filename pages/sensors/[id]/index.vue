@@ -8,7 +8,7 @@
       </template>
     </PageHeader>
 
-    <div v-if="sensorStore.isLoading && !sensorStore.currentSensor" class="flex items-center justify-center py-8">
+    <div v-if="isLoading" class="flex items-center justify-center py-8">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
       <p class="ml-3 text-gray-500">Cargando información del sensor...</p>
     </div>
@@ -155,12 +155,11 @@
       </div>
       
       <div class="card">
-        <h2 class="text-lg font-medium text-gray-900 mb-4">Gráfica del Historial</h2>
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Monitoreo en Tiempo Real</h2>
         <SensorChart
-          v-if="sensorForChart"
-          :sensors="[sensorForChart]"
+          v-if="sensorStore.currentSensor"
+          :sensors="[sensorStore.currentSensor]"
           :height="400"
-          :show-time-range-controls="true"
           initial-empty-message="Sensor no disponible para la gráfica."
           empty-data-message="No hay lecturas disponibles para este sensor en el rango seleccionado."
         />
@@ -243,47 +242,57 @@ const organizationStore = useOrganizationStore();
 const assetStore = useAssetStore(); 
 
 const error = ref(null);
+const isLoading = ref(true); // ** CAMBIO: Estado de carga local para la página **
 const vibrationProfile = ref(null);
 const itemsPerPage = ref(10);
 const currentPage = ref(1);
 
 const loadSensorDetails = async (sensorId) => {
+    isLoading.value = true;
     error.value = null;
     vibrationProfile.value = null;
     try {
-        // La carga de lecturas ahora está centralizada en el store
-        await sensorStore.fetchAndSubscribeToDetailReadings(sensorId);
-        
+        // Primero, obtenemos la información del sensor.
+        await sensorStore.fetchSensor(sensorId);
         const sensor = sensorStore.currentSensor;
-        if (sensor && sensor.type === 'vibration' && sensor.assetId) {
-            const { profile } = await sensorStore.getVibrationProfileForAsset(sensor.assetId);
-            if (profile) {
-                vibrationProfile.value = profile;
+
+        if (sensor) {
+            // Si el sensor existe, procedemos a cargar el resto de los datos en paralelo.
+            const dataPromises = [
+                sensorStore.fetchAndSubscribeToDetailReadings(sensorId),
+                alertStore.fetchAlerts()
+            ];
+            if (sensor.type === 'vibration' && sensor.assetId) {
+                dataPromises.push(
+                    sensorStore.getVibrationProfileForAsset(sensor.assetId).then(({ profile }) => {
+                        if (profile) vibrationProfile.value = profile;
+                    })
+                );
             }
+            await Promise.all(dataPromises);
+            
+            // Suscribirse a actualizaciones generales
+            alertStore.subscribeToAlertUpdates();
+            sensorStore.subscribeToSensorUpdates();
         }
-        
-        await alertStore.fetchAlerts();
-        await alertStore.subscribeToAlertUpdates();
-        await sensorStore.subscribeToSensorUpdates();
-        
     } catch (e) {
         console.error("[idSensorPage] Error al cargar detalles del sensor:", e);
         error.value = e.message || "Error desconocido al cargar el sensor.";
+    } finally {
+        isLoading.value = false;
     }
 };
 
-const sortedAllReadings = computed(() => {
-  return sensorStore.currentSensorReadings || [];
-});
-
 const totalPages = computed(() => {
-  if (!sortedAllReadings.value.length) return 1;
-  return Math.ceil(sortedAllReadings.value.length / itemsPerPage.value);
+  const totalReadings = sensorStore.currentSensorReadings?.length || 0;
+  if (totalReadings === 0) return 1;
+  return Math.ceil(totalReadings / itemsPerPage.value);
 });
 
 const paginatedReadings = computed(() => {
+  const readings = sensorStore.currentSensorReadings || [];
   const startIndex = (currentPage.value - 1) * itemsPerPage.value;
-  return sortedAllReadings.value.slice(startIndex, startIndex + itemsPerPage.value);
+  return readings.slice(startIndex, startIndex + itemsPerPage.value);
 });
 
 const nextPage = () => { if (currentPage.value < totalPages.value) currentPage.value++; };
@@ -303,22 +312,6 @@ const alertsForCurrentSensor = computed(() => {
     assetName: assetStore.assets.find(a => a.id === (alert.asset_id || sensorStore.currentSensor.assetId))?.name || "N/A",
   }));
 });
-
-// =================================================================================
-// INICIO DE LA MODIFICACIÓN: `sensorForChart` ahora es más directo
-// =================================================================================
-const sensorForChart = computed(() => {
-  if (!sensorStore.currentSensor) return null;
-  // El store ya gestiona el array de lecturas (`currentSensorReadings`) de forma reactiva.
-  // Simplemente pasamos el sensor actual con sus lecturas.
-  return { 
-    ...sensorStore.currentSensor, 
-    readings: sensorStore.currentSensorReadings 
-  };
-});
-// =================================================================================
-// FIN DE LA MODIFICACIÓN
-// =================================================================================
 
 const combinedAssetLocation = computed(() => {
   const sensor = sensorStore.currentSensor;

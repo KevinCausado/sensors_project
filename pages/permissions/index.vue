@@ -3,6 +3,7 @@
     <PageHeader title="Permisos" subtitle="Gestionar permisos del sistema" />
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Columna de Roles (sin cambios) -->
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Roles</h2>
         <div class="space-y-4">
@@ -18,29 +19,48 @@
         </div>
       </div>
 
+      <!-- Columna de Permisos (REDISEÑADA Y ORDENADA) -->
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Permisos para: {{ selectedRoleObject ? translateRole(selectedRoleObject.name) : "Seleccione un rol" }}</h2>
         <div v-if="selectedRole">
           <div v-if="selectedRoleObject.name === 'super-admin'" class="text-center py-8 text-gray-600">El rol "Super Admin" tiene acceso total y sus permisos no pueden ser modificados.</div>
-          <!-- El v-for ahora usa la lista de módulos ordenada -->
+          
+          <!-- Bucle principal con jerarquía y orden personalizado -->
           <div v-else class="space-y-6">
-            <div v-for="module in modules" :key="module.id" class="p-4 border border-gray-200 rounded-lg">
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="font-medium text-gray-900">{{ translateModule(module.name) }}</h3>
+            <div v-for="module in sortedHierarchicalModules" :key="module.id" class="p-4 border border-gray-200 rounded-lg">
+              
+              <!-- Sección del Módulo Padre -->
+              <div>
+                <h3 class="font-semibold text-gray-900 mb-3">{{ translateModule(module.name) }}</h3>
+                <div class="space-y-2 pl-4">
+                  <label v-for="permission in permissionStore.getModuleActions(module.name)" :key="permission" class="flex items-center">
+                    <input
+                      type="checkbox"
+                      :checked="hasPermission(selectedRole, module.id, permission)"
+                      @change="togglePermission(selectedRole, module.id, permission)"
+                      class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <span class="ml-3 text-sm text-gray-700 capitalize">{{ translatePermission(permission) }}</span>
+                  </label>
+                </div>
               </div>
-              <div class="space-y-2">
-                <label v-for="permission in permissionStore.getModuleActions(module.name)" :key="permission" class="flex items-center">
-                  <input
-                    type="checkbox"
-                    :id="`perm-${selectedRole}-${module.id}-${permission}`"
-                    :checked="hasPermission(selectedRole, module.id, permission)"
-                    @change="togglePermission(selectedRole, module.id, permission)"
-                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                  />
-                  <span class="ml-2 text-sm text-gray-700">
-                    {{ translatePermission(permission) }}
-                  </span>
-                </label>
+
+              <!-- Sección de Submódulos (hijos) -->
+              <div v-if="module.children && module.children.length > 0" class="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                <div v-for="child in module.children" :key="child.id">
+                   <h4 class="font-medium text-sm text-gray-700 mb-3">{{ translateModule(child.name) }}</h4>
+                   <div class="space-y-2 pl-4">
+                       <label v-for="permission in permissionStore.getModuleActions(child.name)" :key="permission" class="flex items-center">
+                         <input
+                           type="checkbox"
+                           :checked="hasPermission(selectedRole, child.id, permission)"
+                           @change="togglePermission(selectedRole, child.id, permission)"
+                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                         />
+                         <span class="ml-3 text-sm text-gray-700 capitalize">{{ translatePermission(permission) }}</span>
+                       </label>
+                   </div>
+                </div>
               </div>
             </div>
           </div>
@@ -63,10 +83,7 @@ import { usePermissionStore } from "~/stores/permissions";
 import PageHeader from "~/components/PageHeader.vue";
 
 definePageMeta({
-  // middleware: ['auth'],
-  meta: {
-    requiredRole: "super-admin",
-  },
+  meta: { requiredRole: "super-admin" },
 });
 
 const permissionStore = usePermissionStore();
@@ -74,9 +91,9 @@ const saving = ref(false);
 const selectedRole = ref(null);
 const permissions = ref({}); 
 
-// --- INICIO DE LA CORRECCIÓN ---
+// --- INICIO DE LA MODIFICACIÓN ---
 
-// 1. Definimos el orden deseado para los módulos, basado en tu imagen de navegación.
+// 1. Se define el orden deseado para los módulos padres, basado en tu archivo de navegación.
 const desiredModuleOrder = [
   'dashboard',
   'organization',
@@ -91,14 +108,17 @@ const desiredModuleOrder = [
   'basic_analysis',
   'messaging',
   'reports',
-  'settings' // Asumiendo que 'settings' es el nombre en DB para "Configuración General"
+  'settings'
 ];
 
-// 2. Modificamos la propiedad `modules` para que devuelva la lista ordenada.
-const modules = computed(() => {
-  const originalModules = [...permissionStore.appModules];
+// 2. Se obtiene la lista jerárquica del store.
+const hierarchicalModules = computed(() => permissionStore.hierarchicalModules);
+
+// 3. Se crea una nueva propiedad computada que ordena la lista jerárquica.
+const sortedHierarchicalModules = computed(() => {
+  const modules = [...hierarchicalModules.value]; // Copia para no mutar el estado original
   
-  return originalModules.sort((a, b) => {
+  return modules.sort((a, b) => {
     const indexA = desiredModuleOrder.indexOf(a.name);
     const indexB = desiredModuleOrder.indexOf(b.name);
 
@@ -110,7 +130,7 @@ const modules = computed(() => {
   });
 });
 
-// --- FIN DE LA CORRECCIÓN ---
+// --- FIN DE LA MODIFICACIÓN ---
 
 
 const roles = computed(() => permissionStore.roles);
@@ -119,27 +139,34 @@ const selectedRoleObject = computed(() => {
   return roles.value.find((r) => r.id === selectedRole.value);
 });
 
-// Helpers (sin cambios)
+// Funciones de traducción
 const translateRole = (roleName) => {
   const translations = { "super-admin": "Super Administrador", admin: "Administrador", technician: "Técnico", viewer: "Visualizador", editor: "Editor" };
   return translations[roleName] || roleName;
 };
-
 const translatePermission = (permission) => {
-  const translations = { view: "Ver", create: "Crear", manage: "Gestionar", delete: "Eliminar", generate: "Generar", manage_schedules: "Programar", resolve: "Resolver", assign: "Asignar" };
+  const translations = { view: "Ver", create: "Crear", manage: "Gestionar", delete: "Eliminar", generate: "Generar", resolve: "Resolver", assign: "Asignar" };
   return translations[permission] || permission;
 };
-
 const getRoleBadgeClass = (roleName) => {
   const classes = { "super-admin": "bg-purple-100 text-purple-800", admin: "bg-blue-100 text-blue-800", "Administrador Global": "bg-yellow-100 text-yellow-800", Visor: "bg-gray-100 text-gray-800", Editor: "bg-green-100 text-green-800" };
   return classes[roleName] || "bg-gray-100 text-gray-800";
 };
-
 const translateModule = (moduleName) => {
-  const translations = { dashboard: "Dashboard", sensors: "Sensores", assets: "Activos", reports: "Reportes", organization: "Organizaciones", alerts: "Alertas", users: "Usuarios", permissions: "Permisos", messaging: "Mensajeria", vibration_profiles: "Perfiles de Vibración", asset_status: "Estado de Activos", settings: "Configuración General", parameters: "Parametros", basic_analysis: "Analisis Básico" };
+  const translations = { 
+    dashboard: "Dashboard", sensors: "Sensores", assets: "Activos", 
+    reports: "Reportes",
+    report_schedules: "Tareas Programadas",
+    report_configurations: "Configuración de Servidores",
+    organization: "Organizaciones", alerts: "Alertas", users: "Usuarios", 
+    permissions: "Permisos", messaging: "Mensajeria", vibration_profiles: "Perfiles de Vibración", 
+    asset_status: "Estado de Activos", settings: "Configuración General", 
+    parameters: "Parametros", basic_analysis: "Analisis Básico" 
+  };
   return translations[moduleName] || moduleName;
 };
 
+// Lógica de permisos
 const hasPermission = (roleId, moduleId, permission) => {
   if (selectedRoleObject.value?.name === "super-admin") return true;
   if (permissions.value[selectedRole.value] && permissions.value[selectedRole.value][moduleId]) {
@@ -148,7 +175,6 @@ const hasPermission = (roleId, moduleId, permission) => {
   const rolePerms = permissionStore.rolePermissions[selectedRole.value];
   return rolePerms?.[moduleId]?.[permission] === true || false;
 };
-
 const togglePermission = (roleId, moduleId, permission) => {
   if (selectedRoleObject.value?.name === "super-admin") return;
   if (!permissions.value[roleId]) {
@@ -159,30 +185,16 @@ const togglePermission = (roleId, moduleId, permission) => {
   }
   permissions.value[roleId][moduleId][permission] = !permissions.value[roleId][moduleId][permission];
 };
-
 const savePermissions = async () => {
   if (!selectedRole.value || selectedRoleObject.value?.name === "super-admin") return;
-
   try {
     saving.value = true;
     const changesToSave = permissions.value[selectedRole.value] || {};
-    const filteredChanges = {};
-    for (const moduleId in changesToSave) {
-      if (Object.prototype.hasOwnProperty.call(changesToSave, moduleId)) {
-        const modulePerms = changesToSave[moduleId];
-        const activePerms = {};
-        for (const permName in modulePerms) {
-          if (modulePerms[permName] === true) {
-            activePerms[permName] = true;
-          }
-        }
-        if (Object.keys(activePerms).length > 0) {
-          filteredChanges[moduleId] = activePerms;
-        }
-      }
-    }
-    await permissionStore.saveRolePermissions(selectedRole.value, filteredChanges);
+    await permissionStore.saveRolePermissions(selectedRole.value, changesToSave);
     permissions.value = {};
+    if (selectedRole.value) {
+      permissions.value[selectedRole.value] = JSON.parse(JSON.stringify(permissionStore.getRolePermissions(selectedRole.value) || {}));
+    }
   } catch (error) {
     console.error("Error al guardar permisos:", error);
   } finally {
@@ -194,40 +206,23 @@ onMounted(async () => {
   try {
     await permissionStore.fetchAppModules();
     await permissionStore.fetchRolesAndPermissions();
-    const superAdminRole = roles.value.find((r) => r.name === "super-admin");
-    if (superAdminRole) {
-      selectedRole.value = superAdminRole.id;
-    } else if (roles.value.length > 0) {
+    if (roles.value.length > 0) {
       selectedRole.value = roles.value[0].id;
     }
   } catch (error) {
-    console.error("onMounted: Error al cargar roles y permisos:", error);
+    console.error("onMounted: Error al cargar datos:", error);
   }
 });
 
-watch(
-  selectedRole,
-  (newRoleId) => {
+watch(selectedRole, (newRoleId) => {
     if (newRoleId) {
-      if (selectedRoleObject.value?.name === "super-admin") {
-        permissions.value[newRoleId] = {};
-      } else {
-        permissions.value[newRoleId] = JSON.parse(JSON.stringify(permissionStore.getRolePermissions(newRoleId) || {}));
-      }
+      permissions.value[newRoleId] = JSON.parse(JSON.stringify(permissionStore.getRolePermissions(newRoleId) || {}));
     }
-  },
-  { immediate: true }
-);
+}, { deep: true });
 </script>
 
 <style scoped>
-.card {
-  @apply bg-white shadow-md rounded-lg p-6;
-}
-.btn {
-  @apply px-4 py-2 rounded-md font-semibold text-white;
-}
-.btn-primary {
-  @apply bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
-}
+.card { @apply bg-white shadow-md rounded-lg p-6; }
+.btn { @apply px-4 py-2 rounded-md font-semibold text-white; }
+.btn-primary { @apply bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2; }
 </style>

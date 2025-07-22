@@ -35,5 +35,5 @@ export default defineNuxtPlugin((nuxtApp) => { // No es necesario que sea async 
     // ¡IMPORTANTE! Toda la lógica de `getSession()` y `onAuthStateChange()`
     // ha sido movida a `stores/auth.js` (`checkAuth` e `initAuthListener`).
     // Este plugin SÓLO se encarga de crear y proveer el cliente Supabase.
-    console.log('[Supabase Plugin] Cliente Supabase inicializado y provisto.');
+    // console.log('[Supabase Plugin] Cliente Supabase inicializado y provisto.');
 });

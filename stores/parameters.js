@@ -47,7 +47,7 @@ export const useParameterStore = defineStore('parameters', {
 
         if (error) throw error;
         this.parameters = data;
-        console.log('Fetched parameters (actual data):', this.parameters); // Revisa este log en tu consola
+        // console.log('Fetched parameters (actual data):', this.parameters); // Revisa este log en tu consola
       } catch (e) {
         this.error = 'Failed to fetch parameters: ' + e.message;
         console.error('Error fetching parameters:', e);
@@ -70,7 +70,7 @@ export const useParameterStore = defineStore('parameters', {
 
         if (error) throw error;
         this.parameters.push(data[0]);
-        console.log('[Parameter Store] Parámetro creado:', data[0]);
+        // console.log('[Parameter Store] Parámetro creado:', data[0]);
         return data[0];
       } catch (error) {
         this.error = error.message;
@@ -97,7 +97,7 @@ export const useParameterStore = defineStore('parameters', {
         if (index !== -1) {
           this.parameters[index] = data[0];
         }
-        console.log('[Parameter Store] Parámetro actualizado:', data[0]);
+        // console.log('[Parameter Store] Parámetro actualizado:', data[0]);
         return data[0];
       } catch (error) {
         this.error = error.message;
@@ -120,7 +120,7 @@ export const useParameterStore = defineStore('parameters', {
 
         if (error) throw error;
         this.parameters = this.parameters.filter(p => p.id !== id);
-        console.log('[Parameter Store] Parámetro eliminado:', id);
+        // console.log('[Parameter Store] Parámetro eliminado:', id);
         return true;
       } catch (error) {
         this.error = error.message;
@@ -143,7 +143,7 @@ export const useParameterStore = defineStore('parameters', {
           .single();
 
         if (error) throw error;
-        console.log(`[Parameter Store] Parámetro con ID ${id} cargado:`, data);
+        // console.log(`[Parameter Store] Parámetro con ID ${id} cargado:`, data);
         return data;
       } catch (error) {
         this.error = error.message;

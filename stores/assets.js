@@ -78,7 +78,7 @@ export const useAssetStore = defineStore('assets', {
             isCustomProfile: !!customProfileName 
           };
         });
-        console.log('[Assets Store] Activos cargados (con assetTypeName y vibration_profile_name):', this.assets);
+        // console.log('[Assets Store] Activos cargados (con assetTypeName y vibration_profile_name):', this.assets);
 
       } catch (e) {
         console.error('Error fetching assets:', e);
@@ -201,7 +201,7 @@ export const useAssetStore = defineStore('assets', {
           }
         });
 
-        console.log('Data to update (before Supabase call):', dataToUpdate);
+        // console.log('Data to update (before Supabase call):', dataToUpdate);
       
         const { data, error } = await $supabase
           .from('assets_base')
@@ -211,6 +211,10 @@ export const useAssetStore = defineStore('assets', {
           .single();
 
         if (error) throw error;
+
+        // console.log(`[Asset Store] Activo ${id} actualizado. Llamando a la actualización de umbrales de sensores...`);
+        const sensorStore = useSensorStore();
+        await sensorStore.updateVibrationSensorThresholdsForAsset(id);
         await this.fetchAssets(); 
         if (this.currentAsset && this.currentAsset.id === id) {
           await this.fetchAssetById(id); 
@@ -247,7 +251,7 @@ export const useAssetStore = defineStore('assets', {
     },
    async initializeDataForForms() {
       if (this._dataInitialized) {
-        console.log('[Assets Store] Datos de formulario ya inicializados.');
+        // console.log('[Assets Store] Datos de formulario ya inicializados.');
         return;
       }
 
@@ -286,10 +290,10 @@ export const useAssetStore = defineStore('assets', {
         this.couplingTypes = couplingTypesRes.data;
 
         this._dataInitialized = true; 
-        console.log('[Assets Store] Datos de formularios inicializados con éxito.');
+        // console.log('[Assets Store] Datos de formularios inicializados con éxito.');
 
       } catch (error) {
-        console.error('Error al cargar datos de inicialización de formularios:', error);
+        // console.error('Error al cargar datos de inicialización de formularios:', error);
         this.error = error.message;
         throw error;
       } finally {

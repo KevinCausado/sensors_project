@@ -6,18 +6,12 @@
   html {
     @apply text-gray-900;
     font-family: 'Inter', sans-serif;
+    font-size: 80%;
   }
   
   body {
     @apply bg-gray-50;
-    /* START: Global Scaling for entire application */
-    transform: scale(0.8);
-    transform-origin: top left;
-    /* Adjust width and height to compensate for scaling (1 / 0.8 = 1.25 or 125%) */
-    width: 125%; 
-    height: 125%; 
-    overflow-x: hidden; /* Hide horizontal overflow that might appear due to scaling */
-    /* END: Global Scaling for entire application */
+    overflow-x: hidden;
   }
   
   h1 {

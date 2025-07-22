@@ -32,7 +32,7 @@
         </div>
 
         <div class="flex gap-2">
-          <select v-model="filterCategory" class="form-input py-2 text-sm">
+          <select v-model="filterCategory" class="form-select">
             <option value="">Todas las Categorías</option>
             <option value="system">Sistema</option>
             <option value="sensors">Sensores</option>
@@ -40,7 +40,7 @@
             <option value="units">Unidades</option>
           </select>
 
-          <select v-model="filterType" class="form-input py-2 text-sm">
+          <select v-model="filterType" class="form-select">
             <option value="">Todos los Tipos</option>
             <option value="number">Número</option>
             <option value="text">Texto</option>
@@ -121,7 +121,7 @@
                   <PermissionGuard moduleId="parameters" permission="ver">
                     <ActionButton
                       icon="eye"
-                      tooltip="Ver detalles"
+                      title="Ver detalles"
                       color="primary"
                       @click="router.push(`/Parameters/${param.id}`)"
                     />
@@ -130,7 +130,7 @@
                   <PermissionGuard moduleId="parameters" permission="editar">
                     <ActionButton
                       icon="pencil"
-                      tooltip="Editar parámetro"
+                      title="Editar parámetro"
                       color="warning"
                       @click="router.push(`/parameters/${param.id}/edit`)"
                     />
@@ -139,7 +139,7 @@
                   <PermissionGuard moduleId="parameters" permission="eliminar">
                     <ActionButton
                       icon="trash"
-                      tooltip="Eliminar parámetro"
+                      title="Eliminar parámetro"
                       color="error"
                       @click="showDeleteConfirm(param)"
                     />
@@ -177,22 +177,18 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useParameterStore } from '~/stores/parameters';
-import {
-  PlusIcon,
-  MagnifyingGlassIcon as SearchIcon,
-  // ... otros íconos que uses como PencilIcon, TrashIcon
-} from '@heroicons/vue/24/outline';
-// Asegúrate de que estas rutas son correctas
-// import ActionButton from '~/components/shared/ActionButton.vue';
-// import ConfirmModal from '~/components/shared/ConfirmModal.vue';
-// import Pagination from '~/components/shared/Pagination.vue';
-// import PageHeader from '~/components/shared/PageHeader.vue';
-// import PermissionGuard from '~/components/shared/PermissionGuard.vue';
+import {PlusIcon} from '@heroicons/vue/24/outline';
 
 
 definePageMeta({
   // middleware: ['auth'],
   permission: 'parameters.ver',
+});
+
+const SearchIcon = defineComponent({
+  render: () => h('svg', { class: 'h-4 w-4', viewBox: '0 0 24 24', fill: 'currentColor' }, [
+    h('path', { d: 'M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm-8 8a10 10 0 1 1 17.32 5.92l4.68 4.68a1 1 0 0 1-1.42 1.42l-4.68-4.68A10 10 0 0 1 2 10z' })
+  ])
 });
 
 const parameterStore = useParameterStore();
@@ -319,3 +315,34 @@ watch([searchQuery, filterCategory, filterType], () => {
   currentPage.value = 1;
 });
 </script>
+
+
+<style scoped>
+.card {
+  @apply bg-white shadow rounded-lg p-6;
+}
+.form-input {
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+}
+.btn {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors;
+}
+.btn-primary {
+  @apply bg-primary-600 text-white hover:bg-primary-700;
+}
+.text-error-600 { 
+  @apply text-red-600; 
+}
+
+/* Estilo estandarizado para los selects */
+.form-select {
+  @apply block pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+}
+</style>

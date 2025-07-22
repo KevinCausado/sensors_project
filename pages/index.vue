@@ -11,10 +11,9 @@ const handleRedirect = () => {
   // Asegurarse de que el proceso de checkAuth haya terminado
   if (!authStore.isLoading) {
     if (authStore.isAuthenticated) {
-      console.log('[pages/index.vue] Authenticated, redirecting to /dashboard');
+  
       router.replace('/dashboard');
-    } else {
-      console.log('[pages/index.vue] Not authenticated, redirecting to /auth/login');
+    } else {   
       router.replace('/auth/login');
     }
   }

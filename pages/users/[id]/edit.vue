@@ -163,7 +163,7 @@ const loadUser = async () => {
                 role_id: fetchedUser.role_id || '',
                 organization_id: fetchedUser.organization_id || ''
             };
-            console.log('Usuario cargado y datos del formulario asignados:', form.value);
+            // console.log('Usuario cargado y datos del formulario asignados:', form.value);
         } else {
             console.error('Usuario no encontrado');
             router.push('/users');
@@ -189,7 +189,7 @@ const saveUser = async () => {
       is_active: user.value.is_active // Mantén el estado de activo del usuario actual
     };
 
-    console.log('Datos enviados a Supabase para actualización:', userDataToSave);
+    // console.log('Datos enviados a Supabase para actualización:', userDataToSave);
 
     await userStore.updateUser(route.params.id, userDataToSave);
 

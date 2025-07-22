@@ -118,7 +118,7 @@ const login = async () => {
           const permissionAction = childItem.permissionAction || 'view'; // Asume 'view'
           if (childItem.to && authStore.can(moduleId + '.' + permissionAction)) { // Usar authStore.can
             redirectToPath = childItem.to;
-            console.log(`[Login] User has permission for child module "${childItem.name}". Redirecting to: ${redirectToPath}`);
+            // console.log(`[Login] User has permission for child module "${childItem.name}". Redirecting to: ${redirectToPath}`);
             break; // Salir del bucle interno
           }
         }
@@ -131,7 +131,7 @@ const login = async () => {
         const permissionAction = item.permissionAction || 'view'; // Asume 'view'
         if (item.to && authStore.can(moduleId + '.' + permissionAction)) { // Usar authStore.can
           redirectToPath = item.to;
-          console.log(`[Login] User has permission for module "${item.name}". Redirecting to: ${redirectToPath}`);
+          // console.log(`[Login] User has permission for module "${item.name}". Redirecting to: ${redirectToPath}`);
           break; // Salir del bucle
         }
       }

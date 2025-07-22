@@ -57,10 +57,17 @@
               </span>
               <span class="badge badge-secondary">
                 Organización: {{ alert.organizationName || "Desconocida" }}
-              </span>
-              <span v-if="alert.assetName && alert.assetName !== 'N/A'" class="badge badge-secondary">
+              </span>         
+              <NuxtLink 
+                v-if="alert.assetName && alert.assetName !== 'N/A' && alert.asset_id" 
+                :to="`/asset-status/${alert.asset_id}`"
+                class="badge bg-gray-100 text-gray-700 hover:bg-blue-600 hover:text-white border border-transparent transition-colors duration-200 flex items-center group cursor-pointer">
                 Activo: {{ alert.assetName }}
-              </span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1.5 opacity-60 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                  <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                </svg>
+              </NuxtLink>
             </div>
             <span class="text-gray-500 flex-shrink-0">Generada {{ formatTimeAgo(alert.alert_time) }}</span>
           </div>
@@ -228,12 +235,4 @@ const handleResolveAlert = async (alertId) => {
 .badge-secondary {
   @apply bg-gray-100 text-gray-700;
 }
-
-/* Estas clases no son necesarias si el botón "Resolver" se cambia a texto */
-/* .btn-sm {
-    @apply px-3 py-1.5 text-sm rounded-md;
-}
-.btn-primary {
-  @apply bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
-} */
 </style>

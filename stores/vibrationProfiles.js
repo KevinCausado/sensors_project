@@ -63,9 +63,9 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
         if (rangesError) throw rangesError;
         this.vibrationRanges = rangesData;
 
-        console.log('[VibrationProfiles Store] Form data initialized:', {
-          vibrationRanges: this.vibrationRanges.length,
-        });
+        // console.log('[VibrationProfiles Store] Form data initialized:', {
+        //   vibrationRanges: this.vibrationRanges.length,
+        // });
 
       } catch (e) {
         console.error('Error initializing form data for vibration profiles:', e);
@@ -111,7 +111,7 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
         }));
 
         this.vibrationProfiles = enrichedData;
-        console.log('[VibrationProfiles Store] Vibration profiles loaded:', this.vibrationProfiles.length);
+        // console.log('[VibrationProfiles Store] Vibration profiles loaded:', this.vibrationProfiles.length);
 
       } catch (e) {
         console.error('Error loading vibration profiles:', e);
@@ -159,7 +159,7 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
           vibration_range_unit: data.vibration_ranges?.unit || 'N/A',
           thresholds: data.thresholds || {}, // Ensure it's an object
         };
-        console.log('[VibrationProfiles Store] Vibration profile loaded:', this.currentVibrationProfile);
+        // console.log('[VibrationProfiles Store] Vibration profile loaded:', this.currentVibrationProfile);
         return this.currentVibrationProfile;
 
       } catch (e) {
@@ -194,7 +194,7 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
 
         // After creation, reload the list to update the getter
         await this.fetchVibrationProfiles();
-        console.log('[VibrationProfiles Store] Vibration profile created:', data);
+        // console.log('[VibrationProfiles Store] Vibration profile created:', data);
         return data;
       } catch (e) {
         console.error('Error creating vibration profile:', e);
@@ -232,9 +232,9 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
         // If the updated profile is the current one, also update it
         if (this.currentVibrationProfile && this.currentVibrationProfile.id === id) {
           this.currentVibrationProfile = { ...this.currentVibrationProfile, ...dataToUpdate };
-          console.log('[VibrationProfiles Store] currentVibrationProfile updated locally');
+          // console.log('[VibrationProfiles Store] currentVibrationProfile updated locally');
         }
-        console.log('[VibrationProfiles Store] Vibration profile updated:', data);
+        // console.log('[VibrationProfiles Store] Vibration profile updated:', data);
         return data;
       } catch (e) {
         console.error('Error updating vibration profile:', e);
@@ -263,7 +263,7 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
 
         // Remove from the local list
         this.vibrationProfiles = this.vibrationProfiles.filter(profile => profile.id !== id);
-        console.log(`[VibrationProfiles Store] Vibration profile ${id} deleted.`);
+        // console.log(`[VibrationProfiles Store] Vibration profile ${id} deleted.`);
       } catch (e) {
         console.error('Error deleting vibration profile:', e);
         this.error = e.message || 'Error deleting the vibration profile.';
@@ -280,7 +280,7 @@ export const useVibrationProfileStore = defineStore('vibrationProfiles', {
      */
     setSearchQuery(query) {
       this.searchQuery = query;
-      console.log(`[VibrationProfiles Store] Search query set to: "${query}"`);
+      // console.log(`[VibrationProfiles Store] Search query set to: "${query}"`);
       // If this store directly managed pagination (e.g., currentPage), you'd reset it here:
       // this.currentPage = 1;
     },

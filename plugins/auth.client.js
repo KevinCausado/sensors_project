@@ -6,7 +6,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
 
   // Solo si el store no tiene usuario o perfil, intenta cargar la sesión
   if (!authStore.user || !authStore.userProfile) {
-    console.log('[Auth Plugin] Initializing Auth Store on client startup...');
+    // console.log('[Auth Plugin] Initializing Auth Store on client startup...');
     authStore.isLoading = true; // Indicar que hay una carga en progreso
 
     try {
@@ -18,17 +18,17 @@ export default defineNuxtPlugin(async (nuxtApp) => {
 
       if (session && session.user) {
         authStore.user = session.user;
-        console.log('[Auth Plugin] Supabase session user loaded:', session.user.id);
+        // console.log('[Auth Plugin] Supabase session user loaded:', session.user.id);
         // Asegúrate de que el perfil y los permisos estén cargados
         if (!authStore.userProfile) {
-            console.log('[Auth Plugin] Ensuring user profile exists after session load.');
+            // console.log('[Auth Plugin] Ensuring user profile exists after session load.');
             await authStore.ensureUserProfileExists(session.user.id);
         }
       } else {
         authStore.user = null;
         authStore.userProfile = null;
         authStore.permissions = {};
-        console.log('[Auth Plugin] No active Supabase session.');
+        // console.log('[Auth Plugin] No active Supabase session.');
       }
     } catch (error) {
       console.error('[Auth Plugin] Error during auth store initialization:', error);
@@ -37,7 +37,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
       authStore.permissions = {};
     } finally {
       authStore.isLoading = false; // Finalizar carga
-      console.log('[Auth Plugin] Auth Store initialization complete.');
+      // console.log('[Auth Plugin] Auth Store initialization complete.');
     }
   }
 

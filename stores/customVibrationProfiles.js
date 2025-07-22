@@ -9,6 +9,14 @@ export const useCustomVibrationProfileStore = defineStore('customVibrationProfil
     error: null,
   }),
 
+
+    getters: {    
+    getProfileById: (state) => (id) => {
+      if (!id || !state.profiles) return null;
+      return state.profiles.find(profile => profile.id === id);
+    },
+  },
+
   actions: {
     async fetchSupportData() {
         if (this.rigidityTypes.length > 0) return;
@@ -50,7 +58,6 @@ export const useCustomVibrationProfileStore = defineStore('customVibrationProfil
       }
     },
 
-    // ++ NUEVA ACCIÓN: Obtener un solo perfil para editarlo ++
     async fetchProfileById(id) {
         this.loading = true;
         this.error = null;
@@ -95,14 +102,15 @@ export const useCustomVibrationProfileStore = defineStore('customVibrationProfil
         this.loading = false;
       }
     },
-
-    // ++ NUEVA ACCIÓN: Actualizar un perfil y sus rangos ++
+   
     async updateProfileWithRanges(id, profileData) {
         this.loading = true;
         this.error = null;
         try {
             const { $supabase } = useNuxtApp();
-            const { error } = await $supabase.rpc('update_custom_profile_with_ranges', {
+
+           
+            const { error: updateError } = await $supabase.rpc('update_custom_profile_with_ranges', {
                 profile_id: id,
                 profile_name: profileData.name,
                 profile_description: profileData.description,
@@ -113,9 +121,24 @@ export const useCustomVibrationProfileStore = defineStore('customVibrationProfil
                     max_value: range.max_value
                 }))
             });
-            if (error) throw error;
+
+            if (updateError) throw updateError;
+            
+            // console.log(`Sincronizando sensores para el perfil ${id}...`);
+            const { error: syncError } = await $supabase.rpc('sync_sensors_for_profile', {
+                p_profile_id: id
+            });
+
+            if (syncError) {                
+                console.error('Error al sincronizar los umbrales de los sensores:', syncError);                
+                throw new Error(`El perfil se actualizó correctamente, pero falló la sincronización de los sensores asociados: ${syncError.message}`);
+            }
+            
+            // console.log('¡Sincronización de sensores completada!');
+            
             await this.fetchProfiles();
-        } catch (e) {
+
+        } catch (e) {         
             this.error = e.message;
         } finally {
             this.loading = false;

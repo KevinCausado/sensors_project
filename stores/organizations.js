@@ -249,7 +249,7 @@ export const useOrganizationStore = defineStore('organizations', {
           }
           // FIN DEL CAMBIO
         }
-        console.log('Organización cargada con relaciones (para depuración):', data); // Depuración crítica
+        // console.log('Organización cargada con relaciones (para depuración):', data); // Depuración crítica
         this.selectedOrganization = data;
         return data;
 
@@ -269,7 +269,7 @@ export const useOrganizationStore = defineStore('organizations', {
      * @param {string|null} orgId - El ID de la organización a seleccionar, o null para "Todas las organizaciones".
      */
     setSelectedOrganizationId(orgId) {
-      console.log(`[Organization Store] setSelectedOrganizationId llamado con ID: ${orgId}`);
+      // console.log(`[Organization Store] setSelectedOrganizationId llamado con ID: ${orgId}`);
       this.selectedOrganizationId = orgId;
     },
   },

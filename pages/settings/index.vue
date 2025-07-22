@@ -88,6 +88,6 @@ const settings = ref({
 // Métodos
 const saveSettings = async () => {
   // Implementación para guardar configuración
-  console.log('Guardando configuración:', settings.value);
+  // console.log('Guardando configuración:', settings.value);
 };
 </script>

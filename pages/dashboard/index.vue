@@ -11,7 +11,7 @@
         icon="sensor"
         color="primary"
         :trend="sensorTrend"
-        :percentage="Math.abs(totalSensorsPercentage).toFixed(1)" />
+        :percentage="Number(Math.abs(totalSensorsPercentage).toFixed(1))" />
 
       <StatCard
         title="Alertas Activas"
@@ -19,14 +19,14 @@
         icon="alert"
         color="error"
         :trend="alertTrend"
-        :percentage="Math.abs(activeAlertsPercentage).toFixed(1)" />
+        :percentage="Number(Math.abs(activeAlertsPercentage).toFixed(1))" />
 
       <StatCard
         title="Total Sensores Activos" :value="activeSensors"
         icon="sensor"
         color="success"
         :trend="activeSensorTrend"
-        :percentage="Math.abs(activeSensorsPercentage).toFixed(1)" />
+        :percentage="Number(Math.abs(activeSensorsPercentage).toFixed(1))" />
      
       <StatCard
         title="Activos Operativos"
@@ -34,7 +34,7 @@
         icon="asset"
         color="success"
         :trend="activeAssetTrend"
-        :percentage="Math.abs(activeAssetsPercentage).toFixed(1)" />
+        :percentage="Number(Math.abs(activeAssetsPercentage).toFixed(1))" />
     </div>
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -157,38 +157,6 @@
           <AlertList :alerts="displayedAlerts" :loading="loading" />
         </div>
       </div>
-
-      <!-- <div class="card lg:col-span-2">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-medium text-gray-900">Monitoreo en Tiempo Real</h2>
-          <button
-            @click="expandedSection = expandedSection === 'chart' ? null : 'chart'"
-            class="text-sm text-primary-600 hover:text-primary-500">
-            {{ expandedSection === 'chart' ? 'Ver menos' : 'Ver todo' }}
-          </button>
-        </div>
-
-        <div class="mb-4 flex flex-wrap gap-2">
-          <label v-for="sensor in availableSensorsForSelection"
-                  :key="sensor.id"
-                  class="inline-flex items-center">
-            <input type="checkbox"
-                    v-model="selectedSensorIds"
-                    :value="sensor.id"
-                    class="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300" />
-            <span class="ml-2 text-sm text-gray-700">{{ sensor.name }}</span>
-            <span v-if="sensor.assetName" class="ml-1 text-xs text-gray-500">({{ sensor.assetName }})</span>
-          </label>
-          <p v-if="availableSensorsForSelection.length === 0 && !sensorStore.isLoading" class="text-sm text-gray-500">No hay sensores activos para monitorear en esta organización.</p>
-           <p v-if="sensorStore.isLoading" class="text-sm text-gray-500">Cargando sensores para seleccionar...</p>
-        </div>
-
-        <SensorChart
-          :sensors="realtimeSelectedSensorsForChart"
-          :height="expandedSection === 'chart' ? 600 : 300"
-          :show-time-range-controls="true"
-        />
-      </div> -->
     </div>
   </div>
 </template>
@@ -235,48 +203,32 @@ const calculatePercentageChange = (current, previous) => {
 // Stats (valores actuales)
 const totalSensors = computed(() => {
     const count = sensorStore.filteredSensors.length;
-    console.log(`[Dashboard Computed] totalSensors: ${count} (depende de filteredSensors)`);
     return count;
 });
 
 const activeAlerts = computed(() => {
   const selectedOrgId = organizationStore.selectedOrganizationId;
-  console.log(`[activeAlerts Computed] selectedOrganizationId: ${selectedOrgId}`);
-  console.log(`[activeAlerts Computed] alertStore.alerts ANTES DE FILTRAR:`, JSON.parse(JSON.stringify(alertStore.alerts)));
-
   const filtered = alertStore.alerts.filter(alert => {
     const statusMatch = (alert.status === 'active');
-    // MANTENEMOS ESTA LÍNEA TAL CUAL COMO EN TU CÓDIGO ORIGINAL
     const orgMatch = (selectedOrgId === null || alert.organization_id === selectedOrgId); 
-    
-    console.log(`  - Alerta ID: ${alert.id} | Status: ${alert.status} (Match: ${statusMatch}) | Alert Org ID: ${alert.organization_id} | Selected Org ID: ${selectedOrgId} (Match: ${orgMatch}) | TOTAL MATCH: ${statusMatch && orgMatch}`);
-    
     return statusMatch && orgMatch;
   });
   const count = filtered.length;
-  console.log(`[activeAlerts Computed] activeAlerts count DESPUÉS DE FILTRAR: ${count}`);
   return count;
 }); 
 
 const totalAlerts = computed(() => {
   const selectedOrgId = organizationStore.selectedOrganizationId;
-  console.log(`[totalAlerts Computed] selectedOrganizationId: ${selectedOrgId}`);
-  console.log(`[totalAlerts Computed] alertStore.alerts ANTES DE FILTRAR:`, JSON.parse(JSON.stringify(alertStore.alerts)));
-
   const filtered = alertStore.alerts.filter(alert => {
-    // MANTENEMOS ESTA LÍNEA TAL CUAL COMO EN TU CÓDIGO ORIGINAL
     const orgMatch = (selectedOrgId === null || alert.organization_id === selectedOrgId);
-    console.log(`  - Alerta ID: ${alert.id} | Org ID: ${alert.organization_id} | Selected Org ID: ${selectedOrgId} (Match: ${orgMatch})`); // Añadido más detalle aquí también
     return orgMatch;
   });
   const count = filtered.length;
-  console.log(`[totalAlerts Computed] totalAlerts count DESPUÉS DE FILTRAR: ${count}`);
   return count;
 }); 
 
 const activeSensors = computed(() => {
     const count = sensorStore.filteredSensors.filter(s => s.status === 'active').length;
-    console.log(`[Dashboard Computed] activeSensors: ${count} (depende de filteredSensors)`);
     return count;
 });
 
@@ -332,7 +284,6 @@ const activeAssetTrend = 'up';
 // Propiedades computadas para la visualización de listas
 const displayedSensors = computed(() => {
   const sensors = sensorStore.recentSensors; 
-  console.log('[Dashboard Computed] displayedSensors (Sensores Recientes) evaluado. Cantidad:', sensors.length, 'Primeros 3 IDs:', sensors.slice(0,3).map(s => s.id));
   return expandedSection.value === 'sensors' ? sensors : sensors.slice(0, 3);
 });
 
@@ -346,14 +297,12 @@ const displayedAssets = computed(() => {
       const dateB = new Date(b.updated_at || b.created_at || 0);
       return dateB - dateA; 
   });
-  console.log('[Dashboard Computed] displayedAssets (Activos Recientes) evaluado. Cantidad:', assets.length, 'Primeros 3 IDs:', assets.slice(0,3).map(a => a.id));
   return expandedSection.value === 'assets' ? assets : assets.slice(0, 3);
 });
 
 
 const displayedAlerts = computed(() => {
   const alerts = alertStore.filteredAlerts; 
-  console.log('[Dashboard Computed] displayedAlerts (Alertas Recientes) evaluado. Cantidad:', alerts.length, 'Primeras 3 IDs:', alerts.slice(0,3).map(a => a.id));
   return expandedSection.value === 'alerts' ? alerts : alerts.slice(0, 3);
 });
 
@@ -365,7 +314,6 @@ const availableSensorsForSelection = computed(() => {
       const dateB = b.lastReading ? new Date(b.lastReading) : (b.createdAt ? new Date(b.createdAt) : new Date(0));
       return dateB - dateA;
     });
-    console.log('[Dashboard Computed] availableSensorsForSelection (para Gráfica) evaluado. Cantidad:', sensors.length, 'IDs de sensores disponibles:', sensors.map(s => s.id));
     return sensors;
 });
 
@@ -375,14 +323,13 @@ const realtimeSelectedSensorsForChart = computed(() => {
     .filter(id => currentFilteredSensorIds.includes(id)) 
     .map(id => {
       const sensorDetails = sensorStore.sensors.find(s => s.id === id); 
-      // Usar el getter del store para obtener las lecturas acumuladas para la gráfica
       const readings = sensorStore.getReadingsBySensorId(id) || []; 
       return sensorDetails ? {
         ...sensorDetails,
         readings: readings,
       } : null;
     }).filter(Boolean);
-    console.log('[Dashboard Computed] realtimeSelectedSensorsForChart evaluado. Cantidad:', selected.length, 'IDs seleccionados para gráfica:', selectedSensorIds.value, 'IDs de sensores filtrados actualmente:', currentFilteredSensorIds);
+  
     return selected;
 });
 
@@ -431,20 +378,14 @@ const getAssetDisplayLocation = (asset) => {
 
 // --- Funciones para clases de estilo y texto de Sensores/Activos ---
 
-// Clases para el fondo del ITEM completo para Sensores (cambiado a gris suave)
 const getSensorItemBgClass = (status) => {
-  // Se usa un color fijo de fondo para los ítems de sensores
   return 'bg-gray-50 border-gray-100'; 
 };
 
-// Clases para el fondo del ITEM completo para Activos (cambiado a gris suave)
 const getAssetItemBgClass = (isActive) => {
-  // Se usa un color fijo de fondo para los ítems de activos
   return 'bg-gray-50 border-gray-100';
 };
 
-
-// Clases para el TEXTO y FONDO del BADGE (igual que los badges de alerta)
 const getSensorStatusClass = (status) => {
   switch (status) {
     case 'active': return 'badge bg-green-100 text-green-800';
@@ -467,7 +408,6 @@ const getAssetStatusClass = (isActive) => {
   return isActive ? 'badge bg-green-100 text-green-800' : 'badge bg-red-100 text-red-800';
 };
 
-// Clases para el FONDO y TEXTO del CÍRCULO del ICONO (similar a los iconos de alerta)
 const getSensorIconBgClass = (status) => {
   switch (status) {
     case 'active': return 'bg-green-100 text-green-700';
@@ -481,7 +421,6 @@ const getAssetIconBgClass = (isActive) => {
   return isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
 };
 
-// Nuevas clases de badges específicos para el contenido
 const getBadgeSecondaryClass = () => 'badge bg-gray-200 text-gray-700'; 
 const getBadgeInfoClass = () => 'badge bg-blue-100 text-blue-700';     
 const getBadgeTimeClass = () => 'badge bg-gray-100 text-gray-600';     
@@ -491,36 +430,13 @@ const getBadgeDescriptionClass = () => 'badge bg-rose-100 text-rose-700';
 
 // --- Watchers y Ciclo de Vida ---
 
-watch(selectedSensorIds, (newIds, oldIds) => {
-  console.log('[Dashboard Watcher] selectedSensorIds ha cambiado. Nuevos IDs:', newIds, 'Antiguos IDs:', oldIds);
-  if (oldIds && oldIds.length > 0 && newIds.length === 0) { 
-     // Usar el método correcto para desuscribirse de todos los gráficos
-     sensorStore.unsubscribeFromAllGraphReadings();
-     console.log('[Dashboard Watcher] selectedSensorIds vacíos, desuscrito de todos los gráficos explícitamente.');
-  } else if (newIds && newIds.length > 0) { 
-    // Usar el método correcto para suscribirse a los gráficos
-    sensorStore.subscribeToGraphReadings(newIds);
-    console.log(`[Dashboard Watcher] Llamando a subscribeToGraphReadings con: ${newIds.length} IDs.`);
-  } else {
-    console.log('[Dashboard Watcher] selectedSensorIds sin cambios significativos para suscripción/desuscripción.');
-  }
-}, { immediate: false }); 
-
 
 watch(() => organizationStore.selectedOrganizationId, async (newOrgId, oldOrgId) => {
-  console.groupCollapsed(`[Dashboard Watcher] organizationStore.selectedOrganizationId ha cambiado de ${oldOrgId} a ${newOrgId}.`);
-  console.log('  - Paso 1: Desuscribiendo y limpiando selección previa de sensores para gráfica.');
-  // Usar el método correcto para desuscribirse de todos los gráficos
-  await sensorStore.unsubscribeFromAllGraphReadings(); 
   selectedSensorIds.value = []; 
-  // Limpiar explícitamente las lecturas en tiempo real
   sensorStore.allSensorRecentReadings = {}; 
 
-  // ESENCIAL: Asegurar que los datos de referencia y organizaciones se carguen primero
-  // Esto es vital para el mapeo en fetchAssets y fetchSensors
-  await assetStore.initializeDataForForms(); // Cargar tipos de activo, etc.
-  await organizationStore.fetchOrganizations(); // Cargar la lista de organizaciones
-
+  await assetStore.initializeDataForForms();
+  await organizationStore.fetchOrganizations();
 
   await Promise.all([
       sensorStore.fetchSensors(),
@@ -528,29 +444,21 @@ watch(() => organizationStore.selectedOrganizationId, async (newOrgId, oldOrgId)
       assetStore.fetchAssets() 
   ]);
 
-  console.log('  - Paso 2: Esperando nextTick para la reactividad de las computadas.');
   await nextTick(); 
-  
-  console.log('  - Paso 3: availableSensorsForSelection DESPUÉS de nextTick. Cantidad:', availableSensorsForSelection.value.length, 'IDs:', availableSensorsForSelection.value.map(s => s.id));
   
   if (availableSensorsForSelection.value.length > 0) {
       const newSelectedIds = availableSensorsForSelection.value.map(s => s.id);
       selectedSensorIds.value = newSelectedIds; 
-      console.log('  - Paso 4: Sensores re-seleccionados para la nueva organización:', organizationStore.selectedOrganizationId);
   } else {
-      console.log('  - Paso 4: No hay sensores activos para la nueva organización. selectedSensorIds permanecerán vacíos.');
   }
-  console.groupEnd();
 }, { immediate: true }); 
 
 
 onMounted(async () => {
     loading.value = true;
-    console.groupCollapsed('[Dashboard onMounted] Iniciando carga de datos...');
     try {
-        // ESENCIAL: Cargar datos de referencia y organizaciones PRIMERO
-        await assetStore.initializeDataForForms(); // Cargar tipos de activo, etc.
-        await organizationStore.fetchOrganizations(); // Cargar la lista de organizaciones
+        await assetStore.initializeDataForForms();
+        await organizationStore.fetchOrganizations();
 
         await Promise.all([
             sensorStore.fetchSensors(), 
@@ -558,21 +466,10 @@ onMounted(async () => {
             assetStore.fetchAssets() 
         ]);
 
-        console.log('[Dashboard onMounted] DESPUÉS DE PROMISE.ALL - Estados de Stores:');
-        console.log(`  - organizationStore.selectedOrganizationId: ${organizationStore.selectedOrganizationId}`);
-        console.log(`  - sensorStore.sensors.length (TODOS los sensores en el store): ${sensorStore.sensors.length}`);
-        console.log(`  - alertStore.alerts.length (TODAS las alertas en el store): ${alertStore.alerts.length}`);
-        console.log(`  - organizationStore.organizations.length: ${organizationStore.organizations.length}`);
-        console.log(`  - assetStore.assets.length: ${assetStore.assets.length}`);
-        console.log(`  - sensorStore.filteredSensors.length (SENSORES YA FILTRADOS al cargar): ${sensorStore.filteredSensors.length}`);
-
         if (selectedSensorIds.value.length === 0 && availableSensorsForSelection.value.length > 0) {
-            console.log('[Dashboard onMounted] Auto-seleccionando sensores con lecturas para la gráfica en la carga inicial.');
             selectedSensorIds.value = availableSensorsForSelection.value.map(s => s.id);
         } else if (availableSensorsForSelection.value.length === 0) {
-             console.log('[Dashboard onMounted] No hay sensores activos disponibles con lecturas para seleccionar en la carga inicial.');
         }
-
 
         const now = new Date();
         const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -591,31 +488,17 @@ onMounted(async () => {
         if (errAssetsYesterday) console.error("Error al obtener el total de activos hace 24h:", errAssetsTwentyFourHoursAgo);
         previousTotalAssets.value = totalAssetsTwentyFourHoursAgo || 0;
         
-        console.log('[Dashboard.vue - onMounted] Preparando para iniciar suscripciones Realtime GENERALES...');
-
         alertStore.subscribeToAlertUpdates();
-        console.log('--- alertStore.subscribeToAlertUpdates() ha sido llamada ---');
-
         sensorStore.subscribeToSensorUpdates();
-        console.log('--- sensorStore.subscribeToSensorUpdates() ha sido llamada ---');
-        
-        // ELIMINADO: sensorStore.subscribeToDashboardRecentReadings(); // Esta línea es la que causa el problema para el gráfico
-        // console.log('--- sensorStore.subscribeToDashboardRecentReadings() ha sido llamada ---'); // También eliminar este log
-
     } catch (error) {
         console.error("[Dashboard] Error al cargar el dashboard:", error);
     } finally {
         loading.value = false;
-        console.groupEnd();
     }
 });
 
 onUnmounted(async () => {
-  console.log('[Dashboard.vue - onUnmounted] Desuscribiendo de los canales de Realtime...');
-  // Usar el método correcto para desuscribirse de todos los gráficos
-  await sensorStore.unsubscribeFromAllGraphReadings(); 
   await sensorStore.unsubscribeFromSensorUpdates();      
-  // ELIMINADO: await sensorStore.unsubscribeFromDashboardRecentReadings(); // Esta línea también debe eliminarse
   await alertStore.unsubscribeFromAlertUpdates();         
 });
 </script>
@@ -638,12 +521,11 @@ onUnmounted(async () => {
 }
 
 /* Colores de fondo de los ITEMS */
-/* Para Sensores y Activos, un gris muy suave para diferenciarse un poco más del blanco */
 .bg-gray-50 { background-color: #F9FAFB; }
 .border-gray-100 { border-color: #F3F4F6; }
 
 
-/* Colores de fondo de BADGE y FONDO de CÍRCULO de ÍCONO (igual que AlertList.vue) */
+/* Colores de fondo de BADGE y FONDO de CÍRCULO de ÍCONO */
 .bg-red-100 { background-color: #FEE2E2; }
 .bg-yellow-100 { background-color: #FEF3C7; }
 .bg-green-100 { background-color: #DCFCE7; }
@@ -656,14 +538,14 @@ onUnmounted(async () => {
 .bg-rose-100 { background-color: #FFE4E6; } 
 
 
-/* Colores de TEXTO para CÍRCULO de ÍCONO (copiados de AlertList.vue) */
+/* Colores de TEXTO para CÍRCULO de ÍCONO */
 .text-red-700 { color: #B91C1C; }
 .text-yellow-700 { color: #B45309; }
 .text-green-700 { color: #15803D; }
 .text-gray-700 { color: #374151; }
 
 
-/* Colores de TEXTO para BADGE (copiados de AlertList.vue) */
+/* Colores de TEXTO para BADGE */
 .text-red-800 { color: #991B1B; }
 .text-yellow-800 { color: #92400E; }
 .text-green-800 { color: #14532D; }

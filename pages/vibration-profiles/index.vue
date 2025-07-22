@@ -16,11 +16,12 @@
     </PageHeader>
 
     <div class="space-y-8">
-      <!-- Este componente ahora tendrá el botón de editar para cada perfil -->
+      <!-- Sección de perfiles personalizados -->
       <customProfilesSection />
 
       <div class="border-t border-gray-200 my-10"></div>
       
+      <!-- Sección de estándares ISO -->
       <isoStandardsSection />
     </div>
   </div>
@@ -29,9 +30,8 @@
 <script setup>
 import { PlusIcon } from "@heroicons/vue/24/outline";
 import PageHeader from '~/components/PageHeader.vue';
-// ++ CORREGIDO: Se ajustan las rutas de importación a la carpeta de componentes ++
-import customProfilesSection from '~/pages/vibration-profiles/CustomProfilesSection.vue';
-import isoStandardsSection from '~/pages/vibration-profiles/IsoStandardsSection.vue';
+import customProfilesSection from './customProfilesSection.vue';
+import isoStandardsSection from './isoStandardsSection.vue';
 
 definePageMeta({
   permission: "vibration_profiles.ver", 

@@ -17,11 +17,8 @@
     <div v-else class="space-y-6">
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-4">
         <StatCard title="Total Usuarios" :value="organization.users?.length || 0" icon="user" color="primary" />
-
         <StatCard title="Total Activos (Assets)" :value="organization.assets_base?.length || 0" icon="asset" color="info" />
-
         <StatCard title="Total Sensores" :value="organization.sensors?.length || 0" icon="sensor" color="success" />
-
         <StatCard title="Alertas Activas" :value="organization.alerts?.filter((alert) => alert.status !== 'resolved').length || 0" icon="alert" color="warning" />
       </div>
 
@@ -40,9 +37,9 @@
             <p class="text-sm font-medium text-gray-500">Email de Contacto</p>
             <p class="text-primary-600">{{ organization.contact_email }}</p>
           </div>
-          <div v-if="organization.contact_phone">
+          <div v-if="organization.phone_number">
             <p class="text-sm font-medium text-gray-500">Teléfono de Contacto</p>
-            <p class="text-gray-900">{{ organization.contact_phone }}</p>
+            <p class="text-gray-900">{{ organization.phone_number  }}</p>
           </div>
           <div class="mb-4">
             <p class="form-label">Ubicación Geográfica (Organización)</p>
@@ -63,11 +60,6 @@
             <p class="text-sm font-medium text-gray-500">Dirección</p>
             <p class="text-gray-900">{{ organization.address }}</p>
           </div>
-
-          <!-- <div v-if="organization.logo_url">
-            <p class="text-sm font-medium text-gray-500">Logo</p>
-            <img :src="organization.logo_url" alt="Logo de la organización" class="h-16 w-auto object-contain mt-2" />
-          </div> -->
           <div>
             <p class="text-sm font-medium text-gray-500">Estado</p>
             <span :class="`badge ${organization.is_active ? 'badge-success' : 'badge-danger'}`">
@@ -85,29 +77,27 @@
         </div>
       </div>
 
-      <div class="card p-6">
+       <div class="card p-6">
         <h3 class="text-lg font-semibold mb-4">Usuarios de la Organización ({{ organization.users?.length || 0 }})</h3>
         <div v-if="organization.users && organization.users.length > 0" class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rol</th>
-                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teléfono</th>
-                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                <th class="px-6 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>                
+                <th class="px-6 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rol</th>               
+                <th class="px-6 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="user in organization.users" :key="user.id">
                 <td class="px-6 py-4 whitespace-nowrap">{{ user.first_name }} {{ user.last_name }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ user.email }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-6 py-4 whitespace-nowrap text-center">{{ user.email }}</td>               
+                <td class="px-6 py-4 whitespace-nowrap text-center">
                   <span :class="`badge ${getRoleBadgeClass(user.roleName)}`">{{ translateRole(user.roleName) }}</span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ user.phone || "N/A" }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
+                </td>             
+                <td class="px-6 py-4 whitespace-nowrap text-center">
                   <span :class="`badge ${user.is_active ? 'badge-success' : 'badge-danger'}`">
                     {{ user.is_active ? "Activo" : "Inactivo" }}
                   </span>
@@ -183,13 +173,12 @@
       </div>
 
       <div class="card p-6">
-        <h3 class="text-lg font-semibold mb-4">Alertas de la Organización ({{ organization.alerts?.length || 0 }})</h3>
-        <div v-if="organization.alerts && organization.alerts.length > 0" class="overflow-x-auto">
+        <h3 class="text-lg font-semibold mb-4">Alertas de la Organización ({{ totalAlerts }})</h3>
+        <div v-if="paginatedAlerts && paginatedAlerts.length > 0" class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activo</th>
-                <!-- NUEVO: Columna para el nombre del Activo -->
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mensaje</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
@@ -199,11 +188,9 @@
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-              <tr v-for="alert in organization.alerts" :key="alert.id">
+              <tr v-for="alert in paginatedAlerts" :key="alert.id">
                 <td class="px-6 py-4 whitespace-nowrap">{{ alert.assetName || "N/A" }}</td>
-                <!-- NUEVO: Celda para el nombre del Activo -->
-                <td class="px-6 py-4 whitespace-nowrap">{{ alert.type || "N/A" }}</td>
-                <!-- Modificación aquí: Permitir salto de línea y texto más pequeño -->
+                <td class="px-6 py-4 whitespace-nowrap">{{ translateAlertType(alert.type) }}</td>
                 <td class="px-6 py-4 text-xs text-gray-600 align-top max-w-xs break-words">
                   {{ alert.description || "N/A" }}
                 </td>
@@ -224,6 +211,15 @@
           </table>
         </div>
         <div v-else class="text-center text-gray-500 py-4">No hay alertas asociadas a esta organización.</div>
+        
+        <div class="mt-4" v-if="totalAlerts > alertsPerPage">
+          <Pagination
+            :total-items="totalAlerts"
+            :current-page="currentAlertPage"
+            :items-per-page="alertsPerPage"
+            @page-change="handleAlertPageChange"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -235,6 +231,7 @@ import { useRoute } from "vue-router";
 import { useOrganizationStore } from "~/stores/organizations";
 import PageHeader from "~/components/PageHeader.vue";
 import StatCard from "~/components/StatCard.vue";
+import Pagination from "~/components/Pagination.vue";
 
 const route = useRoute();
 const organizationStore = useOrganizationStore();
@@ -242,92 +239,69 @@ const organizationStore = useOrganizationStore();
 const loading = ref(true);
 const organization = ref(null);
 
-const getRoleBadgeClass = (role) => {
-  switch (role) {
-    case "super-admin":
-      return "badge-primary";
-    case "admin":
-      return "badge-info";
-    case "technician":
-      return "badge-warning";
-    case "viewer":
-      return "badge-secondary";
-    default:
-      return "badge-light";
+const currentAlertPage = ref(1);
+const alertsPerPage = ref(5);
+
+const paginatedAlerts = computed(() => {
+  if (!organization.value || !organization.value.alerts) {
+    return [];
   }
+  const sortedAlerts = [...organization.value.alerts].sort((a, b) => new Date(b.alert_time) - new Date(a.alert_time));
+  
+  const start = (currentAlertPage.value - 1) * alertsPerPage.value;
+  const end = start + alertsPerPage.value;
+  return sortedAlerts.slice(start, end);
+});
+
+const totalAlerts = computed(() => organization.value?.alerts?.length || 0);
+
+const handleAlertPageChange = (page) => {
+  currentAlertPage.value = page;
+};
+
+const getRoleBadgeClass = (role) => {
+  const roles = { "super-admin": "badge-primary", admin: "badge-info", technician: "badge-warning", viewer: "badge-secondary" };
+  return roles[role] || "badge-light";
 };
 
 const translateRole = (role) => {
-  const roles = {
-    "super-admin": "Super Admin",
-    admin: "Administrador",
-    technician: "Técnico",
-    viewer: "Visualizador",
-  };
+  const roles = { "super-admin": "Super Admin", admin: "Administrador", technician: "Técnico", viewer: "Visualizador" };
   return roles[role] || role;
 };
 
 const getSensorStatusBadgeClass = (status) => {
-  switch (status) {
-    case "active":
-      return "badge-success";
-    case "inactive":
-      return "badge-danger";
-    case "maintenance":
-      return "badge-warning";
-    case "error":
-      return "badge-error";
-    default:
-      return "badge-light";
-  }
+  const statuses = { active: "badge-success", inactive: "badge-danger", maintenance: "badge-warning", error: "badge-error" };
+  return statuses[status] || "badge-light";
 };
 
 const translateStatus = (status) => {
-  const statuses = {
-    active: "Activo",
-    inactive: "Inactivo",
-    maintenance: "Mantenimiento",
-    error: "Error",
-    new: "Nueva",
-    acknowledged: "Reconocida",
-    resolved: "Resuelta",
-  };
+  const statuses = { active: "Activa", inactive: "Inactivo", maintenance: "Mantenimiento", error: "Error", new: "Nueva", acknowledged: "Reconocida", resolved: "Resuelta" };
   return statuses[status] || status;
 };
 
+const translateAlertType = (type) => {
+  const types = {
+    vibration: 'Vibración',
+    temperature: 'Temperatura',
+    connectivity: 'Conectividad',
+    data_issue: 'Dato Anómalo'
+  };
+  return types[type] || type;
+};
+
 const getAlertPriorityBadgeClass = (priority) => {
-  switch (priority) {
-    case "high":
-      return "badge-danger";
-    case "medium":
-      return "badge-warning";
-    case "low":
-      return "badge-info";
-    default:
-      return "badge-light";
-  }
+  const priorities = { high: "badge-danger", medium: "badge-warning", low: "badge-info" };
+  return priorities[priority] || "badge-light";
 };
 
 const translatePriority = (priority) => {
-  const priorities = {
-    high: "Alta",
-    medium: "Media",
-    low: "Baja",
-  };
+  const priorities = { high: "Alta", medium: "Media", low: "Baja" };
   return priorities[priority] || priority;
 };
 
 const getAlertStatusBadgeClass = (status) => {
-  switch (status) {
-    case "new":
-      return "badge-danger";
-    case "acknowledged":
-      return "badge-warning";
-    case "resolved":
-      return "badge-success";
-    default:
-      return "badge-light";
-  }
+  const statuses = { new: "badge-danger", acknowledged: "badge-warning", resolved: "badge-secondary" };
+  return statuses[status] || "badge-success";
 };
 
 const formatDate = (dateString) => {
@@ -336,10 +310,8 @@ const formatDate = (dateString) => {
   return date.toLocaleDateString("es-ES") + " " + date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 };
 
-// NUEVA FUNCIÓN: Para mostrar la ubicación geográfica de los activos
 const getAssetLocation = (asset) => {
   const parts = [];
-  // Usa asset.city, asset.state, asset.country
   if (asset.city) parts.push(asset.city);
   if (asset.state) parts.push(asset.state);
   if (asset.country) parts.push(asset.country);
@@ -373,32 +345,15 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* Las clases de badge permanecen como estaban, no es necesario incluirlas en la respuesta final a menos que haya cambios */
 .badge {
   @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
 }
-.badge-success {
-  @apply bg-green-100 text-green-800;
-}
-.badge-danger {
-  @apply bg-red-100 text-red-800;
-}
-.badge-primary {
-  @apply bg-indigo-100 text-indigo-800;
-}
-.badge-info {
-  @apply bg-blue-100 text-blue-800;
-}
-.badge-warning {
-  @apply bg-yellow-100 text-yellow-800;
-}
-.badge-error {
-  @apply bg-red-100 text-red-800;
-}
-.badge-secondary {
-  @apply bg-gray-100 text-gray-800;
-}
-.badge-light {
-  @apply bg-gray-50 text-gray-500;
-}
+.badge-success { @apply bg-green-100 text-green-800; }
+.badge-danger { @apply bg-red-100 text-red-800; }
+.badge-primary { @apply bg-indigo-100 text-indigo-800; }
+.badge-info { @apply bg-blue-100 text-blue-800; }
+.badge-warning { @apply bg-yellow-100 text-yellow-800; }
+.badge-error { @apply bg-red-100 text-red-800; }
+.badge-secondary { @apply bg-gray-100 text-gray-800; }
+.badge-light { @apply bg-gray-50 text-gray-500; }
 </style>

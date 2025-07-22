@@ -53,11 +53,11 @@
           <p v-if="sensorStore.isLoading" class="text-sm text-gray-500">Cargando sensores...</p>
         </div>
 
+        <!-- El componente SensorChart ahora es autosuficiente y recibe la lista de sensores seleccionados -->
         <SensorChart
-          v-if="realtimeSelectedSensorsForChart.length > 0"
-          :sensors="realtimeSelectedSensorsForChart"
+          v-if="selectedSensorsForChart.length > 0"
+          :sensors="selectedSensorsForChart"
           :height="400"
-          :show-time-range-controls="true"
           initial-empty-message="Seleccione uno o más sensores para ver su historial de lecturas."
           empty-data-message="No hay lecturas disponibles para los sensores seleccionados en el rango de tiempo actual."
         />
@@ -106,14 +106,17 @@
           <table class="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mensaje</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Generada el</th>
+                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resuelta el</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="alert in paginatedAlertsForCurrentAsset" :key="alert.id">
+                <td class="px-6 py-4 whitespace-nowrap">{{ translateAlertType(alert.type) }}</td>
                 <td class="px-6 py-4 text-xs text-gray-600 align-top max-w-xs break-words">
                     {{ alert.description || 'N/A' }}
                 </td>
@@ -128,6 +131,7 @@
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(alert.alert_time) }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ formatDate(alert.resolved_time) }}</td>
               </tr>
             </tbody>
           </table>
@@ -149,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
+import { ref, onMounted, computed, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAssetStore } from '~/stores/assets';
 import { useSensorStore } from '~/stores/sensors';
@@ -185,9 +189,10 @@ const loadAssetData = async () => {
       await sensorStore.fetchSensors();
       await alertStore.fetchAlerts();
 
+      // Pre-seleccionar los sensores disponibles para la gráfica
       selectedSensorIds.value = availableSensorsForCharts.value.map(s => s.id);
 
-      // La subscripción se maneja con el watcher
+      // Suscripciones generales (no para la gráfica)
       alertStore.subscribeToAlertUpdates();
       sensorStore.subscribeToSensorUpdates();
 
@@ -202,6 +207,7 @@ const loadAssetData = async () => {
   }
 };
 
+// Propiedades Computadas
 const sensorsForCurrentAsset = computed(() => {
   if (!asset.value) return [];
   return sensorStore.sensors.filter(sensor => sensor.assetId === asset.value.id);
@@ -221,24 +227,15 @@ const alertsForCurrentAsset = computed(() => {
 const activeAlertsForCurrentAsset = computed(() => alertsForCurrentAsset.value.filter(a => a.status !== 'resolved').length);
 
 const availableSensorsForCharts = computed(() => {
-  return sensorsForCurrentAsset.value.filter(s => s.status === 'active' && s.last_communication);
+  return sensorsForCurrentAsset.value.filter(s => s.status === 'active');
 });
 
-// =================================================================================
-// INICIO DE LA MODIFICACIÓN: `realtimeSelectedSensorsForChart` ahora es más directo
-// =================================================================================
-const realtimeSelectedSensorsForChart = computed(() => {
+// CORRECCIÓN: Esta propiedad computada ahora solo filtra los sensores.
+// El componente SensorChart se encargará de obtener sus propias lecturas.
+const selectedSensorsForChart = computed(() => {
   return sensorsForCurrentAsset.value
-    .filter(sensor => selectedSensorIds.value.includes(sensor.id))
-    .map(sensor => ({
-      ...sensor,
-      // El store ya gestiona el array de lecturas (`allSensorRecentReadings`) de forma reactiva.
-      readings: sensorStore.getReadingsBySensorId(sensor.id), 
-    }));
+    .filter(sensor => selectedSensorIds.value.includes(sensor.id));
 });
-// =================================================================================
-// FIN DE LA MODIFICACIÓN
-// =================================================================================
 
 const paginatedAlertsForCurrentAsset = computed(() => {
   const start = (currentAlertPage.value - 1) * alertsPerPage.value;
@@ -248,12 +245,8 @@ const paginatedAlertsForCurrentAsset = computed(() => {
 
 const totalFilteredAlertsForAsset = computed(() => alertsForCurrentAsset.value.length);
 
-// Watcher para la selección de sensores
-watch(selectedSensorIds, (newIds, oldIds) => {
-  if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
-    sensorStore.subscribeToGraphReadings(newIds);
-  }
-}, { deep: true, immediate: true });
+// ELIMINADO: El watcher que causaba el error ya no es necesario.
+// La lógica de suscripción ahora vive dentro de SensorChart.vue.
 
 // Manejo de paginación
 const handleAlertPageChange = (page) => {
@@ -264,7 +257,8 @@ const handleAlertPageChange = (page) => {
 onMounted(loadAssetData);
 
 onUnmounted(() => {
-  sensorStore.unsubscribeFromAllGraphReadings(); 
+  // Limpiamos las suscripciones generales al salir de la página.
+  // La suscripción de la gráfica se limpia dentro de su propio componente.
   alertStore.unsubscribeFromAlertUpdates();
   sensorStore.unsubscribeFromSensorUpdates(); 
 });
@@ -275,13 +269,23 @@ const formatDate = (date) => {
   return new Date(date).toLocaleString("es-ES");
 };
 
+const translateAlertType = (type) => {
+  const types = {
+    vibration: 'Vibración',
+    temperature: 'Temperatura',
+    connectivity: 'Conectividad',
+    data_issue: 'Dato Anómalo'
+  };
+  return types[type] || type;
+};
+
 const translateSensorType = (type) => ({ temperature: "Temperatura", humidity: "Humedad", vibration: "Vibración", pressure: "Presión", other: "Otro" })[type] || type;
-const translateStatus = (status) => ({ active: "Activo", inactive: "Inactivo", maintenance: "Mantenimiento", error: "Error", new: "Nueva", acknowledged: "Reconocida", resolved: "Resuelta" })[status] || status;
+const translateStatus = (status) => ({ active: "Activa", inactive: "Inactivo", maintenance: "Mantenimiento", error: "Error", new: "Nueva", acknowledged: "Reconocida", resolved: "Resuelta" })[status] || status;
 const translatePriority = (priority) => ({ high: "Alta", medium: "Media", low: "Baja" })[priority] || priority;
 
 const getSensorStatusBadgeClass = (status) => ({ active: "badge-success", inactive: "badge-danger", maintenance: "badge-warning", error: "badge-error" })[status] || "badge-light";
 const getAlertPriorityBadgeClass = (priority) => ({ high: "badge-danger", medium: "badge-warning", low: "badge-info" })[priority] || "badge-light";
-const getAlertStatusBadgeClass = (status) => ({ new: "badge-danger", acknowledged: "badge-warning", resolved: "badge-success" })[status] || "badge-light";
+const getAlertStatusBadgeClass = (status) => ({ new: "badge-danger", acknowledged: "badge-warning", resolved: "badge-secondary" })[status] || "badge-success";
 
 </script>
 
@@ -297,6 +301,7 @@ const getAlertStatusBadgeClass = (status) => ({ new: "badge-danger", acknowledge
 .badge-danger { @apply bg-red-100 text-red-800; }
 .badge-info { @apply bg-blue-100 text-blue-800; }
 .badge-warning { @apply bg-yellow-100 text-yellow-800; }
+.badge-secondary { @apply bg-gray-100 text-gray-800; }
 .badge-light { @apply bg-gray-50 text-gray-500; }
 .form-checkbox {
     @apply h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500;

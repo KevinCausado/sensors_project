@@ -86,13 +86,13 @@ export const navigationItems = [
     moduleId: "basic_analysis",
     permissionAction: "view"
   },
-   {
-    name: "Mensajeria",
-    to: "/messaging",
-    icon: "i-heroicons-chart-bar",
-    moduleId: "messaging",
-    permissionAction: "view"
-  }, 
+  //  {
+  //   name: "Mensajeria",
+  //   to: "/messaging",
+  //   icon: "i-heroicons-chart-bar",
+  //   moduleId: "messaging",
+  //   permissionAction: "view"
+  // }, 
   {
     name: "Reportes",
     to: "/reports",
