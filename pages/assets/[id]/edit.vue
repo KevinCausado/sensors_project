@@ -88,10 +88,12 @@ import { useOrganizationStore } from '~/stores/organizations';
 import { useAssetIsoLogic } from '~/composables/useAssetIsoLogic';
 import { useCustomVibrationProfileStore } from '~/stores/customVibrationProfiles';
 import PageHeader from '~/components/PageHeader.vue';
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 const route = useRoute(), router = useRouter();
 const assetStore = useAssetStore(), organizationStore = useOrganizationStore(), customProfileStore = useCustomVibrationProfileStore();
 const loading = ref(true), saving = ref(false);
+const breadcrumbStore = useBreadcrumbStore();
 
 const form = ref({
   organization_id: null, name: '', asset_code: '', serial_number: '', model_number: '', country: '', state: '', city: '', description: '', asset_type_id: null,
@@ -117,8 +119,10 @@ const loadAssetForEdit = async () => {
     await Promise.all([ assetStore.initializeDataForForms(), organizationStore.fetchOrganizations(), customProfileStore.fetchProfiles() ]);
     const fetchedAsset = await assetStore.fetchAssetById(assetId);
     if (fetchedAsset) {
-      // Copiamos solo las propiedades que son relevantes para el formulario y la base de datos.
-      // Evitamos copiar propiedades calculadas o de relación directamente.
+       breadcrumbStore.setNameForPath({
+        path: `/assets/${assetId}`,
+        name: fetchedAsset.name
+      });
       const formProps = {};
       for (const key in form.value) { // Iteramos sobre las claves predefinidas en el formulario
         if (fetchedAsset.hasOwnProperty(key)) {
@@ -157,6 +161,10 @@ const saveAsset = async () => {
 };
 
 onMounted(loadAssetForEdit);
+
+onUnmounted(() => {
+    breadcrumbStore.clearNameForPath(`/assets/${route.params.id}`);
+});
 </script>
 
 <style scoped>

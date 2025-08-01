@@ -248,8 +248,8 @@ const getCategoryBadgeClass = (category) => {
       return 'bg-secondary-100 text-secondary-800';
     case 'alerts':
       return 'bg-warning-100 text-warning-800';
-    case 'units': // Añadido para la categoría 'units'
-      return 'bg-info-100 text-info-800'; // Puedes elegir un color adecuado
+    case 'units':
+      return 'bg-success-100 text-success-800';
     default:
       return 'bg-gray-100 text-gray-800';
   }
@@ -265,17 +265,9 @@ const translateCategory = (category) => {
   return categories[category] || category;
 };
 
-const formatDate = (date) => {
+const formatDate = (date) => {  
   if (!date) return 'N/A';
-  // Usar 'updated_at' si existe, si no, 'created_at' como fallback
-  // Asegúrate de que los nombres de las columnas coincidan con tu DB
-  return new Date(date).toLocaleString('es-ES', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return new Date(date).toLocaleString('es-ES');
 };
 
 const handlePageChange = (page) => {

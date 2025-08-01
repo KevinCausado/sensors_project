@@ -58,19 +58,19 @@ export const navigationItems = [
     permissionAction: "view"
   }, 
   {
-    name: "Usuarios", // Changed name to just "Usuarios" as "Permisos" will be separate
-    to: "/users", // This link will default to the 'users' tab
+    name: "Usuarios", 
+    to: "/users", 
     icon: "i-heroicons-users",
     moduleId: "users",
     permissionAction: "view"
   },
-  // --- NEW 'PERMISOS' NAVIGATION ITEM ---
+
   {
-    name: "Permisos", // Name for the sidebar link
-    to: "/permissions", // Link to the users page, with a query param to activate the permissions tab
-    icon: "i-heroicons-key", // A suitable icon for permissions (e.g., a key or shield)
-    moduleId: "permissions", // This must match the 'id' of the new module in your 'app_modules' table
-    permissionAction: "view" // The permission action required to see this navigation item
+    name: "Permisos", 
+    to: "/permissions", 
+    icon: "i-heroicons-key", 
+    moduleId: "permissions", 
+    permissionAction: "view" 
   },
   {
     name: "Parametros",
@@ -106,8 +106,6 @@ export const navigationItems = [
     icon: "i-heroicons-cog-6-tooth",
     moduleId: "settings",
     permissionAction: "view"
-  },  
-  
-  // --- END NEW 'PERMISOS' NAVIGATION ITEM ---
+  },    
  
 ];

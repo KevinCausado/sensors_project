@@ -1,9 +1,7 @@
 <template>
   <div>
     <PageHeader
-      :title="`Detalles del Activo: ${asset?.name || 'Cargando...'}`"
-      :subtitle="`ID: ${asset?.id || 'N/A'}`"
-    >
+      :title="`Detalles del Activo: ${asset?.name || 'Cargando...'}`">
       <template #actions>
         <div class="flex gap-2">
           <NuxtLink
@@ -90,8 +88,7 @@
           <div>
             <p class="text-sm font-medium text-gray-500">Tipo de Acoplamiento</p>
             <p class="form-input-static">{{ asset.coupling_type_name || 'N/A' }}</p>
-          </div>
-          <!-- INICIO DE LA CORRECCIÓN -->
+          </div>          
           <div>
             <p class="text-sm font-medium text-gray-500">Perfil de Vibración</p>
             <div class="form-input-static flex items-center gap-2">
@@ -102,8 +99,7 @@
                     {{ asset.isCustomProfile ? 'Personalizado' : 'Estándar ISO' }}
                 </span>
             </div>
-          </div>
-           <!-- FIN DE LA CORRECCIÓN -->
+          </div>           
         </div>
       </div>
 
@@ -179,6 +175,7 @@ import { useSensorStore } from '~/stores/sensors';
 import { useAlertStore } from '~/stores/alerts';
 import PageHeader from '~/components/PageHeader.vue';
 import StatCard from '~/components/StatCard.vue';
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 definePageMeta({
   // middleware: ['auth'] 
@@ -190,6 +187,7 @@ const assetStore = useAssetStore();
 const organizationStore = useOrganizationStore();
 const sensorStore = useSensorStore();
 const alertStore = useAlertStore();
+const breadcrumbStore = useBreadcrumbStore();
 
 const loading = ref(true);
 const asset = ref(null);
@@ -234,6 +232,10 @@ const loadAsset = async () => {
     const fetchedAsset = await assetStore.fetchAssetById(assetId);
     if (fetchedAsset) {
       asset.value = fetchedAsset;
+       breadcrumbStore.setNameForPath({
+        path: route.path,
+        name: fetchedAsset.name
+      });
       await sensorStore.fetchSensors();
       await alertStore.fetchAlerts();
     } else {
@@ -263,6 +265,10 @@ const formatDate = (date) => {
 
 onMounted(async () => {
   await loadAsset();
+});
+
+onUnmounted(() => {
+  breadcrumbStore.clearNameForPath(route.path);
 });
 </script>
 

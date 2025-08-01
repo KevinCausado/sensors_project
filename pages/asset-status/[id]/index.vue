@@ -1,9 +1,7 @@
 <template>
   <div>
     <PageHeader
-      :title="`Estado del Activo: ${asset?.name || 'Cargando...'}`"
-      :subtitle="`ID: ${asset?.id || 'N/A'}`"
-    >
+      :title="`Estado del Activo: ${asset?.name || 'Cargando...'}`">
       <template #actions>
         <div class="flex gap-2">
           <NuxtLink
@@ -162,6 +160,7 @@ import PageHeader from '~/components/PageHeader.vue';
 import SensorChart from '~/components/SensorChart.vue'; 
 import Pagination from '~/components/Pagination.vue'; 
 import StatCard from '~/components/StatCard.vue';
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 // Inicialización
 const route = useRoute();
@@ -169,6 +168,8 @@ const router = useRouter();
 const assetStore = useAssetStore();
 const sensorStore = useSensorStore();
 const alertStore = useAlertStore();
+const breadcrumbStore = useBreadcrumbStore()
+
 
 // Estado reactivo
 const loading = ref(true);
@@ -185,6 +186,11 @@ const loadAssetData = async () => {
     const fetchedAsset = await assetStore.fetchAssetById(assetId);
     if (fetchedAsset) {
       asset.value = fetchedAsset;
+
+        breadcrumbStore.setNameForPath({
+        path: route.path,
+        name: fetchedAsset.name
+      });
 
       await sensorStore.fetchSensors();
       await alertStore.fetchAlerts();
@@ -261,6 +267,7 @@ onUnmounted(() => {
   // La suscripción de la gráfica se limpia dentro de su propio componente.
   alertStore.unsubscribeFromAlertUpdates();
   sensorStore.unsubscribeFromSensorUpdates(); 
+  breadcrumbStore.clearNameForPath(route.path);
 });
 
 // Funciones de utilidad (traducciones y clases de badge)

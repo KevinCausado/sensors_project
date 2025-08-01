@@ -116,6 +116,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '~/stores/users';
 import { useOrganizationStore } from '~/stores/organizations';
 import { useAuthStore } from '~/stores/auth';
+import { useBreadcrumbStore } from '~/stores/breadCrumb';
 
 // Icons (placeholder)
 import { defineComponent, h } from 'vue';
@@ -130,13 +131,14 @@ definePageMeta({
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
-const organizationStore = useOrganizationStore(); // CORREGIDO: Añadido 'const'
-const authStore = useAuthStore(); // CORREGIDO: Añadido 'const'
+const organizationStore = useOrganizationStore(); 
+const authStore = useAuthStore(); 
+const breadcrumbStore = useBreadcrumbStore();
 
 // Estado
 const loading = ref(true);
 const saving = ref(false);
-const user = ref(null); // Aquí se guardará el usuario tal como viene del store
+const user = ref(null); 
 const form = ref({
   firstName: '',
   lastName: '',
@@ -153,12 +155,17 @@ const loadUser = async () => {
     try {
         const fetchedUser = await userStore.fetchUserById(route.params.id);
         if (fetchedUser) {
-            user.value = fetchedUser; // Asigna el usuario completo al ref 'user'
+            user.value = fetchedUser; 
 
-            // Mapea los datos del usuario cargado al formulario, convirtiendo a camelCase si es necesario
+             breadcrumbStore.setNameForPath({
+              path: `/users/${route.params.id}`,
+              name: `${fetchedUser.first_name} ${fetchedUser.last_name}`
+            });
+
+            // Mapea los datos del usuario cargado al formulario
             form.value = {
-                firstName: fetchedUser.first_name || '', // De first_name (DB) a firstName (Form)
-                lastName: fetchedUser.last_name || '',   // De last_name (DB) a lastName (Form)
+                firstName: fetchedUser.first_name || '', 
+                lastName: fetchedUser.last_name || '',   
                 email: fetchedUser.email || '',
                 role_id: fetchedUser.role_id || '',
                 organization_id: fetchedUser.organization_id || ''
@@ -177,16 +184,14 @@ const loadUser = async () => {
 const saveUser = async () => {
   try {
     saving.value = true;
-
-    // Prepara el objeto de datos que vas a enviar a Supabase.
-    // Los nombres de propiedad deben coincidir con lo que espera updateUser en el store.
+   
     const userDataToSave = {
       firstName: form.value.firstName,
       lastName: form.value.lastName,
-      email: form.value.email, // Se envía, pero no se actualiza a través de este método en Supabase Auth
+      email: form.value.email, 
       role_id: form.value.role_id,
       organization_id: form.value.organization_id,
-      is_active: user.value.is_active // Mantén el estado de activo del usuario actual
+      is_active: user.value.is_active 
     };
 
     // console.log('Datos enviados a Supabase para actualización:', userDataToSave);
@@ -214,5 +219,9 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
+});
+
+onUnmounted(() => {  
+  breadcrumbStore.clearNameForPath(`/users/${route.params.id}`);
 });
 </script>

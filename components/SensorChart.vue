@@ -137,12 +137,37 @@ onUnmounted(() => {
 });
 
 const chartOptions = computed(() => ({
-  chart: { type: 'line', animations: { enabled: true, easing: 'linear', dynamicAnimation: { speed: 1000 } }, toolbar: { show: true }, locales: [{ name: 'es', options: { months: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'], shortMonths: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'], days: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], shortDays: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], toolbar: { download: 'Descargar', selection: 'Selección', selectionZoom: 'Zoom', zoomIn: 'Acercar', zoomOut: 'Alejar', pan: 'Mover', reset: 'Resetear' } } }], defaultLocale: 'es' },
-  stroke: { curve: 'smooth', width: 2 },
+  chart: {
+    type: 'area', 
+    animations: { enabled: true, easing: 'linear', dynamicAnimation: { speed: 1000 } },
+    toolbar: { show: true },
+    locales: [{ name: 'es', options: { months: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'], shortMonths: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'], days: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], shortDays: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], toolbar: { download: 'Descargar', selection: 'Selección', selectionZoom: 'Zoom', zoomIn: 'Acercar', zoomOut: 'Alejar', pan: 'Mover', reset: 'Resetear' } } }],
+    defaultLocale: 'es',
+    // Se agrega el degradado al fondo del área
+    foreColor: '#373d3f'
+  },
+  // Paleta de colores más moderna
+  colors: ['#00B1FF', '#FF0080', '#00A74F', '#FFD100', '#D100FF', '#FF6633', '#1F77B4', '#AEC7E8'],
+  // Se cambia el estilo del trazo para un efecto más limpio
+  stroke: {
+    curve: 'smooth',
+    width: 2,
+  },
+  // Se añaden opciones de fill para los degradados
+  fill: {
+    type: 'gradient',
+    gradient: {
+      shadeIntensity: 1,
+      opacityFrom: 0.7,
+      opacityTo: 0.1,
+      stops: [0, 100, 100, 100]
+    }
+  },
+  // Marcadores interactivos que aparecen al pasar el cursor
   markers: {
     size: 0,
     hover: {
-      size: 0
+      size: 5
     }
   },
   xaxis: {
@@ -190,18 +215,20 @@ const chartOptions = computed(() => ({
     y: { formatter: (val) => val?.toFixed(3) ?? 'N/A' }
   },
   legend: { position: 'top', horizontalAlign: 'left' },
+  dataLabels: {
+    enabled: false
+  },
 }));
 
 
-// **CAMBIO**: La propiedad `series` ahora es mucho más simple.
-// Ya no necesita interpolar datos porque el backend ya los envía agregados.
+
 const series = computed(() => {
   const allSeries = [];
 
   props.sensors.forEach(sensor => {
     if (!sensor?.id) return;
     
-    // Obtiene los datos ya agregados desde el store de Pinia
+    
     const dataToDisplay = sensorStore.getReadingsBySensorId(sensor.id);
     if (!dataToDisplay || dataToDisplay.length === 0) return;
 

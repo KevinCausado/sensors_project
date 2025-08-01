@@ -82,40 +82,28 @@ export const useUserStore = defineStore('users', {
         this.loading = true;
         this.error = null;
         try {
+            
+            const userFromState = this.users.find(u => u.id === id);
+            if (userFromState && userFromState.last_login) {
+                this.currentUser = userFromState;
+                return this.currentUser;
+            }            
             const { $supabase } = useNuxtApp();
-            const { data, error } = await $supabase
-                .from('users')
-                .select(`
-                    id,
-                    email,
-                    first_name,
-                    last_name,
-                    is_active,
-                    last_login,
-                    created_at,
-                    updated_at,
-                    role_id,
-                    organization_id,
-                    roles(name),
-                    organizations(name)
-                `)
-                .eq('id', id)
-                .single();
+            const { data: usersData, error: usersError } = await $supabase.rpc('get_app_users');
+            if (usersError) throw usersError;
 
-            if (error) throw error;
+            const userData = usersData.find(u => u.user_profile_id === id);
 
-            if (data) {
+            if (userData) {                
                 this.currentUser = {
-                    ...data,
-                    role_name: data.roles?.name || 'N/A',
-                    organization_name: data.organizations?.name || 'N/A',
+                    ...userData,
+                    id: userData.user_profile_id,
                 };
-                delete this.currentUser.roles;
-                delete this.currentUser.organizations;
             } else {
                 this.currentUser = null;
             }
             return this.currentUser;
+
         } catch (error) {
             console.error('Error fetching user by ID:', error);
             this.error = error.message || 'Error al cargar usuario.';

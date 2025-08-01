@@ -9,14 +9,7 @@
             to="/parameters"
             class="btn btn-secondary">
             Volver
-          </NuxtLink>
-          <!-- <PermissionGuard moduleId="parameters" permission="editar">
-            <NuxtLink 
-              :to="`/parameters/${route.params.id}/edit`"
-              class="btn btn-primary">
-              Editar Parámetro
-            </NuxtLink>
-          </PermissionGuard> -->
+          </NuxtLink>          
         </div>
       </template>
     </PageHeader>
@@ -67,7 +60,7 @@
           <div>
             <label class="block text-sm font-medium text-gray-500">Última Actualización</label>
             <p class="mt-1 text-sm text-gray-900">
-              {{ formatDate(parameter.updatedAt) }}
+              {{ formatDate(parameter.updated_at) }}
             </p>
           </div>
         </div>
@@ -84,6 +77,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useParameterStore } from '~/stores/parameters';
+import { useBreadcrumbStore } from '~/stores/breadCrumb';
 
 definePageMeta({
   // middleware: ['auth']
@@ -91,6 +85,7 @@ definePageMeta({
 
 const route = useRoute();
 const parameterStore = useParameterStore();
+const breadcrumbStore = useBreadcrumbStore();
 
 // Estado
 const loading = ref(true);
@@ -131,9 +126,7 @@ const getCategoryBadgeClass = (category) => {
   }
 };
 
-const formatDate = (date) => {
-  // Aquí se asume que `date` es una cadena de fecha válida.
-  // Si `date` podría ser null/undefined, añade una comprobación como en otros lugares.
+const formatDate = (date) => {  
   if (!date) return 'N/A';
   return new Date(date).toLocaleString('es-ES');
 };
@@ -141,12 +134,21 @@ const formatDate = (date) => {
 // Cargar datos
 onMounted(async () => {
   try {
-    // *** CORRECCIÓN AQUÍ: Cambiado de getParameterById a fetchParameterById ***
     parameter.value = await parameterStore.fetchParameterById(route.params.id);
+    if (parameter.value) {
+      breadcrumbStore.setNameForPath({
+        path: route.path,
+        name: parameter.value.name,
+      });
+    }
   } catch (error) {
     console.error('Error al cargar parámetro:', error);
   } finally {
     loading.value = false;
   }
+});
+
+onUnmounted(() => {
+  breadcrumbStore.clearNameForPath(route.path);
 });
 </script>

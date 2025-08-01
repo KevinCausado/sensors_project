@@ -1,0 +1,47 @@
+# Archivos de Node.js
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de entorno
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs
+*.log
+
+# Archivos de desarrollo
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Archivos temporales
+.tmp/
+.cache/
+
+# OS generados
+.DS_Store
+Thumbs.db
+
+# Archivos de respaldo
+*.bak
+*.tmp
+*~
+
+# Documentación
+README.md

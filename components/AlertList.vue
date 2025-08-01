@@ -1,75 +1,107 @@
 <template>
   <div class="alert-list w-full">
-    <div v-if="loading" class="flex items-center justify-center py-4">
-      <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
-      <p class="ml-2 text-gray-500">Cargando alertas...</p>
+    <!-- Estado de Carga -->
+    <div v-if="loading" class="flex items-center justify-center py-10">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <p class="ml-4 text-gray-600">Cargando alertas...</p>
     </div>
 
-    <div v-else-if="alerts.length === 0" class="text-center py-6 text-gray-500">
-      <p>No se encontraron alertas.</p>
-      <p class="text-sm mt-1">¡Todo en orden aquí!</p>
+    <!-- Estado Vacío -->
+    <div v-else-if="enrichedAlerts.length === 0" class="text-center py-10 text-gray-500 bg-gray-50/70 rounded-lg">
+      <Icon name="i-heroicons-check-circle" class="mx-auto h-12 w-12 text-gray-400" />
+      <h3 class="mt-2 text-sm font-medium text-gray-900">Todo en orden</h3>
+      <p class="mt-1 text-sm text-gray-500">No hay alertas que requieran atención.</p>
     </div>
 
-    <div v-else class="space-y-3 max-h-80 overflow-y-auto pr-1">
-      <TransitionGroup name="fade">
-        <div v-for="alert in alerts" :key="alert.id" 
-             class="relative flex flex-col p-3 rounded-md border 
-                    transition-all hover:shadow-sm" 
+    <!-- Lista de Alertas con Diseño Mejorado -->
+    <div v-else class="space-y-4">
+      <TransitionGroup name="fade-list">
+        <div v-for="alert in enrichedAlerts" :key="alert.id"
+             class="relative p-4 rounded-xl border transition-all duration-300 ease-in-out hover:shadow-lg hover:border-primary-300"
              :class="getAlertBgClass(alert.priority)">
-          
-          <!-- Botón de Acción/Estado (Arriba a la derecha) -->
-          <PermissionGuard moduleId="alerts" permission="resolve">
-            <div class="absolute top-3 right-3 z-10">
-              <button v-if="alert.status === 'active'" 
-                      @click="handleResolveAlert(alert.id)" 
-                      class="text-xs text-primary-600 hover:text-primary-500 font-semibold transition-colors duration-200">
+
+          <!-- Área de Estado/Acción (Esquina superior derecha) -->
+          <div class="absolute top-4 right-4 z-10 text-right">
+            <PermissionGuard moduleId="alerts" permission="resolve">
+              <button v-if="alert.status === 'active'"
+                      @click="handleResolveAlert(alert.id)"
+                      class="px-2.5 py-1 text-xs font-semibold text-primary-700 bg-primary-100 rounded-md hover:bg-primary-200 hover:text-primary-800 transition-colors">
                 Resolver
               </button>
-              <span v-else class="text-xs text-success-600 font-semibold flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.535-1.28-1.28a.75.75 0 0 0-1.06 1.06l1.75 1.75a.75.75 0 0 0 1.135-.082l3.75-5.25Z" clip-rule="evenodd" /></svg>
+              <span v-else class="inline-flex items-center px-2.5 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-md">
+                <Icon name="i-heroicons-check-circle-solid" class="h-4 w-4 mr-1.5"/>
                 Resuelta
               </span>
-            </div>
-          </PermissionGuard>
+            </PermissionGuard>
+            <p class="text-xs text-gray-500 mt-2">{{ formatTimeAgo(alert.alert_time) }}</p>
+          </div>
 
-          <div class="flex items-start mb-2 pr-16 sm:pr-24"> 
-            <div :class="getAlertIconClass(alert.priority)" 
-                 class="flex-shrink-0 rounded-full p-2 
-                        flex items-center justify-center shadow-sm">
+          <div class="flex items-start">
+            <!-- Icono a la Izquierda -->
+            <div :class="getAlertIconClass(alert.priority)"
+                 class="flex-shrink-0 rounded-full h-10 w-10 flex items-center justify-center mr-4 shadow-sm">
               <component :is="getAlertIcon(alert.type)" class="h-5 w-5" />
             </div>
 
-            <div class="ml-3 flex-1 min-w-0">
-              <p class="text-base font-semibold text-gray-900 truncate">{{ alert.title }}</p>
-              <!-- DESCRIPCIÓN: Letra más pequeña (text-xs) -->
-              <p class="text-xs text-gray-600 mt-1 line-clamp-2">{{ alert.description }}</p>
-            </div>
-          </div>
+            <!-- Área de Contenido Principal -->
+            <div class="flex-1 min-w-0 pr-24">
+              <!-- Título y Descripción (vienen del backend) -->
+              <div>
+                <p class="text-base font-semibold text-gray-900 truncate">{{ alert.title }}</p>
+              </div>
+              <p class="text-sm text-gray-700 mt-2 line-clamp-2">{{ alert.description }}</p>
 
-          <!-- Detalles adicionales y badges -->
-          <div class="flex items-center justify-between flex-wrap gap-2 text-xs">
-            <div class="flex flex-wrap gap-1">
-              <span class="badge" :class="getAlertBadgeClass(alert.priority)">
-                {{ translatePriority(alert.priority) }}
-              </span>
-              <span class="badge badge-secondary">
-                Sensor: {{ alert.sensorName || "Desconocido" }}
-              </span>
-              <span class="badge badge-secondary">
-                Organización: {{ alert.organizationName || "Desconocida" }}
-              </span>         
-              <NuxtLink 
-                v-if="alert.assetName && alert.assetName !== 'N/A' && alert.asset_id" 
-                :to="`/asset-status/${alert.asset_id}`"
-                class="badge bg-gray-100 text-gray-700 hover:bg-blue-600 hover:text-white border border-transparent transition-colors duration-200 flex items-center group cursor-pointer">
-                Activo: {{ alert.assetName }}
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1.5 opacity-60 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
-                  <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
-                </svg>
-              </NuxtLink>
+              <!-- Metadata con Badges -->
+              <div class="mt-4 pt-3 border-t border-gray-200/90 flex flex-wrap items-center gap-2">
+                <span :class="getPriorityBadgeClass(alert.priority)" class="badge">
+                  <Icon name="i-heroicons-shield-exclamation" class="h-4 w-4 mr-1.5" />
+                  <span>{{ translatePriority(alert.priority) }}</span>
+                </span>
+                <NuxtLink v-if="alert.assetName && alert.assetName !== 'N/A' && alert.asset_id"
+                            :to="`/asset-status/${alert.asset_id}`"
+                            class="badge group bg-primary-600 text-white shadow hover:bg-primary-700 hover:scale-105 transform transition-all duration-200">
+                    <Icon name="i-heroicons-cube-transparent" class="h-4 w-4 mr-1.5" />
+                    <span class="font-medium">Activo:</span>
+                    <span class="font-semibold ml-1 truncate">{{ alert.assetName }}</span>
+                </NuxtLink>
+                <span class="badge bg-gray-200 text-gray-800">
+                  <Icon name="i-heroicons-signal" class="h-4 w-4 mr-1.5" />
+                  <span class="font-medium">Sensor:</span>
+                  <span class="font-semibold ml-1 truncate">{{ alert.sensorName || "Desconocido" }}</span>
+                </span>
+                <!-- BADGE DE DISPOSITIVO AGREGADO -->
+                <span v-if="alert.deviceCode" class="badge bg-gray-200 text-gray-800">
+                  <Icon name="i-heroicons-cpu-chip" class="h-4 w-4 mr-1.5" />
+                  <span class="font-medium">Dispositivo:</span>
+                  <span class="font-semibold ml-1 truncate" :title="`${alert.deviceCode} (${alert.deviceBrand} / ${alert.deviceModel})`">{{ alert.deviceCode }}</span>
+                </span>
+                <span class="badge bg-gray-200 text-gray-800">
+                  <Icon name="i-heroicons-building-office-2" class="h-4 w-4 mr-1.5" />
+                  <span class="font-medium">Organización:</span>
+                  <span class="font-semibold ml-1 truncate">{{ alert.organizationName || "Desconocida" }}</span>
+                </span>
+              </div>
+
+              <!-- Display de Perfil de Vibración -->
+              <div v-if="alert.type === 'vibration' && alert.asset_id" class="mt-4 pt-3 border-t border-dashed border-gray-300">
+                <div v-if="alert.isLoadingProfile" class="text-sm text-gray-500 italic px-2">Cargando perfil...</div>
+                <div v-else-if="alert.vibrationProfileName && alert.triggeredRange" class="flex flex-wrap items-center gap-2">
+                    <span class="badge bg-gray-200 text-gray-800">
+                        <Icon name="i-heroicons-chart-bar" class="h-4 w-4 mr-1.5" />
+                        Perfil: <strong class="ml-1">{{ alert.vibrationProfileName }}</strong>
+                    </span>
+                    <span class="badge" :class="getSeverityClass(alert.triggeredRange.severity)">
+                        <Icon name="i-heroicons-exclamation-triangle" class="h-4 w-4 mr-1.5" />
+                        {{ alert.triggeredRange.condition_name }} (Zona {{ alert.triggeredRange.severity }})
+                    </span>
+                    <span class="badge bg-blue-100 text-blue-800 font-mono">
+                        Rango: {{ alert.triggeredRange.min_value }} - {{ alert.triggeredRange.max_value }}
+                    </span>
+                </div>
+                <div v-else class="text-sm text-gray-500 italic px-2">Sin información de perfil.</div>
+              </div>
+
             </div>
-            <span class="text-gray-500 flex-shrink-0">Generada {{ formatTimeAgo(alert.alert_time) }}</span>
           </div>
         </div>
       </TransitionGroup>
@@ -78,161 +110,152 @@
 </template>
 
 <script setup>
-import { defineComponent, h } from "vue"; 
+import { ref, watch, computed } from "vue";
 import { useAlertStore } from "~/stores/alerts";
-import { useNuxtApp } from "#app"; 
-import PermissionGuard from "~/components/PermissionGuard.vue"; 
+import { useSensorStore } from '~/stores/sensors';
+import PermissionGuard from "~/components/PermissionGuard.vue";
 import { ExclamationTriangleIcon, ExclamationCircleIcon, InformationCircleIcon, ArrowPathIcon } from '@heroicons/vue/24/outline';
 
-
-// Para los íconos, usaré los de Heroicons directamente si estás usando la librería.
-const getAlertIcon = (type) => {
-  switch (type) {
-    case "threshold":
-      return ExclamationTriangleIcon; 
-    case "status_change":
-      return ArrowPathIcon; 
-    case "data_issue":
-      return ExclamationTriangleIcon; 
-    case "error":
-      return ExclamationCircleIcon; 
-    default:
-      return InformationCircleIcon; 
-  }
-};
-
-// Props del componente
 const props = defineProps({
-  alerts: {
-    type: Array,
-    default: () => []
-  },
-  loading: {
-    type: Boolean,
-    default: false
-  }
+  alerts: { type: Array, default: () => [] },
+  loading: { type: Boolean, default: false }
 });
 
 const alertStore = useAlertStore();
-const { $supabase } = useNuxtApp(); 
+const sensorStore = useSensorStore();
+const vibrationProfiles = ref({});
+const loadingProfiles = ref({});
 
-// --- Funciones Auxiliares para la UI ---
+// --- Lógica de Enriquecimiento ---
 
-const getAlertIconClass = (priority) => {
-  switch (priority) {
-    case "high":
-      return "bg-red-100 text-red-700"; 
-    case "medium":
-      return "bg-yellow-100 text-yellow-700"; 
-    case "low":
-      return "bg-green-100 text-green-700"; 
-    default:
-      return "bg-gray-100 text-gray-700";
+const findTriggeredRange = (value, profile) => {
+  if (!profile || !profile.ranges || value === null) return null;
+  const sortedRanges = [...profile.ranges].sort((a, b) => a.max_value - b.max_value);
+  for (const range of sortedRanges) {
+    if (value >= range.min_value && value <= range.max_value) return range;
   }
+  if (sortedRanges.length > 0 && value > sortedRanges[sortedRanges.length - 1].max_value) {
+      return sortedRanges[sortedRanges.length - 1];
+  }
+  return null;
+};
+
+const enrichedAlerts = computed(() => {
+  return props.alerts
+    .map(alert => {
+      const sensor = sensorStore.sensors.find(s => s.id === alert.sensor_id);
+      const newAlertData = {
+        ...alert,
+        deviceCode: sensor ? sensor.code : null,
+        deviceBrand: sensor ? sensor.brandName : 'N/A',
+        deviceModel: sensor ? sensor.modelName : 'N/A',
+        isLoadingProfile: loadingProfiles.value[alert.asset_id] || false,
+        vibrationProfileName: null,
+        triggeredRange: null,
+      };
+
+      if (alert.type === 'vibration' && alert.asset_id) {
+        const profile = vibrationProfiles.value[alert.asset_id];
+        if (profile) {
+          newAlertData.vibrationProfileName = profile.name;
+          newAlertData.triggeredRange = findTriggeredRange(alert.value_at_alert, profile);
+        }
+      }
+      return newAlertData;
+    });
+});
+
+const fetchVibrationProfile = async (assetId) => {
+  if (!assetId || vibrationProfiles.value[assetId] || loadingProfiles.value[assetId]) return;
+  loadingProfiles.value[assetId] = true;
+  try {
+    await sensorStore.getVibrationProfileForAsset(assetId);
+    vibrationProfiles.value[assetId] = sensorStore.getVibrationProfileFromCache(assetId);
+  } catch (error) {
+    console.error(`Error fetching vibration profile for asset ${assetId}:`, error);
+  } finally {
+    loadingProfiles.value[assetId] = false;
+  }
+};
+
+watch(() => props.alerts, (newAlerts) => {
+  if (!newAlerts) return;
+  for (const alert of newAlerts) {
+    if (alert.type === 'vibration' && alert.asset_id) {
+      fetchVibrationProfile(alert.asset_id);
+    }
+  }
+}, { immediate: true, deep: true });
+
+// --- Funciones para Estilos ---
+
+const getAlertColorClasses = (priority) => {
+  const colorMap = {
+    high:   { bg: 'bg-red-50/80', border: 'border-red-200/80', iconBg: 'bg-red-100', iconText: 'text-red-600' },
+    medium: { bg: 'bg-amber-50/80', border: 'border-amber-200/80', iconBg: 'bg-amber-100', iconText: 'text-amber-600' },
+    low:    { bg: 'bg-green-50/80', border: 'border-green-200/80', iconBg: 'bg-green-100', iconText: 'text-green-600' }
+  };
+  return colorMap[priority] || { bg: 'bg-white', border: 'border-gray-200', iconBg: 'bg-gray-100', iconText: 'text-gray-600' };
 };
 
 const getAlertBgClass = (priority) => {
-  switch (priority) {
-    case "high":
-      return "bg-red-50 border-red-200"; 
-    case "medium":
-      return "bg-yellow-50 border-yellow-200"; 
-    case "low":
-      return "bg-green-50 border-green-200"; 
-    default:
-      return "bg-white border-gray-200";
-  }
+    const colors = getAlertColorClasses(priority);
+    return [colors.bg, colors.border];
 };
 
-const getAlertBadgeClass = (priority) => {
-  switch (priority) {
-    case "high":
-      return "bg-red-200 text-red-800 font-semibold"; 
-    case "medium":
-      return "bg-yellow-200 text-yellow-800 font-semibold"; 
-    case "low":
-      return "bg-green-200 text-green-800 font-semibold"; 
-    default:
-      return "bg-gray-200 text-gray-800 font-semibold";
-  }
+const getAlertIconClass = (priority) => {
+    const colors = getAlertColorClasses(priority);
+    return [colors.iconBg, colors.iconText];
 };
 
-const translatePriority = (priority) => {
-  switch (priority) {
-    case "high":
-      return "Prioridad: Alta";
-    case "medium":
-      return "Prioridad: Media"; 
-    case "low":
-      return "Prioridad: Baja";
-    default:
-      return "Prioridad: Desconocida"; 
-  }
+const getPriorityBadgeClass = (priority) => {
+  const classes = {
+    high: 'bg-red-200 text-red-800 font-semibold',
+    medium: 'bg-amber-200 text-amber-800 font-semibold',
+    low: 'bg-green-200 text-green-800 font-semibold',
+  };
+  return classes[priority] || 'bg-gray-200 text-gray-800 font-semibold';
 };
 
-/**
- * Formats a date to a "time ago" string.
- * @param {string} createdAt - The creation date of the alert (ISO string).
- * @returns {string} The formatted string.
- */
+const getSeverityClass = (severity) => {
+    const classes = {
+        'A': 'bg-green-100 text-green-800', 'B': 'bg-blue-100 text-blue-800',
+        'C': 'bg-yellow-100 text-yellow-800', 'D': 'bg-red-100 text-red-800',
+    };
+    return classes[severity] || 'bg-gray-100 text-gray-700';
+};
+
+const getAlertIcon = (type) => ({
+    vibration: ExclamationTriangleIcon,
+    temperature: ExclamationTriangleIcon,
+    status_change: ArrowPathIcon,
+    data_issue: ExclamationCircleIcon,
+    connectivity: ExclamationCircleIcon,
+    battery: ExclamationCircleIcon,
+}[type] || InformationCircleIcon);
+
+const translatePriority = (priority) => ({
+    high: "Prioridad: Alta", medium: "Prioridad: Media", low: "Prioridad: Baja",
+}[priority] || "Prioridad: Desconocida");
+
+// --- Acciones y Formato de Fecha ---
+
+const handleResolveAlert = (alertId) => alertStore.resolveAlert(alertId);
+
 const formatTimeAgo = (createdAt) => {
   if (!createdAt) return "Fecha desconocida";
-  const date = new Date(createdAt);
-  const now = new Date();
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  const intervals = [
-    { label: "segundo", seconds: 1 },
-    { label: "minuto", seconds: 60 },
-    { label: "hora", seconds: 3600 },
-    { label: "día", seconds: 86400 },
-    { label: "semana", seconds: 604800 },
-    { label: "mes", seconds: 2592000 }, 
-    { label: "año", seconds: 31536000 }, 
-  ];
-
-  for (let i = intervals.length - 1; i >= 0; i--) {
-    const interval = intervals[i];
-    if (seconds >= interval.seconds) {
-      const value = Math.floor(seconds / interval.seconds);
-      if (interval.label === "segundo" && value < 5) return "hace un instante";
-      return `hace ${value} ${interval.label}${value > 1 ? (interval.label === "mes" ? "es" : "s") : ""}`;
-    }
+  const seconds = Math.floor((new Date() - new Date(createdAt)) / 1000);
+  const intervals = [ { l: "año", s: 31536000 }, { l: "mes", s: 2592000 }, { l: "día", s: 86400 }, { l: "hora", s: 3600 }, { l: "minuto", s: 60 }];
+  for (const i of intervals) {
+    const count = Math.floor(seconds / i.s);
+    if (count >= 1) return `hace ${count} ${i.l}${count > 1 ? (i.l === 'mes' ? 'es' : 's') : ''}`;
   }
-  return "justo ahora"; 
-};
-
-// --- Manejadores de Acciones ---
-
-/**
- * Llama a la acción de la store para resolver una alerta.
- * @param {string} alertId - El ID de la alerta a resolver.
- */
-const handleResolveAlert = async (alertId) => {
-  await alertStore.resolveAlert(alertId);
+  return "justo ahora";
 };
 </script>
 
 <style scoped>
-/* Estilos para la transición de entrada/salida de elementos */
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateX(-30px);
-}
-
-/* Estilos de badges personalizados (si no se cubren completamente con Tailwind) */
-.badge {
-  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
-  white-space: nowrap; /* Evita que los badges se dividan en varias líneas */
-}
-
-.badge-secondary {
-  @apply bg-gray-100 text-gray-700;
-}
+.badge { @apply inline-flex items-center px-2.5 py-1 rounded-md text-xs; }
+.fade-list-enter-active, .fade-list-leave-active { transition: all 0.5s ease; }
+.fade-list-enter-from, .fade-list-leave-to { opacity: 0; transform: scale(0.95) translateY(10px); }
 </style>

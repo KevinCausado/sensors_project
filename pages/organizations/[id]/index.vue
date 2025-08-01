@@ -232,9 +232,11 @@ import { useOrganizationStore } from "~/stores/organizations";
 import PageHeader from "~/components/PageHeader.vue";
 import StatCard from "~/components/StatCard.vue";
 import Pagination from "~/components/Pagination.vue";
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 const route = useRoute();
 const organizationStore = useOrganizationStore();
+const breadcrumbStore = useBreadcrumbStore()
 
 const loading = ref(true);
 const organization = ref(null);
@@ -326,6 +328,10 @@ onMounted(async () => {
       const fetchedOrg = await organizationStore.fetchOrganizationWithRelations(orgId);
       if (fetchedOrg) {
         organization.value = fetchedOrg;
+        breadcrumbStore.setNameForPath({
+      path: route.path, 
+      name: fetchedOrg.name 
+    });
       } else {
         organization.value = null;
         console.warn("Organización no encontrada para el ID:", orgId);
@@ -341,6 +347,10 @@ onMounted(async () => {
     organization.value = null;
     console.warn("No se proporcionó ID de organización en la ruta.");
   }
+});
+
+onUnmounted(() => {  
+  breadcrumbStore.clearNameForPath(route.path);
 });
 </script>
 

@@ -9,14 +9,7 @@
             to="/parameters"
             class="btn btn-secondary">
             Volver
-          </NuxtLink>
-          <!-- <button 
-            @click="saveParameter" 
-            class="btn btn-primary flex items-center"
-            :disabled="saving">
-            <CheckIcon class="h-5 w-5 mr-2" />
-            {{ saving ? 'Guardando...' : 'Guardar Cambios' }}
-          </button> -->
+          </NuxtLink>        
         </div>
       </template>
     </PageHeader>
@@ -144,6 +137,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useParameterStore } from '~/stores/parameters';
+import { useBreadcrumbStore } from '~/stores/breadCrumb';
 
 // Icons (placeholder)
 const CheckIcon = defineComponent({
@@ -157,6 +151,7 @@ definePageMeta({
 const route = useRoute();
 const router = useRouter();
 const parameterStore = useParameterStore();
+const breadcrumbStore = useBreadcrumbStore();
 
 // Estado
 const loading = ref(true);
@@ -176,7 +171,15 @@ const form = ref({
 const loadParameter = async () => {
   try {
     parameter.value = await parameterStore.fetchParameterById(route.params.id);
-    form.value = { ...parameter.value };
+    if (parameter.value) {
+      form.value = { ...parameter.value };
+      breadcrumbStore.setNameForPath({
+        path: `/parameters/${route.params.id}`,
+        name: parameter.value.name,
+      });
+    } else {
+      router.push('/parameters');
+    }
   } catch (error) {
     console.error('Error al cargar parámetro:', error);
     router.push('/parameters');
@@ -202,5 +205,9 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+});
+
+onUnmounted(() => {
+  breadcrumbStore.clearNameForPath(`/parameters/${route.params.id}`);
 });
 </script>

@@ -1,129 +1,88 @@
-<template>
-
+<template>  
   <aside
     :class="{
-      
       'fixed inset-y-0 left-0 z-40': !isDesktop, 
       'transform -translate-x-full': !isOpen && !isDesktop, 
       'transform translate-x-0': isOpen && !isDesktop,      
-      'md:relative md:translate-x-0 md:block md:flex-shrink-0': isDesktop 
+      'relative flex-shrink-0': isDesktop 
     }"
-    class="w-64 bg-white border-r border-gray-200
-           transition duration-200 ease-in-out"
+    class="w-64 bg-white transition-transform duration-200 ease-in-out h-screen"
   >
-    <div class="h-full flex flex-col">
+    <div class="h-full flex flex-col">    
+      <div class="flex items-center justify-start h-16 px-4 flex-shrink-0">
+        <Logo class="h-8 w-8 text-gray-800" />
+        <div class="ml-3 flex items-baseline">
+          <span class="text-gray-800 text-xl font-bold">VibrAI</span>
+          <span class="ml-2 text-xs font-semibold text-blue-500 tracking-wider">PANEL</span>
+        </div>
+      </div>
       
-      <nav class="flex-1 overflow-y-auto py-4 px-3">
+
+      <nav class="flex-1 overflow-y-auto py-4">
         <div class="space-y-1">
-          <template v-for="item in processedNavigationItems" :key="item.name">
+          <template v-for="item in navigationItems" :key="item.name">
             <PermissionGuard :moduleId="item.moduleId" :permission="item.permissionAction">
-              <SidebarLink
+              <NuxtLink 
                 :to="item.to"
-                :icon="item.icon"
-                :label="item.name"
-                :has-children="!!item.children"
-                :is-active="isActiveRoute(item)"
-                @click="!isDesktop && toggleSidebar()" /> 
+                class="flex items-center py-2 text-sm transition-colors"
+                :class="[
+                  'font-semibold',
+                  isActiveRoute(item) 
+                    ? 'bg-gradient-to-r from-blue-100 to-gray-50 text-blue-700 rounded-l-md pl-6'
+                    : 'text-gray-700 hover:bg-gray-100 rounded-md mx-3 px-3'
+                ]"
+                @click="!isDesktop && toggleSidebar()"
+              >
+                <Icon :name="item.icon" class="h-5 w-5 mr-3" />
+                <span>{{ item.name }}</span>
+              </NuxtLink>
             </PermissionGuard>
           </template>
         </div>
 
-        <div v-if="shouldShowOrganizationFilter && organizations.length > 0" class="mt-8 px-3">
-          <label for="organization-filter" class="block text-xs font-medium text-gray-500 mb-2">Organización</label>
+        <div v-if="shouldShowOrganizationFilter && organizations.length > 0" class="mt-8 px-2">
+          <label for="organization-filter" class="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Organización</label>
           <div class="relative">
             <select
               id="organization-filter"
               v-model="organizationStore.selectedOrganizationId"
               @change="changeOrganization"
-              class="block w-full rounded-md border border-gray-300 py-2 pl-3 pr-10 text-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
+              class="block w-full rounded-md border-gray-300 bg-white py-2 pl-3 pr-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <option :value="null">Todas las Organizaciones</option>
+              <option :value="null">Todas</option>
               <option v-for="org in organizations" :key="org.id" :value="org.id">
                 {{ org.name }}
               </option>
             </select>
-            <p v-if="organizationStore.isLoading" class="text-xs text-gray-500 mt-1">Cargando organizaciones...</p>
-            <p v-if="organizationStore.error" class="text-xs text-red-500 mt-1">Error al cargar: {{ organizationStore.error }}</p>
           </div>
         </div>
       </nav>
-
-      <!-- User info and logout button, visible only on mobile (when sidebar is open) -->
-      <div class="border-t border-gray-200 p-4 md:hidden">
-        <div class="flex items-center">
-          <div class="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center text-white font-medium text-sm">
-            {{ userInitials }}
-          </div>
-          <div class="ml-3">
-            <p class="text-sm font-medium text-gray-900">{{ user?.profile?.firstName || user?.email }} {{ user?.profile?.lastName }}</p>
-            <button @click="logout" class="text-xs text-error-600 hover:text-error-500">Cerrar sesión</button>
-          </div>
-        </div>
-      </div>
     </div>
   </aside>
-
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import { useAuthStore } from "~/stores/auth";
 import { useOrganizationStore } from "~/stores/organizations";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { navigationItems } from "~/utils/navigation";
 import PermissionGuard from "~/components/PermissionGuard.vue";
-
-
-const processedNavigationItems = computed(() => {
-  return navigationItems.map((item) => ({
-    ...item,
-    icon: item.icon.replace('i-heroicons-', 'heroicons:'),
-  }));
-});
-
+import Logo from '~/components/Logo.vue';
 
 const props = defineProps({
-  isOpen: {
-    type: Boolean,
-    default: true,
-  },
-  isDesktop: { 
-    type: Boolean,
-    default: true
-  }
+  isOpen: Boolean,
+  isDesktop: Boolean
 });
 
-// Emits to parent
 const emit = defineEmits(["toggle"]);
 
 // Stores
 const authStore = useAuthStore();
 const organizationStore = useOrganizationStore();
 const route = useRoute();
-const router = useRouter();
 
-// User data
-const user = computed(() => authStore.user);
-
-const userInitials = computed(() => {
-  if (!user.value || !user.value.profile) {
-    if (user.value?.email) {
-      return user.value.email.charAt(0).toUpperCase();
-    }
-    return "";
-  }
-  const firstName = user.value.profile.firstName;
-  const lastName = user.value.profile.lastName;
-  if (!firstName && !lastName) {
-    if (user.value?.email) return user.value.email.charAt(0).toUpperCase();
-    return "";
-  }
-  const initialFirstName = firstName ? firstName.charAt(0).toUpperCase() : "";
-  const initialLastName = lastName ? lastName.charAt(0).toUpperCase() : "";
-  return `${initialFirstName}${initialLastName}`;
-});
-
-// Organization data
+// Data
 const organizations = computed(() => organizationStore.organizations);
 
 const shouldShowOrganizationFilter = computed(() => {
@@ -132,19 +91,17 @@ const shouldShowOrganizationFilter = computed(() => {
   const isOnRelevantPage =
     currentPath === "/dashboard" ||
     currentPath.startsWith("/sensors") ||
-    currentPath.startsWith("/alerts")||
+    currentPath.startsWith("/alerts") ||
+    currentPath.startsWith("/assets") ||
     currentPath.startsWith("/asset-status");
   return hasOrganizations && isOnRelevantPage;
 });
 
 // Actions
 const toggleSidebar = () => {
-  emit("toggle");
-};
-
-const logout = async () => {
-  await authStore.logout();
-  router.push("/auth/login");
+  if (!props.isDesktop) {
+    emit("toggle");
+  }
 };
 
 const changeOrganization = () => {  
@@ -153,21 +110,25 @@ const changeOrganization = () => {
   }
 };
 
-// Helper functions
+// Helpers
 const isActiveRoute = (item) => {
-  if (item.to === "/" && route.path === "/") {
-    return true;
+  const itemPath = item.to;
+  const currentPath = route.path;
+  
+  if (itemPath === '/' || itemPath === '/dashboard') {
+    return currentPath === '/' || currentPath === '/dashboard';
   }
-  return item.to !== "/" && route.path.startsWith(item.to);
+  
+  return itemPath !== '/' && currentPath.startsWith(itemPath);
 };
 
-// Initialize organization selector
+// Lifecycle
 onMounted(async () => {
-  await organizationStore.fetchOrganizations();  
-  organizationStore.selectedOrganizationId = null; 
+  if (organizationStore.organizations.length === 0) {
+    await organizationStore.fetchOrganizations();  
+  }
+  if (organizationStore.selectedOrganizationId === undefined) {
+    organizationStore.selectedOrganizationId = null; 
+  }
 });
 </script>
-
-<style scoped>
-
-</style>

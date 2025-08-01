@@ -93,12 +93,12 @@ import { ref, computed, onMounted, watch, defineComponent, h } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAssetStore } from '~/stores/assets';
 import { useCustomVibrationProfileStore } from '~/stores/customVibrationProfiles';
+import { useOrganizationStore } from '~/stores/organizations'; 
 import PageHeader from '~/components/PageHeader.vue';
 import ActionButton from '~/components/ActionButton.vue';
 import Pagination from '~/components/Pagination.vue'; 
 import PermissionGuard from '~/components/PermissionGuard.vue';
 import ConfirmModal from '~/components/ConfirmModal.vue';
-
 
 // Iconos (placeholders)
 const PlusIcon = defineComponent({
@@ -114,6 +114,7 @@ const SearchIcon = defineComponent({
 
 const assetStore = useAssetStore();
 const customProfileStore = useCustomVibrationProfileStore();
+const organizationStore = useOrganizationStore(); 
 const router = useRouter();
 
 const searchQuery = ref('');
@@ -133,7 +134,8 @@ const getAssetStatusClass = (isActive) => isActive ? 'bg-green-100 text-green-80
 const translateAssetStatus = (isActive) => isActive ? 'Activo' : 'Inactivo';
 
 const filteredAssets = computed(() => {
-  let result = [...assetStore.getAssets];
+  let result = [...assetStore.getAssets];  
+  
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase();
     result = result.filter(asset => Object.values(asset).some(val => String(val).toLowerCase().includes(q)));
@@ -173,10 +175,25 @@ const deleteConfirmed = async () => {
   cancelDelete();
 };
 
+// Función para centralizar la carga de activos
+const loadAssets = async () => {
+    await assetStore.fetchAssets();
+}
+
 onMounted(async () => {
   await assetStore.initializeDataForForms(); 
-  await assetStore.fetchAssets(); 
   await customProfileStore.fetchProfiles();
+  // La llamada inicial a 'fetchAssets' se hace aquí y también se manejará por el watcher.
+  await loadAssets();
+});
+
+// Watcher para reaccionar a cambios en la organización seleccionada
+watch(() => organizationStore.selectedOrganizationId, async (newVal, oldVal) => {
+  if (newVal !== oldVal) {
+    // console.log(`[pageAssetIndex] Organización cambiada a: ${newVal}. Refrescando activos.`);
+    await loadAssets();
+    currentPage.value = 1; // Reinicia la paginación a la página 1
+  }
 });
 </script>
 

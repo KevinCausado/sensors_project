@@ -1,15 +1,17 @@
 <template>
   <div>
-    <PageHeader 
-      title="Usuarios" 
+        <PageHeader
+      title="Usuarios"
       subtitle="Gestionar usuarios del sistema">
-      <template #actions>
-        <NuxtLink 
-          to="/users/new"
-          class="btn btn-primary flex items-center">
-          <PlusIcon class="h-5 w-5 mr-2" />
-          Nuevo Usuario
-        </NuxtLink>
+      <template #actions>        
+        <PermissionGuard moduleId="users" permission="crear">
+          <NuxtLink
+            to="/users/new"
+            class="btn btn-primary flex items-center">
+            <PlusIcon class="h-5 w-5 mr-2" />
+            Nuevo Usuario
+          </NuxtLink>
+        </PermissionGuard>
       </template>
     </PageHeader>
 
@@ -24,16 +26,16 @@
           />
           <SearchIcon class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
-        
+
         <div class="flex gap-2">
           <select v-model="filterRole" class="form-select">
             <option value="">Todos los Roles</option>
-            <option value="super-admin">Super Admin</option>
-            <option value="admin">Administrador</option>
-            <option value="technician">Técnico</option>
-            <option value="viewer">Visualizador</option>
+            <option value="super-admin">Super Administrador</option>
+            <option value="Administrador Global">Administrador Global</option>
+            <option value="Editor">Editor</option>
+            <option value="Visor">Visor</option>
           </select>
-          
+
           <select v-model="filterOrg" class="form-select">
             <option value="">Todas las Organizaciones</option>
             <option v-for="org in organizations" :key="org.id" :value="org.id">
@@ -44,22 +46,22 @@
       </div>
 
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
+        <table class="min-w-full divide-y divide-gray-200 table-fixed">
           <thead>
             <tr>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="w-4/12 px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Usuario
               </th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="w-2/12 px-6 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Rol
               </th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="w-2/12 px-6 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Organización
               </th>
-              <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="w-2/12 px-6 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Último Acceso
               </th>
-              <th class="px-6 py-3 bg-gray-50"></th>
+              <th class="w-2/12 px-6 py-3 bg-gray-50 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -72,29 +74,35 @@
             <tr v-else-if="filteredUsers.length === 0">
                 <td colspan="5" class="px-6 py-4 text-center text-gray-500">No se encontraron usuarios.</td>
             </tr>
-            
-            <tr v-else v-for="user in filteredUsers" :key="user.auth_id"> <td class="px-6 py-4 whitespace-nowrap">
+
+            <tr v-else v-for="user in filteredUsers" :key="user.auth_id">
+              <td class="px-6 py-4 whitespace-nowrap overflow-hidden">
                 <div class="flex items-center">
-                  <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700">
+                  <div class="h-10 w-10 rounded-full bg-primary-100 flex-shrink-0 flex items-center justify-center text-primary-700">
                     {{ getUserInitials(user) }}
                   </div>
-                  <div class="ml-4">
-                    <div class="text-sm font-medium text-gray-900">
-                      {{ user.first_name }} {{ user.last_name }} </div>
-                    <div class="text-sm text-gray-500">
+                  <div class="ml-4 overflow-hidden">
+                    <div class="text-sm font-medium text-gray-900 truncate">
+                      {{ user.first_name }} {{ user.last_name }}
+                    </div>
+                    <div class="text-sm text-gray-500 truncate">
                       {{ user.email }}
                     </div>
                   </div>
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap">
+              <td class="px-6 py-4 whitespace-nowrap text-center">
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                      :class="getRoleBadgeClass(user.role_name)"> {{ translateRole(user.role_name) }} </span>
+                      :class="getRoleBadgeClass(user.role_name)">
+                  {{ translateRole(user.role_name) }}
+                </span>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ user.organization_name }} </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ formatDate(user.last_login) }} </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center truncate">
+                {{ user.organization_name }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                {{ formatDate(user.last_login) }}
+              </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div class="flex justify-end space-x-1">
                   <PermissionGuard moduleId="users" permission="ver">
@@ -102,15 +110,15 @@
                       icon="eye"
                       title="Ver detalles"
                       color="primary"
-                      @click="router.push(`/users/${user.user_profile_id || user.auth_id}`)" /> </PermissionGuard>
-                  
+                      @click="router.push(`/users/${user.user_profile_id || user.auth_id}`)" />
+                  </PermissionGuard>
                   <PermissionGuard moduleId="users" permission="editar">
                     <ActionButton
                       icon="pencil"
                       title="Editar usuario"
                       color="warning"
-                      @click="router.push(`/users/${user.user_profile_id || user.auth_id}/edit`)" /> </PermissionGuard>
-                  
+                      @click="router.push(`/users/${user.user_profile_id || user.auth_id}/edit`)" />
+                  </PermissionGuard>
                   <PermissionGuard moduleId="users" permission="eliminar">
                     <ActionButton
                       icon="trash"
@@ -126,8 +134,8 @@
       </div>
 
       <div class="mt-4">
-        <Pagination 
-          :total-items="totalFilteredUsers" 
+        <Pagination
+          :total-items="totalFilteredUsers"
           :current-page="currentPage"
           @page-change="handlePageChange" />
       </div>
@@ -145,7 +153,7 @@
 import { ref, computed, onMounted, defineComponent, h } from 'vue';
 import { useUserStore } from '~/stores/users';
 import { useOrganizationStore } from '~/stores/organizations';
-import { useRouter } from 'vue-router'; 
+import { useRouter } from 'vue-router';
 
 
 // Iconos (placeholders)
@@ -184,24 +192,24 @@ const organizations = computed(() => organizationStore.organizations);
 
 const filteredUsers = computed(() => {
   let result = [...users.value];
-  
+
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
-    result = result.filter(user => 
-      (user.first_name && user.first_name.toLowerCase().includes(query)) || // Usar first_name
-      (user.last_name && user.last_name.toLowerCase().includes(query)) ||   // Usar last_name
+    result = result.filter(user =>
+      (user.first_name && user.first_name.toLowerCase().includes(query)) ||
+      (user.last_name && user.last_name.toLowerCase().includes(query)) ||
       (user.email && user.email.toLowerCase().includes(query))
     );
   }
-  
+
   if (filterRole.value) {
-    result = result.filter(user => user.role_name === filterRole.value); 
+    result = result.filter(user => user.role_name === filterRole.value);
   }
-  
+
   if (filterOrg.value) {
-    result = result.filter(user => user.organization_id === filterOrg.value); // Usar organization_id
+    result = result.filter(user => user.organization_id === filterOrg.value);
   }
-  
+
   return result;
 });
 
@@ -209,43 +217,37 @@ const totalFilteredUsers = computed(() => filteredUsers.value.length);
 
 // Métodos
 const getUserInitials = (user) => {
-  // Asegúrate de que first_name y last_name no sean null/undefined antes de acceder a charAt
   const first = user.first_name ? user.first_name.charAt(0) : '';
   const last = user.last_name ? user.last_name.charAt(0) : '';
   return `${first}${last}`;
 };
 
-const getRoleBadgeClass = (roleName) => { // Recibe roleName
-  switch (roleName) { // Usar roleName
-    case 'super-admin':
-      return 'bg-primary-100 text-primary-800';
-    case 'admin':
-      return 'bg-secondary-100 text-secondary-800';
-    case 'technician':
-      return 'bg-warning-100 text-warning-800';
-    case 'viewer':
-      return 'bg-info-100 text-info-800'; 
+const getRoleBadgeClass = (roleName) => {
+  switch (roleName) {
+    case "super-admin":
+      return "bg-blue-100 text-blue-800";
+    case "Administrador Global":
+      return "bg-yellow-100 text-yellow-800";
+    case "Editor":
+      return "bg-green-100 text-green-800";
+    case "Visor":
+      return "bg-gray-200 text-gray-800";
     default:
-      return 'bg-gray-100 text-gray-800';
+      return "bg-gray-100 text-gray-800";
   }
 };
 
-const translateRole = (roleName) => { // Recibe roleName
+const translateRole = (roleName) => {
   const roles = {
-    'super-admin': 'Super Administrador',
-    'admin': 'Administrador',
-    'technician': 'Técnico',
-    'viewer': 'Visualizador'
+    "super-admin": "Super Administrador",
   };
-  return roles[roleName] || roleName; // Usar roleName
+  return roles[roleName] || roleName;
 };
 
-// ***** FUNCIÓN FORMATDATE ACTUALIZADA *****
 const formatDate = (date) => {
-  if (!date) return 'N/A'; // Agrega esta comprobación para evitar errores si la fecha es nula/undefined
+  if (!date) return 'N/A';
   return new Date(date).toLocaleString('es-ES');
 };
-// *****************************************
 
 const handlePageChange = (page) => {
   currentPage.value = page;
@@ -258,14 +260,14 @@ const showDeleteConfirm = (user) => {
 
 const confirmDelete = async () => {
   try {
- 
+
     const idToDelete = userToDelete.value.user_profile_id || userToDelete.value.auth_id;
-    
-    await userStore.deleteUser(idToDelete); 
+
+    await userStore.deleteUser(idToDelete);
     showDeleteModal.value = false;
-    userToDelete.value = null;  
+    userToDelete.value = null;
   } catch (error) {
-    console.error('Error al eliminar usuario:', error);    
+    console.error('Error al eliminar usuario:', error);
   }
 };
 
@@ -297,8 +299,8 @@ onMounted(async () => {
 .btn-primary {
   @apply bg-primary-600 text-white hover:bg-primary-700;
 }
-.text-error-600 { 
-  @apply text-red-600; 
+.text-error-600 {
+  @apply text-red-600;
 }
 
 /* Estilo estandarizado para los selects */

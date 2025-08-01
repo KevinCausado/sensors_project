@@ -1,70 +1,71 @@
-<template>
+<template> 
   <div>
-    <h2 class="text-center text-2xl font-bold mb-8">Iniciar sesión</h2>
+    <div class="mb-10">
+      <h2 class="text-2xl font-bold text-gray-900">Iniciar Sesión</h2>
+      <p class="mt-2 text-sm text-gray-600">
+        ¿Eres nuevo? 
+        <NuxtLink to="/auth/register" class="font-medium text-blue-600 hover:text-blue-500">
+          Crea una cuenta
+        </NuxtLink>
+      </p>
+    </div>
     
     <form @submit.prevent="login" class="space-y-6">
       <div>
-        <label for="email" class="form-label">Correo electrónico</label>
+        <label for="email" class="block text-xs font-bold uppercase text-gray-600 mb-2">Correo electrónico</label>
         <input 
           id="email" 
           v-model="email" 
           type="email" 
           required 
-          class="form-input" 
-          placeholder="correo@ejemplo.com" />
+          class="block w-full px-4 py-3 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+          placeholder="Email" />
       </div>
       
       <div>
-        <label for="password" class="form-label">Contraseña</label>
+        <label for="password" class="block text-xs font-bold uppercase text-gray-600 mb-2">Contraseña</label>
         <input 
           id="password" 
           v-model="password" 
           type="password" 
           required 
-          class="form-input" 
-          placeholder="••••••••" />
+          class="block w-full px-4 py-3 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" 
+          placeholder="Password" />
       </div>
       
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between text-sm">
         <div class="flex items-center">
           <input 
             id="remember-me" 
             v-model="rememberMe"
             type="checkbox" 
-            class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" />
-          <label for="remember-me" class="ml-2 block text-sm text-gray-700">
+            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+          <label for="remember-me" class="ml-2 block text-gray-700">
             Recordarme
           </label>
         </div>
         
-        <div class="text-sm">
-          <NuxtLink to="/auth/forgot-password" class="font-medium text-primary-600 hover:text-primary-500">
+        <div>
+          <NuxtLink to="/auth/forgot-password" class="font-medium text-blue-600 hover:text-blue-500">
             ¿Olvidaste tu contraseña?
           </NuxtLink>
         </div>
       </div>
       
-      <div v-if="error" class="text-error-600 text-sm mt-1">
+      <div v-if="error" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md text-sm">
         {{ error }}
       </div>
       
       <div>
         <button 
           type="submit" 
-          class="btn btn-primary w-full flex justify-center"
+          class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="loading">
-          <span v-if="loading">Procesando...</span>
-          <span v-else>Iniciar sesión</span>
+          <div v-if="loading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+          <span v-else>Iniciar Sesión</span>
         </button>
       </div>
     </form>
-    
-    <div class="mt-6 text-center text-sm">
-      <span class="text-gray-600">¿No tienes una cuenta?</span>
-      <NuxtLink to="/auth/register" class="font-medium text-primary-600 hover:text-primary-500 ml-1">
-        Regístrate ahora
-      </NuxtLink>
-    </div>
   </div>
 </template>
 
@@ -72,7 +73,7 @@
 import { ref } from 'vue';
 import { useAuthStore } from '~/stores/auth';
 import { useRouter } from 'vue-router';
-import { navigationItems } from '~/utils/navigation'; // Asegúrate de que esta ruta sea correcta y el archivo exista
+import { navigationItems } from '~/utils/navigation';
 
 definePageMeta({
   layout: 'auth'
@@ -92,62 +93,50 @@ const login = async () => {
     loading.value = true;
     error.value = '';
 
-    // --- CAMBIO CLAVE AQUÍ: Cambia authStore.login a authStore.signIn ---
-    await authStore.signIn({ // <--- ESTA ES LA LÍNEA QUE DEBES CAMBIAR
+    await authStore.signIn({
       email: email.value,
       password: password.value
     });
 
-    // Asegúrate de que el user ya esté en el store después de signIn.
-    // Luego llama a `ensureUserProfileExists` con el ID del usuario.
     if (authStore.user) {
       await authStore.ensureUserProfileExists(authStore.user.id);
     } else {
-      throw new Error("No user found after successful login authentication.");
+      throw new Error("No se encontró usuario después de una autenticación exitosa.");
     }
 
-    let redirectToPath = '/'; // Ruta por defecto si no se encuentra ningún módulo accesible
+    let redirectToPath = '/'; 
 
-    // Itera sobre tus ítems de navegación para encontrar el primero accesible
-    // Asegúrate de que tus navigationItems tengan moduleId y to
     for (const item of navigationItems) {
-      // Si el ítem es un "padre" con hijos, podrías querer manejarlo diferente
       if (item.children && item.children.length > 0) {
         for (const childItem of item.children) {
           const moduleId = childItem.moduleId;
-          const permissionAction = childItem.permissionAction || 'view'; // Asume 'view'
-          if (childItem.to && authStore.can(moduleId + '.' + permissionAction)) { // Usar authStore.can
+          const permissionAction = childItem.permissionAction || 'view';
+          if (childItem.to && authStore.can(moduleId + '.' + permissionAction)) {
             redirectToPath = childItem.to;
-            // console.log(`[Login] User has permission for child module "${childItem.name}". Redirecting to: ${redirectToPath}`);
-            break; // Salir del bucle interno
+            break; 
           }
         }
-        if (redirectToPath !== '/') { // Si se encontró una ruta hija, salir del bucle principal
+        if (redirectToPath !== '/') {
           break;
         }
       } else {
-        // Ítems de navegación de nivel superior sin hijos
         const moduleId = item.moduleId;
-        const permissionAction = item.permissionAction || 'view'; // Asume 'view'
-        if (item.to && authStore.can(moduleId + '.' + permissionAction)) { // Usar authStore.can
+        const permissionAction = item.permissionAction || 'view';
+        if (item.to && authStore.can(moduleId + '.' + permissionAction)) {
           redirectToPath = item.to;
-          // console.log(`[Login] User has permission for module "${item.name}". Redirecting to: ${redirectToPath}`);
-          break; // Salir del bucle
+          break;
         }
       }
     }
 
     if (redirectToPath === '/') {
-      // Si después de revisar todos los módulos, no hay ninguno accesible con permiso 'view',
-      // redirige a una página de "acceso no autorizado" o a la página de inicio general.
-      console.warn("[Login] No accessible module found with 'view' permission. Redirecting to default home or unauthorized page.");
-      // redirectToPath = '/unauthorized'; // Una página específica para usuarios sin permisos
+      console.warn("[Login] No se encontró ningún módulo accesible con permiso de 'view'. Redirigiendo a la página de inicio.");
     }
 
     await navigateTo(redirectToPath, { replace: true });
 
   } catch (err) {
-    console.error('Login error:', err); // Log detallado del error
+    console.error('Error de login:', err);
     error.value = authStore.error || err.message || 'Error al iniciar sesión. Por favor, verifica tus credenciales.';
   } finally {
     loading.value = false;

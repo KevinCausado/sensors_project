@@ -102,11 +102,8 @@
               class="btn btn-secondary">
               Cancelar
             </NuxtLink>
-            <button 
-              type="submit" 
-              class="btn btn-primary flex items-center"
-              :disabled="saving">
-              <CheckIcon class="h-5 w-5 mr-2" />
+            <button type="submit" class="btn btn-primary flex items-center" :disabled="saving">
+              <span v-if="saving" class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
               {{ saving ? 'Guardando...' : 'Guardar Cambios' }}
             </button>
           </div>
@@ -120,6 +117,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useOrganizationStore } from '~/stores/organizations';
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 // Icons (placeholder)
 import { defineComponent, h } from 'vue';
@@ -134,6 +132,7 @@ definePageMeta({
 const route = useRoute();
 const router = useRouter();
 const organizationStore = useOrganizationStore();
+const breadcrumbStore = useBreadcrumbStore()
 
 // Estado
 const loading = ref(true);
@@ -179,6 +178,11 @@ const loadOrganization = async () => {
       is_active: org.is_active ?? false, 
     };
 
+    breadcrumbStore.setNameForPath({
+        path: `/organizations/${route.params.id}`,
+        name: org.name
+    });
+
   } catch (error) {
     console.error('Error al cargar organización:', error);
     alert('Error al cargar organización: ' + error.message);
@@ -207,4 +211,7 @@ const saveOrganization = async () => {
 
 // Cargar datos al montar el componente
 onMounted(loadOrganization);
+onUnmounted(() => {
+    
+});
 </script>

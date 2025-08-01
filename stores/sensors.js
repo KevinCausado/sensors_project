@@ -46,6 +46,7 @@ export const useSensorStore = defineStore('sensors', {
             return { ...sensor, assetName: asset ? asset.name : 'Activo Desconocido' };
         });
     },
+    // Getter anterior, se mantiene por si se usa en otro lado
     recentSensors: (state) => {
       const sensorsToProcess = state.filteredSensors;
       const filtered = sensorsToProcess.filter(sensor => sensor.last_communication);
@@ -57,9 +58,57 @@ export const useSensorStore = defineStore('sensors', {
         lastReading: sensor.last_reading_timestamp || null,
       }));
     },
+
+    // ===== NUEVO GETTER PARA EL DASHBOARD =====
+    recentIntegratedDevices: (state) => {
+        if (!state.sensors || state.sensors.length === 0) return [];
+
+        const organizationStore = useOrganizationStore();
+        const filteredByOrg = state.sensors.filter(sensor => 
+            organizationStore.selectedOrganizationId === null || sensor.organizationId === sensor.organizationId
+        );
+        
+        const statusPriority = { 'error': 4, 'inactive': 3, 'maintenance': 2, 'active': 1 };
+
+        const grouped = filteredByOrg.reduce((acc, sensor) => {
+            const key = sensor.code;
+            if (!key) return acc;
+
+            if (!acc[key]) {
+                acc[key] = {
+                    code: key,
+                    brandName: sensor.brandName,
+                    modelName: sensor.modelName,
+                    assetName: sensor.assetName,
+                    overallStatus: 'active',
+                    latestTimestamp: null,
+                    logicalSensorsCount: 0
+                };
+            }
+            
+            acc[key].logicalSensorsCount++;
+
+            if ((statusPriority[sensor.status] || 0) > (statusPriority[acc[key].overallStatus] || 0)) {
+                acc[key].overallStatus = sensor.status;
+            }
+
+            const sensorTimestamp = sensor.last_reading_timestamp ? new Date(sensor.last_reading_timestamp) : null;
+            if (sensorTimestamp && (!acc[key].latestTimestamp || sensorTimestamp > acc[key].latestTimestamp)) {
+                acc[key].latestTimestamp = sensorTimestamp;
+            }
+
+            return acc;
+        }, {});
+
+        const devices = Object.values(grouped);
+        const communicatedDevices = devices.filter(d => d.latestTimestamp);
+        communicatedDevices.sort((a, b) => new Date(b.latestTimestamp) - new Date(a.latestTimestamp));
+        return communicatedDevices.slice(0, 5);
+    }
   },
 
   actions: {
+    // ... (El resto de tus actions permanecen igual) ...
     _getReadingsTableName(sensorType) {
       const typeMap = { temperature: 'temperature_readings', vibration: 'vibration_readings', humidity: 'humidity_readings', pressure: 'pressure_readings' };
       return typeMap[sensorType];
@@ -116,19 +165,15 @@ export const useSensorStore = defineStore('sensors', {
             const existingReading = this.chartReadings[sensorId].find(r => r.timestamp === ts);
 
             if (existingReading) {
-              // Si ya existe un punto con este timestamp, actualízalo.
-              // Se crea un nuevo objeto para asegurar la reactividad de Vue.
               const updatedReading = { ...existingReading, [axis]: value };
               const index = this.chartReadings[sensorId].indexOf(existingReading);
               this.chartReadings[sensorId][index] = updatedReading;
             } else {
-              // Si no existe, crea un nuevo punto para la gráfica.
               const readingToAdd = { timestamp: ts, value: null, x: null, y: null, z: null };
               readingToAdd[axis] = value;
               this.chartReadings[sensorId].push(readingToAdd);
             }
           } else {
-            // Lógica original para temperatura y otros sensores
             this.chartReadings[sensorId].push({ timestamp: payload.new.timestamp, value: payload.new.value, x: null, y: null, z: null });
           }
      
@@ -327,6 +372,7 @@ export const useSensorStore = defineStore('sensors', {
         this.isLoading = false;
       }
     },
+    
     async updateSensor(id, sensorData) {
       this.isLoading = true;
       this.error = null;
@@ -335,28 +381,11 @@ export const useSensorStore = defineStore('sensors', {
         const { data, error } = await $supabase.from('sensors').update(sensorData).eq('id', id).select().single();
         if (error) throw error;
 
-        // Si se actualiza el assetId de un sensor de vibración, también recalculamos los umbrales
         if (data && data.asset_id && data.type === 'vibration') {
           await this.updateVibrationSensorThresholdsForAsset(data.asset_id);
         }
 
         await this.fetchSensors();
-        return data;
-      } catch (e) {
-        this.error = 'Failed to update sensor: ' + e.message;
-        throw e;
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    async updateSensor(id, sensorData) {
-      this.isLoading = true;
-      this.error = null;
-      try {
-        const { $supabase } = useNuxtApp();
-        const { data, error } = await $supabase.from('sensors').update(sensorData).eq('id', id).select().single();
-        if (error) throw error;
         return data;
       } catch (e) {
         this.error = 'Failed to update sensor: ' + e.message;
@@ -374,6 +403,22 @@ export const useSensorStore = defineStore('sensors', {
         if (error) throw error;
       } catch (e) {
         this.error = 'Failed to delete sensor: ' + e.message;
+        throw e;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async deleteDeviceByCode(code) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        const { error } = await $supabase.from('sensors').delete().eq('code', code);
+        if (error) throw error;
+        await this.fetchSensors();
+      } catch (e) {
+        this.error = 'Falló al eliminar el dispositivo: ' + e.message;
         throw e;
       } finally {
         this.isLoading = false;

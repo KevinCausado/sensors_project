@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  basic-analysis-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SUPABASE_URL=${SUPABASE_URL}
+        - SUPABASE_KEY=${SUPABASE_KEY}
+        - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+        - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "node basic-analysis.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s 

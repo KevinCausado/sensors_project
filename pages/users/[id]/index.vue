@@ -1,17 +1,9 @@
 <template>
   <div>
-    <PageHeader
-      title="Detalles del Usuario"
-      :subtitle="`${user?.first_name} ${user?.last_name}`" 
-    >
+    <PageHeader title="Detalles del Usuario" :subtitle="`${user?.first_name} ${user?.last_name}`">
       <template #actions>
         <div class="flex gap-2">
-          <NuxtLink
-            to="/users"
-            class="btn btn-secondary"
-          >
-            Volver
-          </NuxtLink>          
+          <NuxtLink to="/users" class="btn btn-secondary">Volver</NuxtLink>
         </div>
       </template>
     </PageHeader>
@@ -20,9 +12,7 @@
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
     </div>
 
-    <div v-else-if="!user" class="text-center py-8 text-gray-500">
-      Usuario no encontrado
-    </div>
+    <div v-else-if="!user" class="text-center py-8 text-gray-500">Usuario no encontrado</div>
 
     <div v-else class="max-w-3xl mx-auto space-y-6">
       <div class="card">
@@ -30,12 +20,14 @@
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div>
             <label class="block text-sm font-medium text-gray-500">Nombre</label>
-            <p class="mt-1 text-sm text-gray-900">{{ user.first_name }}</p> <!-- Modificado para usar first_name -->
+            <p class="mt-1 text-sm text-gray-900">{{ user.first_name }}</p>
+            <!-- Modificado para usar first_name -->
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-500">Apellido</label>
-            <p class="mt-1 text-sm text-gray-900">{{ user.last_name }}</p> <!-- Modificado para usar last_name -->
+            <p class="mt-1 text-sm text-gray-900">{{ user.last_name }}</p>
+            <!-- Modificado para usar last_name -->
           </div>
 
           <div>
@@ -45,21 +37,24 @@
 
           <div>
             <label class="block text-sm font-medium text-gray-500">Rol</label>
-            <span class="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                  :class="getRoleBadgeClass(user.role_name)"> <!-- Modificado para usar role_name -->
-              {{ translateRole(user.role_name) }} <!-- Modificado para usar role_name -->
+            <span class="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" :class="getRoleBadgeClass(user.role_name)">
+              <!-- Modificado para usar role_name -->
+              {{ translateRole(user.role_name) }}
+              <!-- Modificado para usar role_name -->
             </span>
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-500">Organización</label>
-            <p class="mt-1 text-sm text-gray-900">{{ user.organization_name }}</p> <!-- Modificado para usar organization_name -->
+            <p class="mt-1 text-sm text-gray-900">{{ user.organization_name }}</p>
+            <!-- Modificado para usar organization_name -->
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-500">Último Acceso</label>
             <p class="mt-1 text-sm text-gray-900">
-              {{ formatDate(user.last_login) }} <!-- Modificado para usar last_login -->
+              {{ formatDate(user.last_login) }}
+              <!-- Modificado para usar last_login -->
             </p>
           </div>
         </div>
@@ -69,9 +64,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router'; // Asegúrate de importar useRoute
-import { useUserStore } from '~/stores/users';
+import { ref, onMounted } from "vue";
+import { useRoute } from "vue-router"; // Asegúrate de importar useRoute
+import { useUserStore } from "~/stores/users";
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 definePageMeta({
   // middleware: ['auth']
@@ -79,63 +75,61 @@ definePageMeta({
 
 const route = useRoute();
 const userStore = useUserStore();
+const breadcrumbStore = useBreadcrumbStore();
 
 // Estado
 const loading = ref(true);
 const user = ref(null);
 
 // Métodos
-const getRoleBadgeClass = (roleName) => { // Cambiado a roleName
-  switch (roleName) { // Usar roleName
-    case 'super-admin':
-      return 'bg-primary-100 text-primary-800';
-    case 'admin':
-      return 'bg-secondary-100 text-secondary-800';
-    case 'technician':
-      return 'bg-warning-100 text-warning-800';
-    case 'viewer': // Asegúrate de incluir 'viewer' si es un rol posible
-      return 'bg-blue-100 text-blue-800'; // Un color diferente para 'viewer'
+const getRoleBadgeClass = (roleName) => {
+  switch (roleName) {
+    case "super-admin":
+      return "bg-blue-100 text-blue-800";
+    case "Administrador Global":
+      return "bg-yellow-100 text-yellow-800";
+    case "Editor":
+      return "bg-green-100 text-green-800";
+    case "Visor":
+      return "bg-gray-200 text-gray-800";
     default:
-      return 'bg-gray-100 text-gray-800';
+      return "bg-gray-100 text-gray-800";
   }
 };
 
-const translateRole = (roleName) => { // Cambiado a roleName
+const translateRole = (roleName) => {
   const roles = {
-    'super-admin': 'Super Administrador',
-    'admin': 'Administrador',
-    'technician': 'Técnico',
-    'viewer': 'Visualizador'
-  };
-  return roles[roleName] || roleName; // Usar roleName
+    "super-admin": "Super Administrador",
+  };  
+  return roles[roleName] || roleName;
 };
 
 const formatDate = (date) => {
-  if (!date) return 'Nunca';
-  return new Date(date).toLocaleString('es-ES', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric', 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  });
+  if (!date) return 'N/A'; 
+  return new Date(date).toLocaleString('es-ES');
 };
 
 // Cargar datos
 onMounted(async () => {
   try {
-    // CAMBIO CLAVE AQUÍ: Llama a fetchUserById
     user.value = await userStore.fetchUserById(route.params.id);
-    if (!user.value) {
+    if (user.value) {
+      // Registrar nombre para el breadcrumb
+      breadcrumbStore.setNameForPath({
+        path: route.path,
+        name: `${user.value.first_name} ${user.value.last_name}`,
+      });
+    } else {
       console.warn(`Usuario con ID ${route.params.id} no encontrado.`);
-      // Opcional: Redirigir o mostrar un mensaje específico
     }
   } catch (error) {
-    console.error('Error al cargar usuario:', error);
-    // Opcional: Redirigir o mostrar un mensaje de error si el usuario no se carga
-    // router.push('/users');
+    console.error("Error al cargar usuario:", error);
   } finally {
     loading.value = false;
   }
+});
+
+onUnmounted(() => {
+  breadcrumbStore.clearNameForPath(route.path);
 });
 </script>

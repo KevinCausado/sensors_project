@@ -1,3 +1,5 @@
+const defaultTheme = require('tailwindcss/defaultTheme')
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -6,6 +8,7 @@ module.exports = {
     "./pages/**/*.vue",
     "./plugins/**/*.{js,ts}",
     "./app.vue",
+    "./nuxt.config.{js,ts}",
   ],
   theme: {
     extend: {
@@ -36,8 +39,7 @@ module.exports = {
         },
         success: {
           50: '#F0FDF4',
-          // ¡Añade estas tonalidades! Aquí hay ejemplos, ajústalos a tus necesidades
-          100: '#D1FAE5', // Esta es la que falta y la que causa el error
+          100: '#D1FAE5',
           200: '#A7F3D0',
           300: '#6EE7B7',
           400: '#34D399',
@@ -49,7 +51,6 @@ module.exports = {
         },
         warning: {
           50: '#FFFBEB',
-          // ¡Añade estas tonalidades!
           100: '#FEF3C7',
           200: '#FDE68A',
           300: '#FCD34D',
@@ -62,7 +63,6 @@ module.exports = {
         },
         error: {
           50: '#FEF2F2',
-          // ¡Añade estas tonalidades!
           100: '#FEE2E2',
           200: '#FECACA',
           300: '#FCA5A5',
@@ -74,8 +74,8 @@ module.exports = {
           900: '#7F1D1D',
         },
       },
-      fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+      fontFamily: {        
+        sans: ['Inter', ...defaultTheme.fontFamily.sans],
       },
       spacing: {
         '72': '18rem',

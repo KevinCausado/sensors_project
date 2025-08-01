@@ -4,36 +4,29 @@ import { useNuxtApp } from '#app';
 
 export const useParameterStore = defineStore('parameters', {
   state: () => ({
-    parameters: [], // Para almacenar todos los parámetros de la tabla 'parameters'
+    parameters: [], 
     isLoading: false,
     error: null,
   }),
 
   getters: {
-    // CAMBIO IMPORTANTE AQUÍ:
-    // Este getter ahora extrae valores únicos de la columna 'unit'
-    // directamente de los parámetros cargados, ya que no hay una columna 'type'
-    // para filtrar por 'unit'.
+   
   getUnitParameters: (state) => {
       const uniqueUnits = new Set();
       // Filtra los parámetros cuya 'category' es 'units'
       state.parameters.forEach(param => {
-        if (param.category === 'units' && param.value) { // Asegúrate que 'value' no sea nulo
-          uniqueUnits.add(param.value); // Añade el 'value' (ej. 'mm/s') al Set
+        if (param.category === 'units' && param.value) { 
+          uniqueUnits.add(param.value); 
         }
       });
-      // Mapea los valores únicos a un formato { unit: 'mm/s', name: 'mm/s' }
-      // para que el v-for en tu template funcione correctamente.
+     
       return Array.from(uniqueUnits).map(unitValue => ({
         unit: unitValue,
-        name: unitValue, // Muestra el valor de la unidad tal cual (ej. "mm/s")
+        name: unitValue, 
       }));
     },
 
-    // Aquí pueden ir otros getters si los necesitas (ej. getParametersByName, etc.)
-    // getParametersByName: (state) => (name) => {
-    //   return state.parameters.filter(p => p.name === name);
-    // },
+    
   },
 
   actions: {
@@ -42,8 +35,8 @@ export const useParameterStore = defineStore('parameters', {
       this.error = null;
       try {
         const { data, error } = await useNuxtApp().$supabase
-          .from('parameters') // Nombre de tu tabla en Supabase
-          .select('*'); // Selecciona todas las columnas
+          .from('parameters') 
+          .select('*'); 
 
         if (error) throw error;
         this.parameters = data;
@@ -56,8 +49,7 @@ export const useParameterStore = defineStore('parameters', {
       }
     },
 
-    // Tus otras acciones (createParameter, updateParameter, deleteParameter, fetchParameterById)
-    // que ya tenías definidas, deben ir aquí abajo sin cambios.
+   
     async createParameter(parameterData) {
       this.isLoading = true;
       this.error = null;

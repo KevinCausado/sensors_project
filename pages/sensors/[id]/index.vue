@@ -234,15 +234,17 @@ import SensorChart from "@/components/SensorChart.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import VibrationProfileDisplay from "@/components/VibrationProfileDisplay.vue";
 import PermissionGuard from "@/components/PermissionGuard.vue";
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 const route = useRoute();
 const sensorStore = useSensorStore();
 const alertStore = useAlertStore();
 const organizationStore = useOrganizationStore();
 const assetStore = useAssetStore(); 
+const breadcrumbStore = useBreadcrumbStore();
 
 const error = ref(null);
-const isLoading = ref(true); // ** CAMBIO: Estado de carga local para la página **
+const isLoading = ref(true); 
 const vibrationProfile = ref(null);
 const itemsPerPage = ref(10);
 const currentPage = ref(1);
@@ -258,6 +260,11 @@ const loadSensorDetails = async (sensorId) => {
 
         if (sensor) {
             // Si el sensor existe, procedemos a cargar el resto de los datos en paralelo.
+            breadcrumbStore.setNameForPath({
+              path: route.path,
+              name: sensor.name
+            });
+
             const dataPromises = [
                 sensorStore.fetchAndSubscribeToDetailReadings(sensorId),
                 alertStore.fetchAlerts()
@@ -337,6 +344,7 @@ onMounted(async () => {
 });
 
 onUnmounted(async () => {
+  breadcrumbStore.clearNameForPath(route.path);
   await sensorStore.unsubscribeFromDetailReadings();
   await alertStore.unsubscribeFromAlertUpdates();
   await sensorStore.unsubscribeFromSensorUpdates();

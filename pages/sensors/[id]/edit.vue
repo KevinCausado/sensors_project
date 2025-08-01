@@ -158,6 +158,7 @@ import { useAssetStore } from '~/stores/assets';
 import { useParameterStore } from '~/stores/parameters';
 import PageHeader from "@/components/PageHeader.vue";
 import VibrationProfileDisplay from "@/components/VibrationProfileDisplay.vue";
+import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 const route = useRoute();
 const router = useRouter();
@@ -165,6 +166,7 @@ const sensorStore = useSensorStore();
 const organizationStore = useOrganizationStore();
 const assetStore = useAssetStore();
 const parameterStore = useParameterStore();
+const breadcrumbStore = useBreadcrumbStore();
 
 const loading = ref(true);
 const saving = ref(false);
@@ -225,6 +227,11 @@ const loadSensorData = async () => {
       router.push('/sensors');
       return;
     }
+
+      breadcrumbStore.setNameForPath({
+      path: `/sensors/${sensorId}`, // Ruta del detalle
+      name: fetchedSensor.name
+    });
 
     form.value = {
       id: fetchedSensor.id,
@@ -331,6 +338,10 @@ watch([() => form.value.type, () => form.value.asset_id], async ([newType, newAs
 });
 
 onMounted(loadSensorData);
+
+onUnmounted(() => {
+    breadcrumbStore.clearNameForPath(`/sensors/${route.params.id}`);
+});
 
 watch(() => route.params.id, (newId) => {
   if (newId) loadSensorData();
