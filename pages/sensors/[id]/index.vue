@@ -81,12 +81,24 @@
           </div>
           <div>
             <p class="text-sm font-medium text-gray-500">Última Lectura</p>
-            <p class="mt-1 text-gray-900">
-              {{ sensorStore.currentSensor.last_value !== null ? sensorStore.currentSensor.last_value : "N/A" }}
-              <span class="text-blue-600">
-                {{ sensorStore.currentSensor.last_unit ? sensorStore.currentSensor.last_unit : "" }}
-              </span>
-            </p>
+            <div class="mt-1">
+                <div v-if="sensorStore.currentSensor.type === 'vibration'">
+                    <div v-if="parseVibrationValue(sensorStore.currentSensor.last_value)" class="flex items-center gap-1 sm:gap-2">
+                        <span class="axis-badge bg-red-100 text-red-800"><b class="font-bold">X:</b> {{ parseVibrationValue(sensorStore.currentSensor.last_value).x }}</span>
+                        <span class="axis-badge bg-green-100 text-green-800"><b class="font-bold">Y:</b> {{ parseVibrationValue(sensorStore.currentSensor.last_value).y }}</span>
+                        <span class="axis-badge bg-blue-100 text-blue-800"><b class="font-bold">Z:</b> {{ parseVibrationValue(sensorStore.currentSensor.last_value).z }}</span>
+                        {{ sensorStore.currentSensor.last_unit }}
+                      </div>
+                    <p v-else class="text-gray-900">{{ sensorStore.currentSensor.last_value || "N/A" }}</p>
+                </div>
+                <!-- [MEJORADO] Se aplica badge azul a la lectura de temperatura -->
+                <div v-else-if="sensorStore.currentSensor.last_value !== null">
+                    <span class="status-badge bg-blue-100 text-blue-800 font-mono">
+                        {{ sensorStore.currentSensor.last_value }} {{ sensorStore.currentSensor.last_unit }}
+                    </span>
+                </div>
+                <p v-else class="text-gray-900">N/A</p>
+            </div>
           </div>
         </div>
       </div>
@@ -174,22 +186,12 @@
           <template v-if="sensorStore.currentSensor.type === 'vibration'">
             <li v-for="reading in paginatedReadings" :key="reading.id" class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <span class="text-sm text-gray-600 font-mono w-1/3">{{ new Date(reading.timestamp).toLocaleString() }}</span>
-              <div class="flex items-center justify-end space-x-6 w-2/3 text-right font-mono">
-                <div class="flex flex-col items-center">
-                  <span class="text-xs text-gray-500">Eje X</span>
-                  <span v-if="reading.x" class="font-medium text-gray-900">{{ reading.x.oavelocity.toFixed(3) }} {{ reading.unit }}</span>
-                  <span v-else class="text-gray-400">-</span>
-                </div>
-                <div class="flex flex-col items-center">
-                  <span class="text-xs text-gray-500">Eje Y</span>
-                  <span v-if="reading.y" class="font-medium text-gray-900">{{ reading.y.oavelocity.toFixed(3) }} {{ reading.unit }}</span>
-                  <span v-else class="text-gray-400">-</span>
-                </div>
-                <div class="flex flex-col items-center">
-                  <span class="text-xs text-gray-500">Eje Z</span>
-                  <span v-if="reading.z" class="font-medium text-gray-900">{{ reading.z.oavelocity.toFixed(3) }} {{ reading.unit }}</span>
-                  <span v-else class="text-gray-400">-</span>
-                </div>
+              <!-- [MEJORADO] Se aplica la visualización con badges -->
+              <div class="flex items-center justify-end space-x-2 w-2/3 text-right">
+                <span class="axis-badge bg-red-100 text-red-800"><b class="font-bold">X:</b> {{ reading.x ? reading.x.oavelocity.toFixed(3) : '-' }}</span>
+                <span class="axis-badge bg-green-100 text-green-800"><b class="font-bold">Y:</b> {{ reading.y ? reading.y.oavelocity.toFixed(3) : '-' }}</span>
+                <span class="axis-badge bg-blue-100 text-blue-800"><b class="font-bold">Z:</b> {{ reading.z ? reading.z.oavelocity.toFixed(3) : '-' }}</span>
+                <span class="text-xs text-gray-500">{{ reading.unit }}</span>
               </div>
             </li>
           </template>
@@ -197,7 +199,8 @@
           <template v-else>
             <li v-for="reading in paginatedReadings" :key="reading.id" class="flex justify-between items-center p-2 bg-gray-50 rounded-md">
               <span>{{ new Date(reading.timestamp).toLocaleString() }}</span>
-              <span class="font-medium">
+              <!-- [MEJORADO] Se aplica badge azul a la lectura de temperatura en el historial -->
+              <span class="status-badge bg-blue-100 text-blue-800 font-mono">
                 {{ reading.value }} {{ reading.unit }}
               </span>
             </li>
@@ -214,9 +217,19 @@
 
       <div class="card">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Alertas Recientes</h2>
-        <AlertList :alerts="alertsForCurrentSensor" />
+        <!-- [MEJORADO] Se usa el nuevo paginatedAlerts -->
+        <AlertList :alerts="paginatedAlerts" />
         <p v-if="alertsForCurrentSensor.length === 0 && !alertStore.isLoading" class="text-center text-gray-500 py-4">No hay alertas recientes.</p>
         <p v-if="alertStore.isLoading" class="text-center text-gray-500 py-4">Cargando alertas...</p>
+        <!-- [NUEVO] Componente de paginación para las alertas -->
+        <div v-if="totalAlertsPages > 1" class="mt-4">
+            <Pagination
+                :total-items="alertsForCurrentSensor.length"
+                :current-page="alertsCurrentPage"
+                :items-per-page="alertsItemsPerPage"
+                @page-change="handleAlertsPageChange"
+            />
+        </div>
       </div>
     </div>
   </div>
@@ -234,6 +247,7 @@ import SensorChart from "@/components/SensorChart.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import VibrationProfileDisplay from "@/components/VibrationProfileDisplay.vue";
 import PermissionGuard from "@/components/PermissionGuard.vue";
+import Pagination from "@/components/Pagination.vue"; 
 import { useBreadcrumbStore } from "~/stores/breadCrumb";
 
 const route = useRoute();
@@ -249,22 +263,19 @@ const vibrationProfile = ref(null);
 const itemsPerPage = ref(10);
 const currentPage = ref(1);
 
+// [NUEVO] Estado para la paginación de alertas
+const alertsCurrentPage = ref(1);
+const alertsItemsPerPage = ref(5);
+
 const loadSensorDetails = async (sensorId) => {
     isLoading.value = true;
     error.value = null;
     vibrationProfile.value = null;
     try {
-        // Primero, obtenemos la información del sensor.
         await sensorStore.fetchSensor(sensorId);
         const sensor = sensorStore.currentSensor;
-
         if (sensor) {
-            // Si el sensor existe, procedemos a cargar el resto de los datos en paralelo.
-            breadcrumbStore.setNameForPath({
-              path: route.path,
-              name: sensor.name
-            });
-
+            breadcrumbStore.setNameForPath({ path: route.path, name: sensor.name });
             const dataPromises = [
                 sensorStore.fetchAndSubscribeToDetailReadings(sensorId),
                 alertStore.fetchAlerts()
@@ -277,8 +288,6 @@ const loadSensorDetails = async (sensorId) => {
                 );
             }
             await Promise.all(dataPromises);
-            
-            // Suscribirse a actualizaciones generales
             alertStore.subscribeToAlertUpdates();
             sensorStore.subscribeToSensorUpdates();
         }
@@ -320,6 +329,23 @@ const alertsForCurrentSensor = computed(() => {
   }));
 });
 
+// [NUEVO] Computadas para la paginación de alertas
+const totalAlertsPages = computed(() => {
+    const total = alertsForCurrentSensor.value.length;
+    return total > 0 ? Math.ceil(total / alertsItemsPerPage.value) : 1;
+});
+
+const paginatedAlerts = computed(() => {
+    const alerts = alertsForCurrentSensor.value;
+    const startIndex = (alertsCurrentPage.value - 1) * alertsItemsPerPage.value;
+    return alerts.slice(startIndex, startIndex + alertsItemsPerPage.value);
+});
+
+// [NUEVO] Handler para cambiar de página en las alertas
+const handleAlertsPageChange = (page) => {
+    alertsCurrentPage.value = page;
+};
+
 const combinedAssetLocation = computed(() => {
   const sensor = sensorStore.currentSensor;
   if (!sensor) return 'N/A';
@@ -333,6 +359,18 @@ const hasThresholds = computed(() => {
 });
 
 const isDefined = (value) => value !== undefined && value !== null;
+
+const parseVibrationValue = (value) => {
+    if (typeof value !== 'string' || !value.includes(':')) return null;
+    const parts = value.replace(/,/g, ' ').split(/\s+/).reduce((acc, part) => {
+        if (part.includes(':')) {
+            const [axis, val] = part.split(':');
+            if (axis && val) acc[axis.trim().toLowerCase()] = val.trim();
+        }
+        return acc;
+    }, {});
+    return parts.x && parts.y && parts.z ? parts : null;
+};
 
 onMounted(async () => {
     await Promise.all([
@@ -368,4 +406,7 @@ watch(() => sensorStore.currentSensorReadings, () => {
 .btn { @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow; }
 .btn-primary { @apply text-white bg-primary-600 hover:bg-primary-700; }
 .btn-secondary { @apply text-gray-700 bg-gray-200 hover:bg-gray-300; }
+.axis-badge { @apply px-2 py-0.5 inline-flex text-xs leading-4 font-semibold rounded-md items-center font-mono; }
+/* [NUEVO] Se añade la clase para el badge de temperatura */
+.status-badge { @apply px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full capitalize; }
 </style>

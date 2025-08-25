@@ -18,9 +18,9 @@ const CONNECTIVITY_TIMEOUT_MINUTES = 15;
 const CONNECTIVITY_CHECK_INTERVAL_MINUTES = 5;
 const LOW_BATTERY_THRESHOLD_VOLT = 3.2;
 
-// const mqttTopics = ['Advantech/#'];
+const mqttTopics = ['Advantech/#'];
 
-const mqttTopics = ['Advantech/FF907C3C'];
+// const mqttTopics = ['Advantech/FF907C3C'];
 
 if (!supabaseUrl || !supabaseKey) {
     console.error('Error: Faltan las variables de entorno SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
@@ -219,35 +219,46 @@ function parsePayload(sensorId, sensorType, payload, firmware) {
         batteryVolt: get(payload, 'Device.BatteryVolt'),
         powerSrc: get(payload, 'Device.PowerSrc')
     };
+
     if (firmware.sensor_types.includes(sensorType)) {
         const config = firmware.structure[sensorType];
-        if (config && config.dataPath) {
-            const dataBasePath = get(payload, config.dataPath);
+        if (config) {
+            const dataBasePath = config.dataPath ? get(payload, config.dataPath) : payload;                
+            
+            const correctionFactor = config.correctionFactor || 1;
+            console.log(`[Parser] Aplicando factor de corrección de ${correctionFactor} para ${sensorType}.`);
+
             if (dataBasePath !== undefined) {
                 if (sensorType === 'temperature' && config.camposEsperados) {
                     const rawValue = get(dataBasePath, config.camposEsperados[0]);
-                    if (rawValue !== undefined) {
+                    if (rawValue !== undefined) {                        
+                        const correctedValue = rawValue * correctionFactor;
                         readings.push({
                             type: 'temperature',
-                            data: { sensor_id: sensorId, value: rawValue / 1000.0, timestamp: dateTimestamp }
+                            data: { sensor_id: sensorId, value: correctedValue, timestamp: dateTimestamp }
                         });
+                        console.log(`[Parser] Lectura de Temperatura: ${rawValue} -> ${correctedValue.toFixed(2)} °C`);
                     }
                 } else if (sensorType === 'vibration') {
                     ['X-Axis', 'Y-Axis', 'Z-Axis'].forEach(axisKey => {
                         const axisData = dataBasePath[axisKey];
-                        if (axisData && axisData.OAVelocity !== undefined) {
+                        if (axisData && axisData.OAVelocity !== undefined) {                            
+                            const correctedOAVelocity = axisData.OAVelocity * correctionFactor;
+
                             readings.push({
                                 type: 'vibration',
                                 axis: axisKey.charAt(0),
                                 data: {
                                     sensor_id: sensorId, axis: axisKey.charAt(0),
-                                    oavelocity: axisData.OAVelocity, peak: axisData.Peak, rms: axisData.RMS,
+                                    oavelocity: correctedOAVelocity, // Se guarda el valor corregido
+                                    peak: axisData.Peak, rms: axisData.RMS,
                                     kurtosis: axisData.Kurtosis, crestfactor: axisData.CrestFactor,
                                     skewness: axisData.Skewness, deviation: axisData.Deviation,
                                     peak_to_peak_displacement: axisData['Peak-to-Peak Displacement'],
                                     timestamp: dateTimestamp
                                 }
                             });
+                            console.log(`[Parser] Lectura de Vibración (${axisKey}): ${axisData.OAVelocity} -> ${correctedOAVelocity.toFixed(3)} mm/s`);
                         }
                     });
                 }

@@ -1,27 +1,39 @@
 version: '3.8'
 
 services:
-  basic-analysis-service:
+  vibrai-backend:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         - SUPABASE_URL=${SUPABASE_URL}
-        - SUPABASE_KEY=${SUPABASE_KEY}
         - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
         - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+        - NODE_ENV=production
     environment:
       - NODE_ENV=production
+      - TZ=America/Santiago
       - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - MQTT_BROKER_URL=${MQTT_BROKER_URL}
     restart: unless-stopped
     volumes:
       - ./logs:/app/logs
+      - ./tmp:/app/tmp
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "node basic-analysis.js"]
+      test: ["CMD", "sh", "-c", "pgrep -f 'node.*app.js' > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s 
+      start_period: 15s
+    networks:
+      - vibrai-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  vibrai-network:
+    driver: bridge

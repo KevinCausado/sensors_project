@@ -46,3 +46,18 @@ Thumbs.db
 # Documentación
 README.md
 *.md
+DOCUMENTACION_ARQUITECTURA.md
+DIAGRAMA_FLUJO_SERVICIOS.md
+GUIA_OPERACION.md
+GUIA_TRABAJO_COLABORATIVO.md
+README_REFACTORING.md
+payload.md
+
+# Archivos de desarrollo y testing
+tests/
+build.sh
+captain-definition
+
+# Archivos de configuración de desarrollo
+.vscode/
+.env.example

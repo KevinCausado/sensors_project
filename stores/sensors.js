@@ -205,7 +205,7 @@ export const useSensorStore = defineStore('sensors', {
                   }
                   const index = this.sensors.findIndex(s => s.id === updatedId);
                   if (index !== -1) {
-                      const { data: fullData } = await $supabase.from('sensors').select(`*, asset:assets_base(name, city, state, country), firmware:sensor_firmwares(version, model:sensor_models(name, brand:sensor_brands(name)))`).eq('id', updatedId).single();
+                      const { data: fullData } = await $supabase.from('sensors').select(`*, asset:assets_base(name, city, state, country), firmware:sensor_firmwares(version,structure,model:sensor_models(name, brand:sensor_brands(name)))`).eq('id', updatedId).single();
                       if (fullData) this.sensors[index] = this._mapSensorData(fullData);
                   }
               } else {
@@ -242,7 +242,7 @@ export const useSensorStore = defineStore('sensors', {
           firmware_id: sensor.firmware_id, organizationName: sensor.organization?.name || 'N/A',
           brandName: sensor.firmware?.model?.brand?.name || 'N/A', modelName: sensor.firmware?.model?.name || 'N/A',
           firmwareVersion: sensor.firmware?.version || 'N/A', brandId: sensor.firmware?.model?.brand_id || null,
-          modelId: sensor.firmware?.model_id || null,
+          modelId: sensor.firmware?.model_id || null, firmwareStructure: sensor.firmware?.structure || null,
         };
     },
     
@@ -276,7 +276,7 @@ export const useSensorStore = defineStore('sensors', {
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const { data, error } = await $supabase.from('sensors').select(`*, asset:assets_base(name, city, state, country), firmware:sensor_firmwares(version, model:sensor_models(name, brand:sensor_brands(name)))`);
+        const { data, error } = await $supabase.from('sensors').select(`*, asset:assets_base(name, city, state, country), firmware:sensor_firmwares(version,structure,model:sensor_models(name, brand:sensor_brands(name)))`);
         if (error) throw error;
         this.sensors = data.map(sensor => this._mapSensorData(sensor));
       } catch (e) {

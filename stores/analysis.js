@@ -53,19 +53,34 @@ export const useAnalysisStore = defineStore('analysis', {
             const getCorrectedVibrationStatus = (reading) => {
                 const profile = sensorStore.getVibrationProfileFromCache(reading.asset_id);
                 if (!profile || !profile.ranges || profile.ranges.length === 0) {
-                    return reading.final_status;
+                    return reading.final_status; // Fallback al estado de la DB
                 }
-                const highestValue = Math.max(reading.axes_values.x || 0, reading.axes_values.y || 0, reading.axes_values.z || 0);
-                for (const range of profile.ranges) {
-                    if (highestValue >= range.min_value && highestValue <= range.max_value) {
-                        switch (range.severity) {
-                            case 'A': case 'B': return 'Normal';
-                            case 'C': return 'Precaución';
-                            case 'D': return 'Peligro';
-                            default: return 'No Definido';
-                        }
+
+                const highestValue = Math.max(
+                    parseFloat(reading.axes_values?.x) || 0,
+                    parseFloat(reading.axes_values?.y) || 0,
+                    parseFloat(reading.axes_values?.z) || 0
+                );
+
+                const sortedRanges = [...profile.ranges].sort((a, b) => a.min_value - b.min_value);
+              
+                if (highestValue < sortedRanges[0].min_value) {
+                    return `${sortedRanges[0].condition_name} (Zona ${sortedRanges[0].severity})`;
+                }
+
+                let determinedRange = null;                
+                for (const range of sortedRanges) {
+                    if (highestValue >= range.min_value) {
+                        determinedRange = range;
+                    } else {
+                        break;
                     }
                 }
+
+                if (determinedRange) {
+                    return `${determinedRange.condition_name} (Zona ${determinedRange.severity})`;
+                }
+
                 return 'No Definido';
             };
 
@@ -77,19 +92,34 @@ export const useAnalysisStore = defineStore('analysis', {
                         corrected_status = getCorrectedVibrationStatus(reading);
                     }
                     return { ...reading, corrected_status };
-                });
+                });               
+          
+                const severityMap = {
+                    'crítico': 4, 'inaceptable': 4, 'extrema': 4, 'peligro': 4,
+                    'advertencia': 3, 'insatisfactoria': 3, 'precaución': 3, 'precaucion': 3,
+                    'satisfactoria': 2, 'normal': 1, 'no definido': 0, 'alerta': 2
+                };
 
-               
-                let overallStatus = 'No Definido';
-                let maxSeverity = -1;
+                let maxSeverity = 0;
                 correctedReadings.forEach(reading => {
-                    const severity = statusSeverity[reading.corrected_status] || 0;
-                    if (severity > maxSeverity) {
-                        maxSeverity = severity;
-                        overallStatus = reading.corrected_status;
+                    const status = (reading.corrected_status || 'No Definido').split(' (')[0].toLowerCase();
+                    const level = severityMap[status] ?? 0;
+                    if (level > maxSeverity) {
+                        maxSeverity = level;
                     }
                 });
 
+                let overallStatus;
+                if (maxSeverity >= 4) {
+                    overallStatus = 'Crítico';
+                } else if (maxSeverity === 3) {
+                    overallStatus = 'Advertencia';
+                } else if (maxSeverity > 0) {
+                    overallStatus = 'Normal';
+                } else {
+                    overallStatus = 'No Definido';
+                }
+                
                
                 correctedReadings.sort((a, b) => new Date(b.analysis_timestamp) - new Date(a.analysis_timestamp));
 
@@ -97,10 +127,11 @@ export const useAnalysisStore = defineStore('analysis', {
                     ...assetGroup,
                     sensor_readings: correctedReadings, 
                     latest_timestamp: correctedReadings[0]?.analysis_timestamp,
-                    overall_status: overallStatus,
+                    overall_status: overallStatus, // Se asigna el estado definitivo para el filtro.
                 };
             });
           
+            // Este filtro ahora funcionará correctamente.
             if (state.filterByStatus) {
                 processedAssets = processedAssets.filter(asset => asset.overall_status === state.filterByStatus);
             }
@@ -146,11 +177,9 @@ export const useAnalysisStore = defineStore('analysis', {
                 const assetStore = useAssetStore();
                 if (sensorStore.sensors.length === 0) await sensorStore.fetchSensors();
                 if (assetStore.assets.length === 0) await assetStore.fetchAssets();
-
+                
                 const { data, error } = await $supabase
-                    .from('analysis_results')
-                    .select('*')
-                    .order('analysis_timestamp', { ascending: false });
+                    .rpc('get_complete_analysis_results');
 
                 if (error) throw error;
                 this.analysisResults = data || [];
@@ -161,23 +190,52 @@ export const useAnalysisStore = defineStore('analysis', {
             }
         },
 
-        handleRealtimeUpdate(payload) {
+       handleRealtimeUpdate(payload) {
             const { eventType, new: newRecord, old: oldRecord } = payload;
+            const sensorStore = useSensorStore();
 
             if (eventType === 'INSERT') {
                 this.analysisResults.unshift(newRecord);
+                return;
             } 
-            else if (eventType === 'UPDATE') {
+            
+            if (eventType === 'DELETE') {
+                this.analysisResults = this.analysisResults.filter(r => r.id !== oldRecord.id);
+                return;
+            }
+
+            if (eventType === 'UPDATE') {
                 const index = this.analysisResults.findIndex(r => r.id === newRecord.id);
-                if (index !== -1) {
-                    this.analysisResults[index] = newRecord;
+                
+                if (index !== -1) {                  
+                    const existingRecord = this.analysisResults[index];
+                    const sensor = sensorStore.getSensorById(newRecord.sensor_id);
+                 
+                    if (sensor && sensor.type === 'vibration' && newRecord.axes_values) {
+                        
+                  
+                        const mergedAxes = {
+                            ...existingRecord.axes_values,
+                            ...newRecord.axes_values
+                        };                        
+                      
+                        const finalRecord = {
+                            ...newRecord,
+                            axes_values: mergedAxes
+                        };                        
+                      
+                        this.analysisResults[index] = finalRecord;
+                        
+                    } else {
+                        
+                        this.analysisResults[index] = newRecord;
+                    }
+                   
                 } else {
+                    
                     this.analysisResults.unshift(newRecord);
                 }
             } 
-            else if (eventType === 'DELETE') {
-                this.analysisResults = this.analysisResults.filter(r => r.id !== oldRecord.id);
-            }
         },
 
         subscribeToAnalysisResults() {

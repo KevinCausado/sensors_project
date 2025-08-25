@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  vibrai-backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SUPABASE_URL=${SUPABASE_URL}
+        - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+        - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+        - NODE_ENV=development
+    environment:
+      - NODE_ENV=development
+      - TZ=America/Santiago
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+      - DEBUG=vibrai:*
+    restart: unless-stopped
+    volumes:
+      # Montar código fuente para desarrollo (hot reload)
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+      - ./tmp:/app/tmp
+    ports:
+      - "3000:3000"  # Exponer puerto para debugging
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pgrep -f 'node.*app.js' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - vibrai-dev-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    # Configuración para debugging
+    stdin_open: true
+    tty: true
+
+  # Servicio opcional para monitoreo de logs
+  log-viewer:
+    image: amir20/dozzle:latest
+    container_name: vibrai-logs
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8080:8080"
+    environment:
+      - DOZZLE_LEVEL=info
+      - DOZZLE_TAILSIZE=300
+    networks:
+      - vibrai-dev-network
+    profiles:
+      - monitoring
+
+  # Servicio opcional para simulación MQTT
+  mqtt-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    environment:
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+      - SIMULATION_INTERVAL=10000  # 10 segundos
+    networks:
+      - vibrai-dev-network
+    profiles:
+      - simulation
+    depends_on:
+      - vibrai-backend-dev
+
+networks:
+  vibrai-dev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  dev-logs:
+    driver: local
+  dev-tmp:
+    driver: local

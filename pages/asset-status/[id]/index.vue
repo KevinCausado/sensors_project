@@ -51,7 +51,6 @@
           <p v-if="sensorStore.isLoading" class="text-sm text-gray-500">Cargando sensores...</p>
         </div>
 
-        <!-- El componente SensorChart ahora es autosuficiente y recibe la lista de sensores seleccionados -->
         <SensorChart
           v-if="selectedSensorsForChart.length > 0"
           :sensors="selectedSensorsForChart"
@@ -86,9 +85,24 @@
                     {{ translateStatus(sensor.status) }}
                   </span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  {{ sensor.last_value !== null ? sensor.last_value : "N/A" }}
-                  <span v-if="sensor.last_unit">{{ sensor.last_unit }}</span>
+                <td class="px-6 py-4 whitespace-nowrap">            
+                  <div v-if="sensor.last_value !== null">
+                    <div v-if="sensor.type === 'vibration'">
+                      <div v-if="parseVibrationValue(sensor.last_value)" class="flex items-center gap-1 sm:gap-2">
+                        <span class="badge badge-danger font-mono"><b class="font-bold">X:</b> {{ parseVibrationValue(sensor.last_value).x }}</span>
+                        <span class="badge badge-success font-mono"><b class="font-bold">Y:</b> {{ parseVibrationValue(sensor.last_value).y }}</span>
+                        <span class="badge badge-info font-mono"><b class="font-bold">Z:</b> {{ parseVibrationValue(sensor.last_value).z }}</span>
+                        {{ sensor.last_unit }}
+                      </div>
+                      <span v-else>{{ sensor.last_value }} {{ sensor.last_unit }}</span>
+                    </div>
+                    <div v-else>
+                      <span class="badge badge-info font-mono">
+                        {{ sensor.last_value }} {{ sensor.last_unit }}
+                      </span>
+                    </div>
+                  </div>
+                  <span v-else>N/A</span>
                 </td>
                  <td class="px-6 py-4 whitespace-nowrap">{{ sensor.last_reading_timestamp ? new Date(sensor.last_reading_timestamp).toLocaleString() : 'N/A' }}</td>
               </tr>
@@ -236,8 +250,6 @@ const availableSensorsForCharts = computed(() => {
   return sensorsForCurrentAsset.value.filter(s => s.status === 'active');
 });
 
-// CORRECCIÓN: Esta propiedad computada ahora solo filtra los sensores.
-// El componente SensorChart se encargará de obtener sus propias lecturas.
 const selectedSensorsForChart = computed(() => {
   return sensorsForCurrentAsset.value
     .filter(sensor => selectedSensorIds.value.includes(sensor.id));
@@ -251,9 +263,6 @@ const paginatedAlertsForCurrentAsset = computed(() => {
 
 const totalFilteredAlertsForAsset = computed(() => alertsForCurrentAsset.value.length);
 
-// ELIMINADO: El watcher que causaba el error ya no es necesario.
-// La lógica de suscripción ahora vive dentro de SensorChart.vue.
-
 // Manejo de paginación
 const handleAlertPageChange = (page) => {
   currentAlertPage.value = page;
@@ -263,12 +272,23 @@ const handleAlertPageChange = (page) => {
 onMounted(loadAssetData);
 
 onUnmounted(() => {
-  // Limpiamos las suscripciones generales al salir de la página.
-  // La suscripción de la gráfica se limpia dentro de su propio componente.
   alertStore.unsubscribeFromAlertUpdates();
   sensorStore.unsubscribeFromSensorUpdates(); 
   breadcrumbStore.clearNameForPath(route.path);
 });
+
+// [NUEVO] Función de ayuda para parsear el string de vibración
+const parseVibrationValue = (value) => {
+    if (typeof value !== 'string' || !value.includes(':')) return null;
+    const parts = value.replace(/,/g, ' ').split(/\s+/).reduce((acc, part) => {
+        if (part.includes(':')) {
+            const [axis, val] = part.split(':');
+            if (axis && val) acc[axis.trim().toLowerCase()] = val.trim();
+        }
+        return acc;
+    }, {});
+    return parts.x && parts.y && parts.z ? parts : null;
+};
 
 // Funciones de utilidad (traducciones y clases de badge)
 const formatDate = (date) => {

@@ -18,7 +18,8 @@
             <th class="table-header">Nombre</th>
             <th class="table-header">Email Remitente</th>
             <th class="table-header">Host</th>
-            <th class="table-header">Puerto</th>            
+            <th class="table-header">Puerto</th>    
+            <th class="table-header"></th>          
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">

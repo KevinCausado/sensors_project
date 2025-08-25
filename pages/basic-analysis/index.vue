@@ -50,18 +50,18 @@
             <tr v-else-if="analysisStore.error">
               <td colspan="5" class="table-cell-feedback text-red-600">Error: {{ analysisStore.error }}</td>
             </tr>
-            <tr v-else-if="!enrichedPaginatedResults || enrichedPaginatedResults.length === 0">
+            <tr v-else-if="!paginatedResults || paginatedResults.length === 0">
               <td colspan="5" class="table-cell-feedback">No se encontraron activos con los filtros actuales.</td>
             </tr>
             
-            <template v-else v-for="asset in enrichedPaginatedResults" :key="asset.asset_id">
+            <template v-else v-for="asset in paginatedResults" :key="asset.asset_id">
               <tr class="hover:bg-gray-50 cursor-pointer" @click="toggleExpand(asset.asset_id)">
                 <td class="table-cell">{{ formatDate(asset.latest_timestamp) }}</td>
                 <td class="table-cell font-medium text-gray-900">{{ asset.asset_name }}</td>
                 <td class="table-cell">{{ asset.sensor_readings.length }} mediciones</td>
                 <td class="table-cell">
-                  <span :class="['status-badge', getStatusBadgeClass(calculateOverallStatus(asset.sensor_readings))]">
-                    {{ calculateOverallStatus(asset.sensor_readings) }}
+                  <span :class="['status-badge', getStatusBadgeClass(asset.overall_status)]">
+                    {{ analysisStore.translateStatus(asset.overall_status) }}
                   </span>
                 </td>
                 <td class="table-cell text-center">
@@ -73,7 +73,7 @@
               <!-- Fila Desplegable con Tabla de Detalles -->
               <tr v-if="expandedAssets.includes(asset.asset_id)">
                  <td colspan="5" class="p-0 bg-gray-50">
-                    <div class="p-4 border-l-4" :class="getStatusBorderClass(calculateOverallStatus(asset.sensor_readings))">
+                    <div class="p-4 border-l-4" :class="getStatusBorderClass(asset.overall_status)">
                         <h4 class="font-semibold text-sm mb-3 text-gray-700">Detalle de mediciones para {{ asset.asset_name }}:</h4>
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-100">
@@ -90,7 +90,7 @@
                                    <td class="detail-table-cell">{{ formatDate(reading.analysis_timestamp) }}</td>
                                    <td class="detail-table-cell">{{ reading.sensor_name }}</td>
                                    <td class="detail-table-cell">
-                                        <div v-if="reading.sensor_type === 'vibration' && reading.axes_values" class="flex items-center gap-1 sm:gap-2">
+                                        <div v-if="reading.sensor_type === 'vibration'" class="flex items-center gap-1 sm:gap-2">
                                             <span class="axis-badge bg-red-100 text-red-800"><b class="font-bold">X:</b> {{ reading.axes_values.x }}</span>
                                             <span class="axis-badge bg-green-100 text-green-800"><b class="font-bold">Y:</b> {{ reading.axes_values.y }}</span>
                                             <span class="axis-badge bg-blue-100 text-blue-800"><b class="font-bold">Z:</b> {{ reading.axes_values.z }}</span>
@@ -103,9 +103,8 @@
                                         </div>
                                    </td>
                                    <td class="detail-table-cell">
-                                       <!-- [CAMBIO CLAVE] Se usa el estado calculado en el frontend -->
-                                       <span :class="['status-badge', getStatusBadgeClass(reading.calculated_status)]">
-                                            {{ analysisStore.translateStatus(reading.calculated_status) }}
+                                       <span :class="['status-badge', getStatusBadgeClass(reading.corrected_status)]">
+                                            {{ analysisStore.translateStatus(reading.corrected_status) }}
                                         </span>
                                    </td>
                                    <td class="detail-table-cell align-top text-xs">
@@ -171,7 +170,7 @@ import { useAssetStore } from '~/stores/assets';
 import { useCustomVibrationProfileStore } from '~/stores/customVibrationProfiles';
 import PageHeader from '~/components/PageHeader.vue';
 import Pagination from '~/components/Pagination.vue';
-import {ChevronDownIcon } from "@heroicons/vue/24/outline";
+import { ChevronDownIcon } from "@heroicons/vue/24/outline";
 
 definePageMeta({
   // middleware: ['auth'] 
@@ -183,7 +182,6 @@ const SearchIcon = defineComponent({
   ])
 });
 
-
 const analysisStore = useAnalysisStore();
 const sensorStore = useSensorStore();
 const assetStore = useAssetStore();
@@ -192,90 +190,11 @@ const customProfileStore = useCustomVibrationProfileStore();
 const expandedAssets = ref([]);
 const loadingProfiles = ref([]);
 
-// --- Lógica de Cálculo de Estado en Frontend ---
-
-/**
- * Encuentra el rango de severidad (zona) para un valor de vibración dado.
- * @param {number} value - El valor medido.
- * @param {object} profile - El perfil de vibración con sus rangos.
- * @returns {object|null} El objeto del rango que corresponde al valor, o null.
- */
-const findTriggeredRange = (value, profile) => {
-  if (!profile || !profile.ranges || value === null) return null;
-  const sortedRanges = [...profile.ranges].sort((a, b) => a.max_value - b.max_value);
-  for (const range of sortedRanges) {
-    if (value >= range.min_value && value <= range.max_value) return range;
-  }
-  if (sortedRanges.length > 0 && value > sortedRanges[sortedRanges.length - 1].max_value) {
-      return sortedRanges[sortedRanges.length - 1];
-  }
-  return null;
-};
-
-/**
- * Propiedad computada que enriquece los resultados del análisis con un estado calculado en el frontend.
- */
-const enrichedPaginatedResults = computed(() => {
-  if (!analysisStore.getPaginatedResults) return [];
-  
-  return analysisStore.getPaginatedResults.map(asset => {
-    const newSensorReadings = asset.sensor_readings.map(reading => {
-      const newReading = { ...reading };
-      
-      // Por defecto, el estado calculado es el que viene de la DB.
-      newReading.calculated_status = reading.final_status;
-
-      // Si es de vibración, intentamos recalcularlo.
-      if (reading.sensor_type === 'vibration') {
-        const profile = sensorStore.getVibrationProfileFromCache(reading.asset_id);
-        if (profile) {
-          const range = findTriggeredRange(reading.measured_value, profile);
-          if (range) {
-            // Sobrescribimos con el estado calculado en el frontend.
-            newReading.calculated_status = `${range.condition_name} (Zona ${range.severity})`;
-          } else {
-            newReading.calculated_status = 'No Definido';
-          }
-        }
-      }
-      return newReading;
-    });
-    
-    return { ...asset, sensor_readings: newSensorReadings };
-  });
+// [SIMPLIFICADO] La propiedad computada ahora solo devuelve los resultados del store.
+// Ya no necesita lógica de caché porque los datos vienen completos desde la BD.
+const paginatedResults = computed(() => {
+  return analysisStore.getPaginatedResults || [];
 });
-
-/**
- * Calcula el estado general de un activo basado en el peor estado de sus sensores.
- * @param {Array} readings - El array de lecturas de sensores para un activo.
- * @returns {string} El estado de mayor severidad encontrado.
- */
-const calculateOverallStatus = (readings) => {
-    if (!readings || readings.length === 0) return 'No Definido';
-
-    const severityMap = {
-        'crítico': 4, 'inaceptable': 4, 'extrema': 4, 'peligro': 4,
-        'advertencia': 3, 'insatisfactoria': 3, 'precaución': 3,
-        'satisfactoria': 2, 'normal': 1, 'no definido': 0
-    };
-
-    let maxSeverity = 0;
-
-    for (const reading of readings) {
-        // Usa el 'calculated_status' para determinar la severidad.
-        const status = (reading.calculated_status || 'No Definido').split(' (')[0].toLowerCase();
-        const level = severityMap[status] ?? 0;
-        if (level > maxSeverity) {
-            maxSeverity = level;
-        }
-    }
-
-    if (maxSeverity >= 4) return 'Crítico';
-    if (maxSeverity === 3) return 'Advertencia';
-    if (maxSeverity > 0) return 'Normal';
-    return 'No Definido';
-};
-
 
 const toggleExpand = async (assetId) => {
     const index = expandedAssets.value.indexOf(assetId);
@@ -299,29 +218,17 @@ const toggleExpand = async (assetId) => {
     }
 };
 
-/**
- * [CORREGIDO] Devuelve la clase CSS para el badge de estado, priorizando la zona.
- * @param {string} status - El estado del análisis.
- * @returns {string} Las clases de Tailwind CSS para el badge.
- */
 const getStatusBadgeClass = (status) => {
     if (!status) return 'bg-gray-100 text-gray-800';
     const statusLower = status.toLowerCase();
 
-    // Prioriza la coloración por Zonas de vibración para máxima consistencia.
-    if (statusLower.includes('zona d')) return 'bg-red-100 text-red-800';
-    if (statusLower.includes('zona c')) return 'bg-yellow-100 text-yellow-800';
+    if (statusLower.includes('zona d') || statusLower.includes('crítico')) return 'bg-red-100 text-red-800';
+    if (statusLower.includes('zona c') || statusLower.includes('advertencia') || statusLower.includes('precaución')) return 'bg-yellow-100 text-yellow-800';
     if (statusLower.includes('zona b')) return 'bg-blue-100 text-blue-800';
-    if (statusLower.includes('zona a')) return 'bg-green-100 text-green-800';
-
-    // Lógica de fallback para estados generales (ej. temperatura, estado general del activo)
-    if (statusLower.includes('crítico') || statusLower.includes('inaceptable')) return 'bg-red-100 text-red-800';
-    if (statusLower.includes('advertencia') || statusLower.includes('insatisfactoria')) return 'bg-yellow-100 text-yellow-800';
-    if (statusLower.includes('normal') || statusLower.includes('satisfactoria')) return 'bg-green-100 text-green-800';
+    if (statusLower.includes('zona a') || statusLower.includes('normal') || statusLower.includes('satisfactoria') || statusLower.includes('buena')) return 'bg-green-100 text-green-800';
             
-    return 'bg-gray-100 text-gray-800'; // Color por defecto
+    return 'bg-gray-100 text-gray-800';
 };
-
 
 const getStatusBorderClass = (status) => {
     if (!status) return 'border-gray-300';
@@ -348,12 +255,15 @@ const getSeverityClass = (severity) => ({'A': 'bg-green-100 text-green-800', 'B'
 const isDefined = (value) => value !== null && value !== undefined;
 
 onMounted(async () => {
+  // Ahora la acción fetchAnalysisResults llamará a la nueva función RPC.
   await Promise.all([
       analysisStore.fetchAnalysisResults(),
       sensorStore.fetchSensors(),
       assetStore.fetchAssets(),
       customProfileStore.fetchProfiles()
   ]);
+
+  // La suscripción en tiempo real sigue funcionando para las actualizaciones.
   analysisStore.subscribeToAnalysisResults();
 });
 

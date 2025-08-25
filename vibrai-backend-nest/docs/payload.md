@@ -1,3 +1,9 @@
+# Documentación de Payload MQTT
+
+## Estructura del Payload Original
+
+Los datos llegan desde los sensores con la siguiente estructura:
+
 [
   {    
     "SequenceNumber": 301,
@@ -59,3 +65,51 @@
     "Device": { "Events": 0, "PowerSrc": 1, "BatteryVolt": 95, "Time": 1722427181 }
   }
 ]
+
+## Factores de Conversión Aplicados
+
+El sistema aplica los siguientes factores de conversión durante el procesamiento en `payload.service.js`:
+
+### Datos de Vibración (Accelerometer)
+- **OAVelocity**: Se divide por 100 para convertir a mm/s
+- **Peak**: Se divide por 100 o 1000 según el valor (condicional)
+- **RMS**: Se divide por 100 o 1000 según el valor (condicional)
+- **Kurtosis**: Se divide por 100
+- **CrestFactor**: Se divide por 100
+- **Skewness**: Se divide por 100
+- **Deviation**: Se divide por 100
+
+### Datos de Temperatura (TempHumi)
+- **SenVal**: Se divide por 1000 para convertir a °C
+
+## Ejemplo de Valores Convertidos
+
+Después de aplicar los factores de conversión, los valores típicos serían:
+
+```json
+{
+  "vibration": {
+    "oavelocity": 0.035,     // 3.5 / 100 = 0.035 mm/s
+    "peak": 0.0495,          // 4.95 / 100 = 0.0495 mm/s
+    "rms": 0.035,            // 3.5 / 100 = 0.035 mm/s
+    "kurtosis": 0.03,        // 3.0 / 100 = 0.03
+    "crestfactor": 0.0141,   // 1.41 / 100 = 0.0141
+    "skewness": 0.001,       // 0.1 / 100 = 0.001
+    "deviation": 0.0008      // 0.08 / 100 = 0.0008
+  },
+  "temperature": {
+    "value": 45.0            // 45000 / 1000 = 45.0 °C
+  }
+}
+```
+
+## Análisis con Umbrales ISO 10816
+
+Los valores convertidos se analizan contra los umbrales estándar de la norma ISO 10816:
+
+- **Normal**: ≤ 2.3 mm/s
+- **Alerta**: ≤ 4.5 mm/s
+- **Precaución**: ≤ 9.0 mm/s
+- **Peligro**: > 9.0 mm/s
+
+En el ejemplo anterior, un valor de 0.035 mm/s se clasificaría como "Normal".

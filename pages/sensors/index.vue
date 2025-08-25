@@ -11,7 +11,7 @@
       </template>
     </PageHeader>
 
-    <!-- Tarjetas de estadísticas ahora siempre visibles, calculadas sobre sensores lógicos -->
+    <!-- Tarjetas de estadísticas -->
     <div class="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-4">
       <StatCard title="Total Sensores Lógicos" :value="totalSensors" icon="sensor" color="primary" />
       <StatCard title="Sensores Activos" :value="activeSensors" icon="sensor" color="success" />
@@ -106,11 +106,12 @@
                                       <div v-if="sensor.last_reading_timestamp">
                                         <!-- Vista para Vibración -->
                                         <div v-if="sensor.type === 'vibration'">
-                                            <div v-if="parseVibrationValue(sensor.last_value)" class="flex items-center gap-1 sm:gap-2">
+                                           <div v-if="parseVibrationValue(sensor.last_value)" class="flex items-center gap-1 sm:gap-2">
                                                 <span class="axis-badge bg-red-100 text-red-800"><b class="font-bold">X:</b> {{ parseVibrationValue(sensor.last_value).x }}</span>
                                                 <span class="axis-badge bg-green-100 text-green-800"><b class="font-bold">Y:</b> {{ parseVibrationValue(sensor.last_value).y }}</span>
                                                 <span class="axis-badge bg-blue-100 text-blue-800"><b class="font-bold">Z:</b> {{ parseVibrationValue(sensor.last_value).z }}</span>
-                                            </div>
+                                           {{ sensor.last_unit }}
+                                              </div> 
                                             <div v-else class="font-mono text-sm">{{ sensor.last_value }} {{ sensor.last_unit }}</div>
                                         </div>
                                         <!-- Vista para Temperatura y otros -->
@@ -119,7 +120,9 @@
                                                 {{ sensor.last_value }} {{ sensor.last_unit }}
                                             </span>
                                         </div>
-                                        <!-- Vista de fecha revertida -->
+                                        <div v-if="['vibration', 'temperature'].includes(sensor.type)" class="text-xs text-gray-500 italic" title="Factor de multiplicación aplicado a la lectura cruda">
+                                          Factor: <b>x{{ getCorrectionFactor(sensor) }}</b>
+                                        </div>
                                         <div class="text-xs text-gray-500 mt-1">{{ formatDate(sensor.last_reading_timestamp) }}</div>
                                       </div>
                                       <div v-else class="text-xs text-gray-400 italic">Sin lecturas</div>
@@ -327,15 +330,28 @@ const getDeviceStatusClass = getSensorStatusClass; // Reutilizamos la misma lóg
 const getDeviceStatusBorderClass = (status) => ({ "active": "border-green-400", "maintenance": "border-yellow-400", "inactive": "border-gray-400", "error": "border-red-500" }[status] || "border-gray-300");
 const translateSensorStatus = (status) => ({ "active": "Activo", "maintenance": "Mantenimiento", "inactive": "Inactivo", "error": "Error" }[status] || status);
 const translateSensorType = (type) => ({ "temperature": "Temperatura", "vibration": "Vibración" }[type] || type);
+
+const getCorrectionFactor = (sensor) => {
+  if (sensor.firmwareStructure && sensor.firmwareStructure[sensor.type]) {
+    return sensor.firmwareStructure[sensor.type].correctionFactor ?? 1;
+  }
+  return 1;
+};
+
+
 const parseVibrationValue = (value) => {
     if (typeof value !== 'string' || !value.includes(':')) return null;
-    const parts = value.split(',').reduce((acc, part) => {
-        const [axis, val] = part.split(':');
-        if (axis && val) {
-            acc[axis.trim().toLowerCase()] = val.trim();
+    // Reemplaza comas por espacios y luego divide por cualquier cantidad de espacios
+    const parts = value.replace(/,/g, ' ').split(/\s+/).reduce((acc, part) => {
+        if (part.includes(':')) {
+            const [axis, val] = part.split(':');
+            if (axis && val) {
+                acc[axis.trim().toLowerCase()] = val.trim();
+            }
         }
         return acc;
     }, {});
+    // Devuelve el objeto solo si los tres ejes están presentes
     return parts.x && parts.y && parts.z ? parts : null;
 };
 const formatDate = (dateString) => {
