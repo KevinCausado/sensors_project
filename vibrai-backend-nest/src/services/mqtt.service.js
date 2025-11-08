@@ -12,12 +12,23 @@ class MQTTService {
 
   async connect() {
     return new Promise((resolve, reject) => {
-      this.client = mqtt.connect(environmentConfig.mqttBrokerUrl, {
+      const connectionOptions = {
         clientId: `vibrai-backend-${Math.random().toString(16).substr(2, 8)}`,
         clean: true,
         connectTimeout: 30000,
         reconnectPeriod: 5000
-      });
+      };
+
+      // Agregar credenciales de autenticación si están configuradas
+      if (environmentConfig.mqttUsername && environmentConfig.mqttPassword) {
+        connectionOptions.username = environmentConfig.mqttUsername;
+        connectionOptions.password = environmentConfig.mqttPassword;
+        console.log(`[MQTT] Conectando con autenticación para usuario: ${environmentConfig.mqttUsername}`);
+      } else {
+        console.log('[MQTT] Conectando sin autenticación');
+      }
+
+      this.client = mqtt.connect(environmentConfig.mqttBrokerUrl, connectionOptions);
 
       this.client.on('connect', () => {
         console.log(`[MQTT] Conectado exitosamente al broker MQTT en ${environmentConfig.mqttBrokerUrl}`);

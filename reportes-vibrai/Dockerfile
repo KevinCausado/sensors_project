@@ -4,17 +4,12 @@ FROM node:18-alpine
 # Establecer directorio de trabajo
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para canvas
+# Instalar dependencias del sistema necesarias para algunas librerías de Node.js
 RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    pkgconfig \
-    pixman-dev \
-    cairo-dev \
-    pango-dev \
-    jpeg-dev \
-    giflib-dev
+    && rm -rf /var/cache/apk/*
 
 # Copiar archivos de dependencias
 COPY package*.json ./
@@ -33,7 +28,7 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 --ingroup nodejs appuser
 
 # Copiar el código fuente
-COPY report-scheduler-service.js ./
+COPY basic-analysis.js start.js report-scheduler-service.js ./
 
 # Crear directorio para logs si es necesario
 RUN mkdir -p /app/logs
@@ -59,7 +54,7 @@ EXPOSE 3000
 
 # Comando de salud para verificar que el proceso está corriendo
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD pgrep -f "node report-scheduler-service.js" || exit 1
+    CMD pgrep -f "node basic-analysis.js" || exit 1
 
 # Comando para ejecutar la aplicación
-CMD ["node", "report-scheduler-service.js"]
+CMD ["node", "start.js"]

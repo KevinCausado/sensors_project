@@ -38,7 +38,7 @@ class MainService {
       console.log('[MAIN] Conexión MQTT establecida');
 
       // Suscribirse a tópicos
-      await this.mqttService.subscribe('Advantech/#');
+      await this.mqttService.subscribe('Advantech/#');      
       console.log('[MAIN] Suscrito a tópicos MQTT');
 
       // Iniciar monitoreo de conectividad
@@ -172,10 +172,30 @@ class MainService {
         console.log(`[READINGS] Procesando lecturas de vibración con inserción en bloque optimizada`);
         await this.saveVibrationReadingsBatch(sensor, readings);
         
-        // Analizar cada lectura individualmente después de guardar en bloque
-        for (const reading of readings) {
-          await this.analyzeVibrationReading(sensor, reading);
-        }
+         console.log(`[READINGS] Analizando el valor máximo de vibración de todos los ejes para una alerta consistente.`);
+
+        // 1. Asegurarse de que hay lecturas para procesar.
+        if (readings.length === 0) return;
+
+        // 2. Encontrar la lectura que contiene el valor máximo de 'oavelocity'.
+        const maxReading = readings.reduce((max, current) => {
+            const currentValue = current.data && typeof current.data.oavelocity === 'number' ? current.data.oavelocity : -Infinity;
+            const maxValue = max.data && typeof max.data.oavelocity === 'number' ? max.data.oavelocity : -Infinity;
+            return (currentValue > maxValue) ? current : max;
+        }, readings[0]);
+
+        // 3. Crear un objeto de lectura "representativo" para el análisis, usando el valor máximo.
+        const analysisReading = {
+            type: 'vibration',
+            axis: maxReading.axis, // Eje que tuvo el valor máximo
+            metric: 'OAVelocity',
+            value: maxReading.data.oavelocity,
+            unit: 'mm/s',
+            timestamp: maxReading.timestamp
+        };
+
+        // 4. Llamar a la función de análisis UNA SOLA VEZ con el valor máximo.
+        await this.analyzeReading(sensor, analysisReading);
       } else {
         // Para otros tipos, procesar individualmente
         for (const reading of readings) {
@@ -289,29 +309,29 @@ class MainService {
   }
 
   // Analiza una lectura de vibración completa
-  async analyzeVibrationReading(sensor, vibrationReading) {
-    try {
-      // Usar OAVelocity como valor principal para análisis
-      if (vibrationReading.data.oavelocity !== undefined) {
-        const analysisReading = {
-          type: 'vibration',
-          axis: vibrationReading.axis,
-          metric: 'OAVelocity',
-          value: vibrationReading.data.oavelocity,
-          unit: 'mm/s',
-          timestamp: vibrationReading.timestamp
-        };
+  // async analyzeVibrationReading(sensor, vibrationReading) {
+  //   try {
+  //     // Usar OAVelocity como valor principal para análisis
+  //     if (vibrationReading.data.oavelocity !== undefined) {
+  //       const analysisReading = {
+  //         type: 'vibration',
+  //         axis: vibrationReading.axis,
+  //         metric: 'OAVelocity',
+  //         value: vibrationReading.data.oavelocity,
+  //         unit: 'mm/s',
+  //         timestamp: vibrationReading.timestamp
+  //       };
 
-        await this.analyzeReading(sensor, analysisReading);
+  //       await this.analyzeReading(sensor, analysisReading);
         
-        // Nota: No actualizar última lectura aquí individualmente
-        // La actualización se hace en bloque en saveVibrationReadingsBatch
-      }
+  //       // Nota: No actualizar última lectura aquí individualmente
+  //       // La actualización se hace en bloque en saveVibrationReadingsBatch
+  //     }
 
-    } catch (error) {
-      console.error(`[READINGS] Error al analizar lectura de vibración:`, error.message);
-    }
-  }
+  //   } catch (error) {
+  //     console.error(`[READINGS] Error al analizar lectura de vibración:`, error.message);
+  //   }
+  // }
 
   // Guarda una lectura en la base de datos
   async saveReading(sensor, reading) {

@@ -33,9 +33,11 @@
           <p v-else-if="series.length === 0 && !loading" class="text-center text-gray-500 py-4">{{ emptyDataMessage }}</p>
           <VueApexCharts
             v-else
+            ref="chartRef"
             :options="chartOptions"
             :series="series"
             :height="height"
+            :key="chartKey"
           />
         </div>
         <template #fallback>
@@ -50,7 +52,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useSensorStore } from '@/stores/sensors';
 import VueApexCharts from 'vue3-apexcharts';
 
@@ -68,6 +70,13 @@ const error = computed(() => sensorStore.error);
 const selectedRange = ref('15m');
 const customStartDate = ref('');
 const customEndDate = ref('');
+const chartRef = ref(null);
+const chartKey = ref(0);
+
+// Estados para controlar zoom
+const isZoomed = ref(false);
+const zoomTimeout = ref(null);
+const currentZoom = ref(null);
 
 const timeRanges = [
   { value: '15m', label: '15m' },
@@ -80,6 +89,8 @@ const timeRanges = [
 ];
 
 let debounceTimer;
+let updateQueue = [];
+let isProcessingQueue = false;
 
 function debounce(func, delay) {
   return function(...args) {
@@ -88,7 +99,40 @@ function debounce(func, delay) {
   };
 }
 
-// Esta función ahora llama a la acción del store que usa el RPC
+// Cola de actualizaciones para aplicar después del zoom
+const queueUpdate = (newData) => {
+  updateQueue.push(newData);
+  if (!isZoomed.value) {
+    processQueue();
+  }
+};
+
+const processQueue = async () => {
+  if (isProcessingQueue || updateQueue.length === 0) return;
+  
+  isProcessingQueue = true;
+  const latestUpdate = updateQueue[updateQueue.length - 1];
+  updateQueue = [];
+  
+  await nextTick();
+  
+  if (chartRef.value && chartRef.value.chart && currentZoom.value) {
+    try {
+      chartRef.value.chart.updateSeries(latestUpdate);
+      // Restaurar zoom
+      setTimeout(() => {
+        if (chartRef.value && chartRef.value.chart && currentZoom.value) {
+          chartRef.value.chart.zoomX(currentZoom.value.min, currentZoom.value.max);
+        }
+      }, 50);
+    } catch (e) {
+      console.warn('Error actualizando chart:', e);
+    }
+  }
+  
+  isProcessingQueue = false;
+};
+
 const fetchDataAndSubscribe = debounce(async (startTime, endTime) => {
   const ids = props.sensors.map(s => s.id);
   if (ids.length > 0 && startTime && endTime) {
@@ -102,6 +146,12 @@ const handlePredefinedRangeChange = (rangeValue) => {
   selectedRange.value = rangeValue;
   customStartDate.value = '';
   customEndDate.value = '';
+  
+  // Reset zoom state
+  isZoomed.value = false;
+  currentZoom.value = null;
+  chartKey.value++;
+  
   const now = new Date();
   let startTime = new Date();
   const value = parseInt(rangeValue.slice(0, -1));
@@ -117,6 +167,10 @@ const handlePredefinedRangeChange = (rangeValue) => {
 const handleCustomRangeChange = () => {
   if (customStartDate.value && customEndDate.value) {
     selectedRange.value = 'custom';
+    isZoomed.value = false;
+    currentZoom.value = null;
+    chartKey.value++;
+    
     const start = new Date(customStartDate.value);
     const end = new Date(customEndDate.value);
     if (start < end) fetchDataAndSubscribe(start, end);
@@ -134,6 +188,9 @@ watch(sensorIds, () => {
 
 onUnmounted(() => {
   sensorStore.unsubscribeFromChartReadings();
+  if (zoomTimeout.value) {
+    clearTimeout(zoomTimeout.value);
+  }
 });
 
 const chartOptions = computed(() => ({
@@ -143,17 +200,35 @@ const chartOptions = computed(() => ({
     toolbar: { show: true },
     locales: [{ name: 'es', options: { months: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'], shortMonths: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'], days: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], shortDays: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], toolbar: { download: 'Descargar', selection: 'Selección', selectionZoom: 'Zoom', zoomIn: 'Acercar', zoomOut: 'Alejar', pan: 'Mover', reset: 'Resetear' } } }],
     defaultLocale: 'es',
-    // Se agrega el degradado al fondo del área
-    foreColor: '#373d3f'
+    foreColor: '#373d3f',
+    events: {
+      zoomed: function(chartContext, { xaxis }) {
+        isZoomed.value = true;
+        currentZoom.value = { min: xaxis.min, max: xaxis.max };
+        
+        // Reset timeout para volver a normal después de inactividad
+        if (zoomTimeout.value) clearTimeout(zoomTimeout.value);
+        zoomTimeout.value = setTimeout(() => {
+          isZoomed.value = false;
+          currentZoom.value = null;
+          processQueue();
+        }, 30000); // 30 segundos sin actividad
+      },
+      
+      beforeResetZoom: function() {
+        isZoomed.value = false;
+        currentZoom.value = null;
+        if (zoomTimeout.value) clearTimeout(zoomTimeout.value);
+        processQueue();
+        return true;
+      }
+    }
   },
-  // Paleta de colores más moderna
   colors: ['#00B1FF', '#FF0080', '#00A74F', '#FFD100', '#D100FF', '#FF6633', '#1F77B4', '#AEC7E8'],
-  // Se cambia el estilo del trazo para un efecto más limpio
   stroke: {
     curve: 'smooth',
     width: 2,
   },
-  // Se añaden opciones de fill para los degradados
   fill: {
     type: 'gradient',
     gradient: {
@@ -163,7 +238,6 @@ const chartOptions = computed(() => ({
       stops: [0, 100, 100, 100]
     }
   },
-  // Marcadores interactivos que aparecen al pasar el cursor
   markers: {
     size: 0,
     hover: {
@@ -220,14 +294,11 @@ const chartOptions = computed(() => ({
   },
 }));
 
-
-
 const series = computed(() => {
   const allSeries = [];
 
   props.sensors.forEach(sensor => {
     if (!sensor?.id) return;
-    
     
     const dataToDisplay = sensorStore.getReadingsBySensorId(sensor.id);
     if (!dataToDisplay || dataToDisplay.length === 0) return;
@@ -262,6 +333,13 @@ const series = computed(() => {
         }
     }
   });
+
+  // Si hay zoom activo, encolar la actualización
+  if (isZoomed.value) {
+    queueUpdate(allSeries);
+    return series.value; // Devolver datos anteriores
+  }
+
   return allSeries;
 });
 </script>

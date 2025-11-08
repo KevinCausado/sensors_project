@@ -373,20 +373,47 @@ export const useSensorStore = defineStore('sensors', {
       }
     },
     
-    async updateSensor(id, sensorData) {
+     async updateSensor(id, sensorData) {
       this.isLoading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const { data, error } = await $supabase.from('sensors').update(sensorData).eq('id', id).select().single();
+
+        // Obtenemos el estado del sensor ANTES de actualizarlo.
+        const oldSensor = this.getSensorById(id);
+
+        // Realizamos la actualización en la base de datos.
+        const { data: updatedSensor, error } = await $supabase
+            .from('sensors')
+            .update(sensorData)
+            .eq('id', id)
+            .select()
+            .single();
+
         if (error) throw error;
 
-        if (data && data.asset_id && data.type === 'vibration') {
-          await this.updateVibrationSensorThresholdsForAsset(data.asset_id);
+        // LÓGICA PARA TEMPERATURA: Borrar alertas si los umbrales cambian.
+        const thresholdsChanged = oldSensor && JSON.stringify(oldSensor.thresholds) !== JSON.stringify(updatedSensor.thresholds);
+        if (thresholdsChanged && updatedSensor.type === 'temperature' && updatedSensor.asset_id) {
+            console.log(`[Sensor Store] Temperature thresholds changed for sensor ${id}. Deleting alerts for asset ${updatedSensor.asset_id}...`);
+            const { error: rpcError } = await $supabase.rpc('delete_temperature_alerts_for_asset', { p_asset_id: updatedSensor.asset_id });
+            if (rpcError) {
+                console.error('Error deleting temperature alerts via RPC:', rpcError);
+            } else {
+                console.log(`[Sensor Store] Temperature alerts for asset ${updatedSensor.asset_id} deleted successfully.`);
+            }
         }
 
+        // LÓGICA ORIGINAL PARA VIBRACIÓN: Resincronizar umbrales desde el perfil del activo.
+        if (updatedSensor && updatedSensor.asset_id && updatedSensor.type === 'vibration') {
+          console.log(`[Sensor Store] Vibration sensor ${id} updated. Resyncing thresholds from asset...`);
+          await this.updateVibrationSensorThresholdsForAsset(updatedSensor.asset_id);
+        }
+
+        // Finalmente, refrescamos la lista de sensores para actualizar la UI.
         await this.fetchSensors();
-        return data;
+        return updatedSensor;
+
       } catch (e) {
         this.error = 'Failed to update sensor: ' + e.message;
         throw e;
@@ -394,7 +421,7 @@ export const useSensorStore = defineStore('sensors', {
         this.isLoading = false;
       }
     },
-
+    
     async deleteSensor(id) {
       this.isLoading = true;
       this.error = null;

@@ -1,47 +1,125 @@
 // stores/assets.js
 import { defineStore } from 'pinia';
 import { useNuxtApp } from '#app';
-import { useOrganizationStore } from '~/stores/organizations'; 
-import { useSensorStore } from '~/stores/sensors'; 
+import { useOrganizationStore } from '~/stores/organizations';
+import { useSensorStore } from '~/stores/sensors';
 
 export const useAssetStore = defineStore('assets', {
   state: () => ({
     assets: [],
-    assetTypes: [], 
-    isoGroups: [], 
+    assetTypes: [],
+    isoGroups: [],
     rigidityTypes: [],
     foundationTypes: [],
     couplingTypes: [],
-    vibrationProfiles: [], 
-    loading: false, 
-    error: null, 
-    currentAsset: null, 
-    _dataInitialized: false, 
+    vibrationProfiles: [],
+    loading: false,
+    error: null,
+    currentAsset: null,
+    _dataInitialized: false,
   }),
 
   getters: {
-     getAssetById: (state) => (id) => {
+    getAssetById: (state) => (id) => {
       return state.assets.find(asset => asset.id === id);
     },
+    // ... el resto de tus getters no cambian
     getAssets: (state) => state.assets,
     getAssetTypes: (state) => state.assetTypes,
     getIsoGroups: (state) => state.isoGroups,
     getRigidityTypes: (state) => state.rigidityTypes,
     getFoundationTypes: (state) => state.foundationTypes,
     getCouplingTypes: (state) => state.couplingTypes,
-    getVibrationProfiles: (state) => state.vibrationProfiles, 
+    getVibrationProfiles: (state) => state.vibrationProfiles,
     isLoading: (state) => state.loading,
     getError: (state) => state.error,
     getCurrentAsset: (state) => state.currentAsset,
   },
 
   actions: {
+    async updateAsset(id, assetData) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { $supabase } = useNuxtApp();
+        const sensorStore = useSensorStore();
+
+        const oldAsset = this.getAssetById(id);
+        const dataToUpdate = { ...assetData };
+
+        const computedOrRelationKeys = [
+            'organization_name','assetTypeName','iso_group_name','rigidity_type_name',
+            'foundation_type_name','coupling_type_name','vibration_profile_name',
+            'vibration_profile_display_name','assets_vibration_config','iso_group',
+            'custom_profile','profileDisplayName','isCustomProfile'
+        ];
+        computedOrRelationKeys.forEach(key => delete dataToUpdate[key]);
+        Object.keys(dataToUpdate).forEach(key => {
+          if (dataToUpdate[key] === '') dataToUpdate[key] = null;
+        });
+
+        const { data: updatedAsset, error: updateError } = await $supabase
+          .from('assets_base')
+          .update(dataToUpdate)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (updateError) throw updateError;
+
+        // VERIFICAMOS CAMBIOS EN VIBRACIÓN
+        const profileChanged = oldAsset && (
+            oldAsset.iso_group_id !== updatedAsset.iso_group_id ||
+            oldAsset.custom_vibration_profile_id !== updatedAsset.custom_vibration_profile_id
+        );
+
+        if (profileChanged) {
+          console.log(`[Asset Store] Vibration profile changed for asset ${id}. Running actions...`);
+          const { error: rpcError } = await $supabase.rpc('delete_vibration_alerts_for_asset', { p_asset_id: id });
+          if (rpcError) {
+            console.error('Error executing RPC to delete vibration alerts:', rpcError);
+          } else {
+            console.log(`[Asset Store] Vibration alerts for ${id} deleted via RPC.`);
+          }
+          await sensorStore.updateVibrationSensorThresholdsForAsset(id);
+        }
+
+        // VERIFICAMOS CAMBIOS EN TEMPERATURA
+        const tempChanged = oldAsset && oldAsset.operating_temp_c !== updatedAsset.operating_temp_c;
+        
+        if (tempChanged) {
+          console.log(`[Asset Store] Operating temperature changed for asset ${id}. Running actions...`);
+          const { error: rpcError } = await $supabase.rpc('delete_temperature_alerts_for_asset', { p_asset_id: id });
+          if (rpcError) {
+            console.error('Error executing RPC to delete temperature alerts:', rpcError);
+          } else {
+            console.log(`[Asset Store] Temperature alerts for ${id} deleted via RPC.`);
+          }
+          await sensorStore.updateTemperatureSensorThresholdsForAsset(id);
+        }
+        
+        await this.fetchAssets();
+        if (this.currentAsset && this.currentAsset.id === id) {
+          await this.fetchAssetById(id);
+        }
+        return updatedAsset;
+
+      } catch (e) {
+        console.error('Error updating asset:', e);
+        this.error = e.message;
+        throw e;
+      } finally {
+        this.loading = false;
+      }
+    },
+    
+    
     async fetchAssets() {
       this.loading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const organizationStore = useOrganizationStore(); 
+        const organizationStore = useOrganizationStore();
         if (!this._dataInitialized) {
             await this.initializeDataForForms();
         }
@@ -73,12 +151,11 @@ export const useAssetStore = defineStore('assets', {
           return {
             ...asset,
             organization_name: organizationStore.organizations.find(org => org.id === asset.organization_id)?.name || 'N/A',
-            assetTypeName: this.assetTypes.find(type => type.id === asset.asset_type_id)?.name || 'N/A',         
-            profileDisplayName: customProfileName ? customProfileName : isoGroupName,            
-            isCustomProfile: !!customProfileName 
+            assetTypeName: this.assetTypes.find(type => type.id === asset.asset_type_id)?.name || 'N/A',
+            profileDisplayName: customProfileName ? customProfileName : isoGroupName,
+            isCustomProfile: !!customProfileName
           };
         });
-        // console.log('[Assets Store] Activos cargados (con assetTypeName y vibration_profile_name):', this.assets);
 
       } catch (e) {
         console.error('Error fetching assets:', e);
@@ -93,7 +170,7 @@ export const useAssetStore = defineStore('assets', {
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
-        const organizationStore = useOrganizationStore(); 
+        const organizationStore = useOrganizationStore();
 
         if (!this._dataInitialized) {
             await this.initializeDataForForms();
@@ -102,7 +179,7 @@ export const useAssetStore = defineStore('assets', {
             await organizationStore.fetchOrganizations();
         }
 
-       
+
         const { data, error } = await $supabase
           .from('assets_base')
           .select(`
@@ -112,7 +189,7 @@ export const useAssetStore = defineStore('assets', {
           `)
           .eq('id', id)
           .single();
-       
+
         if (error) throw error;
 
         if (data) {
@@ -122,13 +199,13 @@ export const useAssetStore = defineStore('assets', {
           this.currentAsset = {
             ...data,
             organization_name: organizationStore.organizations.find(org => org.id === data.organization_id)?.name || 'N/A',
-            assetTypeName: this.assetTypes.find(type => type.id === data.asset_type_id)?.name || 'N/A',            
+            assetTypeName: this.assetTypes.find(type => type.id === data.asset_type_id)?.name || 'N/A',
             iso_group_name: isoGroupName,
             rigidity_type_name: this.rigidityTypes.find(type => type.id === data.rigidity_type_id)?.name || 'N/A',
             foundation_type_name: this.foundationTypes.find(type => type.id === data.foundation_type_id)?.name || 'N/A',
-            coupling_type_name: this.couplingTypes.find(type => type.id === data.coupling_type_id)?.name || 'N/A',            
+            coupling_type_name: this.couplingTypes.find(type => type.id === data.coupling_type_id)?.name || 'N/A',
             profileDisplayName: customProfileName ? customProfileName : isoGroupName,
-            isCustomProfile: !!customProfileName 
+            isCustomProfile: !!customProfileName
           };
           return this.currentAsset;
         }
@@ -155,7 +232,7 @@ export const useAssetStore = defineStore('assets', {
           .single();
 
         if (error) throw error;
-        await this.fetchAssets(); 
+        await this.fetchAssets();
         return data;
       } catch (e) {
         console.error('Error creating asset:', e);
@@ -165,70 +242,6 @@ export const useAssetStore = defineStore('assets', {
         this.loading = false;
       }
     },
-
-    async updateAsset(id, assetData) {
-      this.loading = true;
-      this.error = null;
-      try {
-        const { $supabase } = useNuxtApp();        
-       
-        const dataToUpdate = { ...assetData };
-
-        // Definimos una lista de claves que son calculadas o relacionales y no deben enviarse en la actualización.
-        const computedOrRelationKeys = [
-            'organization_name',
-            'assetTypeName',
-            'iso_group_name',
-            'rigidity_type_name',
-            'foundation_type_name',
-            'coupling_type_name',
-            'vibration_profile_name',
-            'vibration_profile_display_name',
-            'assets_vibration_config', // Es una relación, no una columna de 'assets_base'
-            'iso_group', // Objeto de relación
-            'custom_profile', // Objeto de relación
-            'profileDisplayName', // Propiedad calculada
-            'isCustomProfile' // Propiedad calculada
-        ];
-
-        // Eliminamos las claves no deseadas del objeto que se enviará a Supabase.
-        computedOrRelationKeys.forEach(key => delete dataToUpdate[key]);
-      
-        // Manejar cadenas vacías convirtiéndolas a null
-        Object.keys(dataToUpdate).forEach(key => {
-          if (dataToUpdate[key] === '') {
-            dataToUpdate[key] = null;
-          }
-        });
-
-        // console.log('Data to update (before Supabase call):', dataToUpdate);
-      
-        const { data, error } = await $supabase
-          .from('assets_base')
-          .update(dataToUpdate) // Usamos el objeto "limpio".
-          .eq('id', id)
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // console.log(`[Asset Store] Activo ${id} actualizado. Llamando a la actualización de umbrales de sensores...`);
-        const sensorStore = useSensorStore();
-        await sensorStore.updateVibrationSensorThresholdsForAsset(id);
-        await this.fetchAssets(); 
-        if (this.currentAsset && this.currentAsset.id === id) {
-          await this.fetchAssetById(id); 
-        }
-        return data;
-      } catch (e) {
-        console.error('Error updating asset:', e);
-        this.error = e.message;
-        throw e;
-      } finally {
-        this.loading = false;
-      }
-    },
-
     async deleteAsset(id) {
       this.loading = true;
       this.error = null;
@@ -251,16 +264,14 @@ export const useAssetStore = defineStore('assets', {
     },
    async initializeDataForForms() {
       if (this._dataInitialized) {
-        // console.log('[Assets Store] Datos de formulario ya inicializados.');
         return;
       }
 
-      this.loading = true; 
+      this.loading = true;
       this.error = null;
       try {
         const { $supabase } = useNuxtApp();
 
-        // Cargar todas las tablas de configuración en paralelo
         const [
           assetsTypesRes,
           isoGroupsRes,
@@ -269,31 +280,27 @@ export const useAssetStore = defineStore('assets', {
           couplingTypesRes,
         ] = await Promise.all([
           $supabase.from('assets_types').select('id, name'),
-          $supabase.from('iso_groups').select('id, name'), // Traemos los grupos ISO
+          $supabase.from('iso_groups').select('id, name'),
           $supabase.from('rigidity_types').select('id, name'),
           $supabase.from('foundation_types').select('id, name'),
           $supabase.from('coupling_types').select('id, name'),
         ]);
 
-        // Manejo de errores para cada consulta
         if (assetsTypesRes.error) throw assetsTypesRes.error;
         if (isoGroupsRes.error) throw isoGroupsRes.error;
         if (rigidityTypesRes.error) throw rigidityTypesRes.error;
         if (foundationTypesRes.error) throw foundationTypesRes.error;
         if (couplingTypesRes.error) throw couplingTypesRes.error;
 
-        // Asignar los datos al estado del store
         this.assetTypes = assetsTypesRes.data;
         this.isoGroups = isoGroupsRes.data;
         this.rigidityTypes = rigidityTypesRes.data;
         this.foundationTypes = foundationTypesRes.data;
         this.couplingTypes = couplingTypesRes.data;
 
-        this._dataInitialized = true; 
-        // console.log('[Assets Store] Datos de formularios inicializados con éxito.');
+        this._dataInitialized = true;
 
       } catch (error) {
-        // console.error('Error al cargar datos de inicialización de formularios:', error);
         this.error = error.message;
         throw error;
       } finally {
@@ -302,3 +309,4 @@ export const useAssetStore = defineStore('assets', {
     },
   },
 });
+

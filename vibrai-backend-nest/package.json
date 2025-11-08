@@ -15,6 +15,7 @@
     "test:sensor": "node tests/get-real-sensor.js",
     "test:mqtt-simulator": "node tests/test-mqtt-payload-simulator.js",
     "test:mqtt-analyzer": "node tests/test-mqtt-real-analyzer.js",
+    "test:mqtt-auth": "node tests/test-mqtt-authentication.js",
     "test:all": "npm run test:complete && npm run test:temperature && npm run test:timestamps && npm run test:batch",
     "simulator": "node mqtt-simulator.js",
     "analyzer": "node tests/test-mqtt-real-analyzer.js"

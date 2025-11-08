@@ -128,18 +128,45 @@ const loadingProfiles = ref({});
 
 // --- Lógica de Enriquecimiento ---
 
+// --- FUNCIÓN CORREGIDA BASADA EN TU CÓDIGO ORIGINAL ---
 const findTriggeredRange = (value, profile) => {
-  if (!profile || !profile.ranges || value === null) return null;
-  const sortedRanges = [...profile.ranges].sort((a, b) => a.max_value - b.max_value);
-  for (const range of sortedRanges) {
-    if (value >= range.min_value && value <= range.max_value) return range;
+  if (!profile || !profile.ranges || value === null || profile.ranges.length === 0) {
+    return null;
   }
+
+  // 1. Ordenamos los rangos por su valor MÍNIMO, de menor a mayor (A, B, C, D).
+  const sortedRanges = [...profile.ranges].sort((a, b) => a.min_value - b.min_value);
+  
+  // 2. Buscamos una coincidencia exacta primero.
+  for (const range of sortedRanges) {
+    if (value >= range.min_value && value <= range.max_value) {
+      return range; // Coincidencia perfecta, lo retornamos.
+    }
+  }
+
+  // 3. Si no hay coincidencia exacta (está en un hueco), buscamos la zona anterior.
+  // Iteramos y encontramos el último rango cuyo valor mínimo sea MENOR que el valor de la alerta.
+  let bestFit = null;
+  for (const range of sortedRanges) {
+    if (value > range.min_value) {
+      bestFit = range;
+    }
+  }
+  
+  if (bestFit) {
+    return bestFit;
+  }
+
+  // 4. Como último recurso, si el valor es mayor que el máximo de la zona más alta.
   if (sortedRanges.length > 0 && value > sortedRanges[sortedRanges.length - 1].max_value) {
       return sortedRanges[sortedRanges.length - 1];
   }
-  return null;
+
+  return null; // Si no encuentra nada (ej, valor negativo), retorna null.
 };
 
+
+// --- CÓMPUTO DE ALERTAS MEJORADO ---
 const enrichedAlerts = computed(() => {
   return props.alerts
     .map(alert => {
@@ -154,11 +181,37 @@ const enrichedAlerts = computed(() => {
         triggeredRange: null,
       };
 
-      if (alert.type === 'vibration' && alert.asset_id) {
+      if (alert.type === 'vibration' && alert.asset_id && alert.value_at_alert != null) {
         const profile = vibrationProfiles.value[alert.asset_id];
         if (profile) {
           newAlertData.vibrationProfileName = profile.name;
-          newAlertData.triggeredRange = findTriggeredRange(alert.value_at_alert, profile);
+          const triggeredRange = findTriggeredRange(alert.value_at_alert, profile);
+          newAlertData.triggeredRange = triggeredRange;
+
+          // NUEVA LÓGICA: Si encontramos un rango, verificamos si el valor está en un hueco
+          // y sobreescribimos el título/descripción para mantener la consistencia.
+          if (triggeredRange) {
+            const isInsideRange = alert.value_at_alert >= triggeredRange.min_value && alert.value_at_alert <= triggeredRange.max_value;
+            const isGap = !isInsideRange;
+            
+            if (isGap) {
+                const sensorName = alert.sensorName || 'Sensor de Vibracion';
+                const { severity, condition_name } = triggeredRange;
+                const value = alert.value_at_alert.toFixed(2);
+                const unit = 'mm/s'; // Asumimos la unidad
+
+                newAlertData.title = `Alerta de Vibración: Vibración en Zona ${severity} (${condition_name})`;
+                
+                if (severity === 'C') {
+                    newAlertData.description = `El sensor '${sensorName}' reporta ${value} ${unit}. Condición no apta para operación continua.`;
+                } else if (severity === 'D') {
+                    newAlertData.description = `¡Peligro de Daño! El sensor '${sensorName}' reporta ${value} ${unit}.`;
+                } else {
+                    // Fallback para otras zonas si fuera necesario
+                    newAlertData.description = `El sensor '${sensorName}' reporta un valor de ${value} ${unit} en la zona ${severity} (${condition_name}).`;
+                }
+            }
+          }
         }
       }
       return newAlertData;
@@ -259,3 +312,4 @@ const formatTimeAgo = (createdAt) => {
 .fade-list-enter-active, .fade-list-leave-active { transition: all 0.5s ease; }
 .fade-list-enter-from, .fade-list-leave-to { opacity: 0; transform: scale(0.95) translateY(10px); }
 </style>
+

@@ -2,7 +2,7 @@
 module.exports = {
   // Umbrales de análisis
   SPIKE_THRESHOLD_MULTIPLIER: 5,
-  SPIKE_MIN_ABSOLUTE_VALUE: 0.2, // Ajustado para valores convertidos (antes 20.0)
+  SPIKE_MIN_ABSOLUTE_VALUE: 20, // Ajustado para valores convertidos (antes 20.0)
   
   // Configuración de conectividad
   CONNECTIVITY_TIMEOUT_MINUTES: 15,

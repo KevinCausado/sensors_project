@@ -65,7 +65,7 @@ class PayloadService {
     
     // Usar estructura del firmware si está disponible
     const firmwareStructure = sensor.firmware?.structure;
-    const correctionFactor = sensor.correctionFactor || firmwareStructure?.correctionFactor || 1;
+   const correctionFactor = sensor.correctionFactor || firmwareStructure?.vibration?.correctionFactor || 1;
     
     console.log(`[PAYLOAD] Factor de corrección: ${correctionFactor}`);
     console.log(`[PAYLOAD] Estructura de firmware:`, firmwareStructure);
@@ -201,7 +201,7 @@ class PayloadService {
     console.log(`[PAYLOAD] Extrayendo lecturas de temperatura para sensor: ${sensor.name}`);
     
     const firmwareStructure = sensor.firmware?.structure;
-    const correctionFactor = firmwareStructure?.correctionFactor || 1;
+    const correctionFactor = firmwareStructure?.temperature?.correctionFactor || 1;
     
     // Usar estructura del firmware para extraer temperatura
     const temperaturePath = firmwareStructure?.temperature?.value || 'TempHumi.SenVal';
@@ -220,7 +220,7 @@ class PayloadService {
 
     if (typeof temperatureValue === 'number') {
       // Aplicar conversión estándar de funtion.js (dividir por 1000) y factor de corrección del sensor
-      let convertedValue = temperatureValue / 1000; // Conversión estándar de funtion.js
+      let convertedValue = temperatureValue / 1000; // Conversión estándar de funtion.js     
       let finalValue = convertedValue * correctionFactor; // Factor de corrección del sensor
       finalValue = parseFloat(finalValue.toFixed(2));
       

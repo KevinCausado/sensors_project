@@ -18,6 +18,14 @@ class EnvironmentConfig {
     return process.env.MQTT_BROKER_URL || 'mqtt://direct.miobox.io';
   }
 
+  get mqttUsername() {
+    return process.env.MQTT_USERNAME;
+  }
+
+  get mqttPassword() {
+    return process.env.MQTT_PASSWORD;
+  }
+
   get nodeEnv() {
     return process.env.NODE_ENV || 'development';
   }
